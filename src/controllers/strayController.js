@@ -1,44 +1,82 @@
 // src/controllers/strayController.js
 
-// 1. Report a Stray Animal
-exports.reportStray = async (req, res) => {
-    try {
-        const { type, description, latitude, longitude, imageUrl } = req.body;
+const StrayReport = require("../models/StrayReport");
 
-        if (!latitude || !longitude) {
-            return res.status(400).json({ message: "Location (lat/lng) is required." });
-        }
+// 1. CREATE A NEW REPORT
+exports.createReport = async (req, res) => {
+  try {
+    const {
+      caseId,
+      animalType,
+      breed,
+      status,
+      notes,
+      anonymous,
+      location,
+      photos,
+    } = req.body;
 
-        // TODO: Replace this with your actual MongoDB model later
-        const newReport = {
-            id: Date.now(),
-            type,
-            description,
-            location: { latitude, longitude },
-            imageUrl,
-            status: "Reported",
-            date: new Date()
-        };
-
-        res.status(201).json({
-            message: "Stray reported successfully",
-            data: newReport
-        });
-    } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+    // Basic validation (matches your schema)
+    if (!caseId || !animalType || !status || !location) {
+      return res.status(400).json({
+        message: "Missing required fields",
+      });
     }
+
+    // Create and save report in MongoDB
+    const newReport = await StrayReport.create({
+      caseId,
+      animalType,
+      breed,
+      status,
+      notes,
+      anonymous,
+      location,
+      photos,
+    });
+
+    res.status(201).json({
+      message: "Report created successfully",
+      data: newReport,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
 };
 
-// 2. Get Map Locations
-exports.getStrayLocations = async (req, res) => {
-    try {
-        // Dummy data for testing map integration
-        const locations = [
-            { id: 1, type: "Dog", lat: 6.9271, lng: 79.8612, status: "Injured" },
-            { id: 2, type: "Cat", lat: 6.7106, lng: 79.9074, status: "Safe" }
-        ];
-        res.status(200).json(locations);
-    } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+// 2. GET A SINGLE REPORT BY CASE ID
+exports.getReportByCaseId = async (req, res) => {
+  try {
+    const { caseId } = req.params;
+
+    const report = await StrayReport.findOne({ caseId });
+
+    if (!report) {
+      return res.status(404).json({ message: "Report not found" });
     }
+
+    res.status(200).json(report);
+  } catch (error) {
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
+// 3. GET ALL REPORTS (FOR MAP + ADMIN VIEW)
+exports.getAllReports = async (req, res) => {
+  try {
+    const reports = await StrayReport.find();
+
+    res.status(200).json(reports);
+  } catch (error) {
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
 };
