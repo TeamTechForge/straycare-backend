@@ -20,10 +20,15 @@
   },
   "homepage": "https://github.com/TeamTechForge/Backend#readme",
   "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.0",
     "express": "^5.2.1",
-    "mongoose": "^9.0.2"
+    "firebase-admin": "^13.7.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.4.1",
+    "morgan": "^1.10.1",
+    "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.11"
