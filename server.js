@@ -21,15 +21,8 @@ require("./src/sockets/chatSocket")(io);
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || "0.0.0.0";
 
-
-app.get("/api/test", (req, res) => {
-  console.log("[API HIT] /api/test from", req.ip);
-  res.json({ message: "Backend is working!" });
-});
-
 server.listen(PORT, HOST, () => {
   console.log(`Server running on http://${HOST}:${PORT}`);
-  console.log("If testing from a phone, use your PC LAN IP (not localhost).");
 });
 
 server.on("error", (err) => {
