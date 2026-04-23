@@ -6,37 +6,39 @@ const StrayReportSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+
   animalType: {
     type: String,
     required: true,
   },
-  breed: {
-    type: String,
-  },
+
+  breed: String,
+
   status: {
     type: String,
-    required: true,
+    enum: ["Needs Help", "Under Rescue", "Treated", "Ready for Adoption"],
+    default: "Needs Help",
   },
-  notes: {
-    type: String,
-  },
+
+  notes: String,
+
   anonymous: {
     type: Boolean,
     default: false,
   },
+
   location: {
-    type: String,
-    required: true,
+    lat: { type: Number, required: true },
+    lng: { type: Number, required: true },
+    address: { type: String },
   },
-  photos: [
-    {
-      type: String,
-    },
-  ],
+
+  photos: [String],
+
   createdAt: {
     type: Date,
     default: Date.now,
   },
 });
-const StrayReport = mongoose.model("StrayReport", StrayReportSchema);
-module.exports = StrayReport;
+
+module.exports = mongoose.model("StrayReport", StrayReportSchema);

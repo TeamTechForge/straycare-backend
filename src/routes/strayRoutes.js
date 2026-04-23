@@ -1,22 +1,23 @@
-// src/routes/strayRoutes.js
-
 const express = require("express");
 const router = express.Router();
 
-// Import controller functions
 const {
   createReport,
   getReportByCaseId,
   getAllReports,
+  updateCaseStatus,
 } = require("../controllers/strayController");
 
-// 1. Create a new stray report
+// Create a new stray report
 router.post("/report", createReport);
 
-// 2. Get a single report by caseId
+// Get a single report by caseId
 router.get("/report/:caseId", getReportByCaseId);
 
-// 3. Get all reports
+// Get all reports
 router.get("/reports", getAllReports);
+
+// Update case status
+router.patch("/report/:caseId/status", updateCaseStatus);
 
 module.exports = router;
