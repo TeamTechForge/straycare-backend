@@ -6,6 +6,8 @@ const morgan = require("morgan");
 const nearbyRoutes = require("./routes/nearbyRoutes");
 const rescueRoutes = require("./routes/rescueRoutes");
 const forumRoutes = require("./routes/forumRoutes");
+const uploadRoutes = require("./routes/uploadRoutes");
+const strayRoutes = require("./routes/strayRoutes");
 
 const app = express();
 
@@ -20,6 +22,8 @@ app.use("/api/forum", (req, res, next) => {
   next();
 });
 app.use("/api/forum", forumRoutes);
+app.use("/api/upload", uploadRoutes);
+app.use("/api/stray", strayRoutes);
 
 
 module.exports = app;

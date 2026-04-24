@@ -1,44 +1,54 @@
-// src/controllers/strayController.js
+const StrayReport = require("../models/StrayReport");
 
-// 1. Report a Stray Animal
-exports.reportStray = async (req, res) => {
-    try {
-        const { type, description, latitude, longitude, imageUrl } = req.body;
-
-        if (!latitude || !longitude) {
-            return res.status(400).json({ message: "Location (lat/lng) is required." });
-        }
-
-        // TODO: Replace this with your actual MongoDB model later
-        const newReport = {
-            id: Date.now(),
-            type,
-            description,
-            location: { latitude, longitude },
-            imageUrl,
-            status: "Reported",
-            date: new Date()
-        };
-
-        res.status(201).json({
-            message: "Stray reported successfully",
-            data: newReport
-        });
-    } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
-    }
+// 1. CREATE REPORT
+exports.createReport = async (req, res) => {
+  try {
+    const newReport = await StrayReport.create(req.body);
+    res.status(201).json(newReport);
+  } catch (error) {
+    res.status(500).json({ message: "Error creating report", error });
+  }
 };
 
-// 2. Get Map Locations
-exports.getStrayLocations = async (req, res) => {
-    try {
-        // Dummy data for testing map integration
-        const locations = [
-            { id: 1, type: "Dog", lat: 6.9271, lng: 79.8612, status: "Injured" },
-            { id: 2, type: "Cat", lat: 6.7106, lng: 79.9074, status: "Safe" }
-        ];
-        res.status(200).json(locations);
-    } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+// 2. GET REPORT BY CASE ID
+exports.getReportByCaseId = async (req, res) => {
+  try {
+    const report = await StrayReport.findOne({ caseId: req.params.caseId });
+    if (!report) return res.status(404).json({ message: "Report not found" });
+    res.json(report);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching report", error });
+  }
+};
+
+// 3. GET ALL REPORTS
+exports.getAllReports = async (req, res) => {
+  try {
+    const reports = await StrayReport.find({}, { status: 1, location: 1, caseId: 1 });
+    res.json(reports);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching reports", error });
+  }
+};
+
+// 4. UPDATE CASE STATUS
+exports.updateCaseStatus = async (req, res) => {
+  try {
+    const { caseId } = req.params;
+    const { status } = req.body;
+
+    const updated = await StrayReport.findOneAndUpdate(
+      { caseId },
+      { status },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: "Case not found" });
     }
+
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: "Error updating status", error });
+  }
 };
