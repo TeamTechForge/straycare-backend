@@ -13,7 +13,7 @@ app.use(express.json());
 
 // --- REGISTER ROUTES ---
  app.use('/api/auth', authRoutes); // <-- Temporarily disabled
-app.use('/api/strays', strayRoutes); // <-- Your feature active
+
 
 // Base Route
 app.get("/", (req, res) => {

@@ -1,27 +1,24 @@
 const express = require("express");
-const mongoose = require("mongoose");
-const { upload } = require("../config/gridfs");
+const multer = require("multer");
+const path = require("path");
+
 const router = express.Router();
 
-// UPLOAD IMAGES (GridFS)
-router.post("/", upload.array("photos", 5), (req, res) => {
-  const fileIds = req.files.map((file) => file.id);
-  res.json({ fileIds });
+// Local disk storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, "uploads/"),
+  filename: (req, file, cb) =>
+    cb(null, Date.now() + "-" + Math.round(Math.random() * 1e9) + path.extname(file.originalname)),
 });
 
-// GET IMAGE BY ID
-router.get("/files/:id", async (req, res) => {
-  try {
-    const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, {
-      bucketName: "uploads",
-    });
+const upload = multer({ storage });
 
-    const fileId = new mongoose.Types.ObjectId(req.params.id);
+// Upload single image
+router.post("/", upload.single("image"), (req, res) => {
+  if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
-    bucket.openDownloadStream(fileId).pipe(res);
-  } catch (err) {
-    res.status(404).json({ error: "File not found" });
-  }
+  const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+  res.json({ url: fileUrl });
 });
 
 module.exports = router;
