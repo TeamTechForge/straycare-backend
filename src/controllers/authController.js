@@ -1,6 +1,8 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const User = require("../models/User");
+const Notification = require("../models/Notification");
 
 const generateToken = (userId, role) => {
   return jwt.sign(
@@ -35,6 +37,14 @@ const register = async (req, res) => {
     });
 
     const token = generateToken(user._id, user.role);
+
+    // Create welcome notification
+    await Notification.create({
+      userId: user._id,
+      title: "Welcome to StrayCare!",
+      message: `Hi ${name}, welcome to our community! Together we can save more stray animals. 🐾`,
+      type: "welcome",
+    });
 
     res.status(201).json({
       message: "Account created successfully",
@@ -149,16 +159,85 @@ const selectRole = async (req, res) => {
   }
 };
 
+const NGOProfile = require("../models/NGOProfile");
+
 const getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select("-password");
+    const user = await User.findById(req.user.id).select("-password").lean();
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
+
+    // If NGO, try to get organization name
+    if (user.role === "ngo") {
+      const ngoProfile = await NGOProfile.findOne({ userId: user._id });
+      if (ngoProfile) {
+        user.organizationName = ngoProfile.orgName;
+      }
+    }
+
     res.status(200).json(user);
   } catch (error) {
     res.status(500).json({
       message: "Failed to fetch user details",
+      error: error.message,
+    });
+  }
+};
+
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(20).toString("hex");
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+
+    await user.save();
+
+    // Since email service is not configured, return the token in response (DEV ONLY)
+    res.status(200).json({
+      message: "Reset token generated successfully",
+      resetToken: process.env.NODE_ENV === "production" ? undefined : resetToken,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Forgot password failed",
+      error: error.message,
+    });
+  }
+};
+
+const resetPassword = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired reset token" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+
+    await user.save();
+
+    res.status(200).json({ message: "Password reset successful" });
+  } catch (error) {
+    res.status(500).json({
+      message: "Reset password failed",
       error: error.message,
     });
   }
@@ -169,4 +248,6 @@ module.exports = {
   login,
   selectRole,
   getMe,
+  forgotPassword,
+  resetPassword,
 };

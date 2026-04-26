@@ -10,6 +10,7 @@ const uploadRoutes = require("./routes/uploadRoutes");
 const strayRoutes = require("./routes/strayRoutes");
 const authRoutes = require("./routes/authRoutes");
 const profileRoutes = require("./routes/profileRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use(morgan("dev"));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/profiles", profileRoutes);
+app.use("/api/notifications", notificationRoutes);
 app.use("/api/nearby", nearbyRoutes);
 app.use("/api/rescues", rescueRoutes);
 app.use("/api/forum", (req, res, next) => {
