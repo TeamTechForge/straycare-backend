@@ -1,3 +1,6 @@
+require("dotenv").config();
+console.log("MONGO_URI exists:", !!process.env.MONGO_URI);
+
 const mongoose = require("mongoose");
 const { GridFsStorage } = require("multer-gridfs-storage");
 const multer = require("multer");

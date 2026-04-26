@@ -1,12 +1,21 @@
 const express = require("express");
 const mongoose = require("mongoose");
-const { upload } = require("../config/gridfs");
+const { upload: gridfsUpload } = require("../config/gridfs");
+const { upload: cloudinaryUpload } = require("../config/cloudinary");
 const router = express.Router();
 
 // UPLOAD IMAGES (GridFS)
-router.post("/", upload.array("photos", 5), (req, res) => {
+router.post("/", gridfsUpload.array("photos", 5), (req, res) => {
   const fileIds = req.files.map((file) => file.id);
   res.json({ fileIds });
+});
+
+// UPLOAD TO CLOUDINARY
+router.post("/cloudinary", cloudinaryUpload.single("file"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: "No file uploaded" });
+  }
+  res.json({ url: req.file.path });
 });
 
 // GET IMAGE BY ID

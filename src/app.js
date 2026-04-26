@@ -8,6 +8,8 @@ const rescueRoutes = require("./routes/rescueRoutes");
 const forumRoutes = require("./routes/forumRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const strayRoutes = require("./routes/strayRoutes");
+const authRoutes = require("./routes/authRoutes");
+const profileRoutes = require("./routes/profileRoutes");
 
 const app = express();
 
@@ -15,6 +17,8 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan("dev"));
 
+app.use("/api/auth", authRoutes);
+app.use("/api/profiles", profileRoutes);
 app.use("/api/nearby", nearbyRoutes);
 app.use("/api/rescues", rescueRoutes);
 app.use("/api/forum", (req, res, next) => {
@@ -25,5 +29,10 @@ app.use("/api/forum", forumRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/stray", strayRoutes);
 
+app.get("/test", (req, res) => {
+  res.send("Backend test route working");
+});
+
+console.log("AUTH ROUTES LOADED");
 
 module.exports = app;
