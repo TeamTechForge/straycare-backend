@@ -1,6 +1,18 @@
 const StrayReport = require("../models/StrayReport");
 
 // 1. CREATE REPORT
+
+exports.createReport = async (req, res) => {
+  try {
+    console.log("📥 Incoming Report Data:", req.body); // ⭐ DEBUG LOG
+
+    const newReport = await StrayReport.create(req.body);
+    res.status(201).json(newReport);
+  } catch (error) {
+    res.status(500).json({ message: "Error creating report", error });
+  }
+};
+
 exports.createReport = async (req, res) => {
   try {
     const newReport = await StrayReport.create(req.body);
@@ -24,30 +36,40 @@ exports.getReportByCaseId = async (req, res) => {
 // 3. GET ALL REPORTS
 exports.getAllReports = async (req, res) => {
   try {
-    const reports = await StrayReport.find({}, { status: 1, location: 1, caseId: 1 });
+    const reports = await StrayReport.find(
+      {},
+      { status: 1, location: 1, caseId: 1 }
+    );
     res.json(reports);
   } catch (error) {
     res.status(500).json({ message: "Error fetching reports", error });
   }
 };
 
-// 4. UPDATE CASE STATUS
+// 4. UPDATE CASE STATUS + PUSH HISTORY
 exports.updateCaseStatus = async (req, res) => {
   try {
     const { caseId } = req.params;
     const { status } = req.body;
 
-    const updated = await StrayReport.findOneAndUpdate(
-      { caseId },
-      { status },
-      { new: true }
-    );
-
-    if (!updated) {
+    const report = await StrayReport.findOne({ caseId });
+    if (!report) {
       return res.status(404).json({ message: "Case not found" });
     }
 
-    res.json(updated);
+    // Update status
+    report.status = status;
+
+    // ⭐ Add history entry
+    report.history.push({
+      status,
+      message: `Status changed to ${status}`,
+      timestamp: new Date(),
+    });
+
+    await report.save();
+
+    res.json(report);
   } catch (error) {
     res.status(500).json({ message: "Error updating status", error });
   }
