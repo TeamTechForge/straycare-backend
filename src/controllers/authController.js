@@ -3,6 +3,10 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
+const NGOProfile = require("../models/NGOProfile");
+const VolunteerProfile = require("../models/VolunteerProfile");
+const VetProfile = require("../models/VetProfile");
+const GeneralUserProfile = require("../models/GeneralUserProfile"); // General User profile
 
 const generateToken = (userId, role) => {
   return jwt.sign(
@@ -159,7 +163,7 @@ const selectRole = async (req, res) => {
   }
 };
 
-const NGOProfile = require("../models/NGOProfile");
+
 
 const getMe = async (req, res) => {
   try {
@@ -243,6 +247,71 @@ const resetPassword = async (req, res) => {
   }
 };
 
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+
+    if (!isMatch) {
+      return res.status(401).json({ message: "Incorrect current password" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    await user.save();
+
+    res.status(200).json({ message: "Password updated successfully" });
+  } catch (error) {
+    res.status(500).json({
+      message: "Password update failed",
+      error: error.message,
+    });
+  }
+};
+
+const deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Delete role-specific profile
+    if (user.role === "ngo") {
+      await NGOProfile.findOneAndDelete({ userId });
+    } else if (user.role === "volunteer") {
+      await VolunteerProfile.findOneAndDelete({ userId });
+    } else if (user.role === "vet") {
+      await VetProfile.findOneAndDelete({ userId });
+    } else if (user.role === "general_user") {
+      await GeneralUserProfile.findOneAndDelete({ userId });
+    }
+
+    // Delete User record
+    await User.findByIdAndDelete(userId);
+
+    // Delete associated notifications
+    await Notification.deleteMany({ userId });
+
+    res.status(200).json({ message: "Account and associated data deleted successfully" });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to delete account",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -250,4 +319,6 @@ module.exports = {
   getMe,
   forgotPassword,
   resetPassword,
+  changePassword,
+  deleteAccount,
 };
