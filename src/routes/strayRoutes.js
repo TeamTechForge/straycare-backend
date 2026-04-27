@@ -1,4 +1,3 @@
-// src/routes/strayRoutes.js
 const express = require('express');
 const router = express.Router();
 const strayController = require('../controllers/strayController');

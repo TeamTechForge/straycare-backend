@@ -1,23 +1,21 @@
-const express = require("express");
+﻿const express = require("express");
 const cors = require("cors");
-
-// --- IMPORTS ---
- const authRoutes = require('./routes/authRoutes'); // <-- Temporarily disabled
-const strayRoutes = require('./routes/strayRoutes');  // <-- Your feature
-
+const authRoutes = require("./routes/authRoutes");
+const strayRoutes = require("./routes/strayRoutes");
+const donationRoutes = require("./routes/donation.routes");
+const organizationRoutes = require("./routes/organization.routes");
 const app = express();
-
-// --- MIDDLEWARE ---
+app.use((req, res, next) => {
+  res.setHeader("ngrok-skip-browser-warning", "true");
+  next();
+});
 app.use(cors());
 app.use(express.json());
-
-// --- REGISTER ROUTES ---
- app.use('/api/auth', authRoutes); // <-- Temporarily disabled
-app.use('/api/strays', strayRoutes); // <-- Your feature active
-
-// Base Route
-app.get("/", (req, res) => {
-  res.send("StrayCare Backend API Running");
-});
-
+app.use(express.urlencoded({ extended: true }));
+app.get("/ping", (req, res) => res.send("pong"));
+app.get("/", (req, res) => res.send("StrayCare Backend API Running"));
+app.use("/api/auth", authRoutes);
+app.use("/api/strays", strayRoutes);
+app.use("/api/donations", donationRoutes);
+app.use("/api/organizations", organizationRoutes);
 module.exports = app;
