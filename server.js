@@ -1,10 +1,27 @@
+<<<<<<< HEAD
 const express = require("express");
+=======
+require("dotenv").config();
+
+>>>>>>> 0af9fd1 (Merge nearby and image uploading part)
 const http = require("http");
 const { Server } = require("socket.io");
 
 const app = require("./src/app");
 const connectDB = require("./src/config/db");
-require("dotenv").config();
+
+const nodeMajor = Number(process.versions.node.split(".")[0]);
+if (Number.isFinite(nodeMajor) && nodeMajor >= 23) {
+  console.warn(
+    `[ENV WARNING] Detected Node ${process.versions.node}. multer-gridfs-storage is known to be unstable on Node 23+; use Node 20 LTS.`
+  );
+}
+
+if (!process.env.MONGO_URI) {
+  console.error(
+    "[ENV ERROR] MONGO_URI is missing before startup. Check Backend/.env and dotenv loading order."
+  );
+}
 
 connectDB();
 
@@ -19,7 +36,12 @@ const io = new Server(server, {
   }
 });
 
+<<<<<<< HEAD
 // Load socket handlers
+=======
+app.set("io", io);
+
+>>>>>>> 0af9fd1 (Merge nearby and image uploading part)
 require("./src/sockets/rescueSocket")(io);
 require("./src/sockets/chatSocket")(io);
 

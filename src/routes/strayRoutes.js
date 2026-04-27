@@ -1,7 +1,11 @@
 const express = require("express");
 const router = express.Router();
+<<<<<<< HEAD
 const multer = require("multer");
 const path = require("path");
+=======
+const { upload, uploadToGridFs } = require("../config/gridfs");
+>>>>>>> 0af9fd1 (Merge nearby and image uploading part)
 
 const {
   createReport,
@@ -36,6 +40,17 @@ router.post("/upload", upload.single("image"), (req, res) => {
 
 // ------------------ EXISTING ROUTES ------------------
 router.post("/report", createReport);
+<<<<<<< HEAD
+=======
+
+// One-step submission flow (multipart + photos)
+router.post("/report/submit", upload.array("photos", 5), uploadToGridFs, createReport);
+
+// Compatibility route for merged clients posting to /reports
+router.post("/reports", createReport);
+
+// Get a single report by caseId
+>>>>>>> 0af9fd1 (Merge nearby and image uploading part)
 router.get("/report/:caseId", getReportByCaseId);
 router.get("/reports", getAllReports);
 router.patch("/report/:caseId/status", updateCaseStatus);

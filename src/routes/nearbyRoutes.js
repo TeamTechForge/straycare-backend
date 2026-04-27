@@ -9,7 +9,7 @@ router.get("/", async (req, res) => {
     const { lat, lng } = req.query;
 
     const rescuers = await Rescuer.find({
-      available: true,
+      isAvailable: true,
       location: {
         $near: {
           $geometry: { type: "Point", coordinates: [parseFloat(lng), parseFloat(lat)] },

@@ -7,7 +7,10 @@ const rescuerSchema = new mongoose.Schema({
     type: { type: String, default: "Point" },
     coordinates: [Number]
   },
-  available: { type: Boolean, default: true }
+  phone: String,
+  email: String,
+  role: { type: String, default: "rescuer" },
+  isAvailable: { type: Boolean, default: true }
 });
 
 rescuerSchema.index({ location: "2dsphere" });
