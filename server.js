@@ -2,47 +2,49 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 
-const app = require("./src/app");
+const app = require("./src/app"); // Express app with middleware
 const connectDB = require("./src/config/db");
 require("dotenv").config();
 
+// 1. CONNECT TO DATABASE
 connectDB();
 
-// Create HTTP server for socket.io
+// 2. CREATE HTTP SERVER (required for socket.io)
 const server = http.createServer(app);
 
-// Initialize socket.io
+// 3. INITIALIZE SOCKET.IO
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST", "PATCH"]
-  }
+    origin: "*", // Allow all origins (dev mode)
+    methods: ["GET", "POST", "PATCH"],
+  },
 });
 
-// Load socket handlers
+// 4. LOAD SOCKET HANDLERS
+// These files contain the real-time event logic
 require("./src/sockets/rescueSocket")(io);
 require("./src/sockets/chatSocket")(io);
 
-//  Serve uploaded images BEFORE routes
+// 5. SERVE STATIC UPLOADED IMAGES
+// before routes so images load correctly
 app.use("/uploads", express.static("uploads"));
 
-//  Mount routes
+// 6. MOUNT API ROUTES
 const uploadRoutes = require("./src/routes/uploadRoutes");
-const strayRoutes = require("./src/routes/strayRoutes");
+const reportRoutes = require("./src/routes/reportRoutes");
 
-app.use("/api/upload", uploadRoutes);
-app.use("/api/strays", strayRoutes);
+app.use("/api/upload", uploadRoutes);   // Image upload endpoints
+app.use("/api/strays", reportRoutes);   // Report CRUD endpoints
 
-// Start server
+// 7. START SERVER
 const PORT = process.env.PORT || 5000;
-const HOST = process.env.HOST || "0.0.0.0";
+const HOST = process.env.HOST || "0.0.0.0"; // Expose to LAN
 
 server.listen(PORT, HOST, () => {
   console.log(`Server running on http://${HOST}:${PORT}`);
 });
 
+// 8. ERROR HANDLING FOR SERVER STARTUP
 server.on("error", (err) => {
   console.error("Server failed to start:", err.message);
-});
-
 });
