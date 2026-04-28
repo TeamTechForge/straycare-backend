@@ -6,8 +6,9 @@ const Notification = require("../models/Notification");
 const NGOProfile = require("../models/NGOProfile");
 const VolunteerProfile = require("../models/VolunteerProfile");
 const VetProfile = require("../models/VetProfile");
-const GeneralUserProfile = require("../models/GeneralUserProfile"); // General User profile
+const GeneralUserProfile = require("../models/GeneralUserProfile");
 
+// Creates a JWT containing the user's id and role.
 const generateToken = (userId, role) => {
   return jwt.sign(
     { id: userId, role },
@@ -16,6 +17,7 @@ const generateToken = (userId, role) => {
   );
 };
 
+// Registers a new user with the default role "general_user"
 const register = async (req, res) => {
   try {
     const { name, email, phone, password } = req.body;
@@ -71,6 +73,8 @@ const register = async (req, res) => {
   }
 };
 
+// Authenticates a user by checking email and password.
+// If valid, returns a JWT and basic user details.
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -84,7 +88,7 @@ const login = async (req, res) => {
     if (!user) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
-
+    // Compare entered password with the hashed password
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
@@ -114,13 +118,14 @@ const login = async (req, res) => {
   }
 };
 
+// Updates the logged-in user's role after registration.
 const selectRole = async (req, res) => {
   try {
-    // userId comes from the verified JWT payload (set by authMiddleware),
-    // NOT from req.body — clients cannot spoof another user's id.
+    // userId comes from the verified JWT (set by authMiddleware),
     const userId = req.user.id;
     const { role } = req.body;
 
+    // Only allow roles supported by the StrayCare system.
     const allowedRoles = ["general_user", "volunteer", "ngo", "vet"];
 
     if (!role) {
@@ -147,7 +152,7 @@ const selectRole = async (req, res) => {
       });
     }
 
-    // Issue a fresh token so the client's stored token reflects the new role.
+    // Issue a new token so the client's stored token reflects the new role.
     const token = generateToken(user._id, user.role);
 
     res.status(200).json({
@@ -164,7 +169,7 @@ const selectRole = async (req, res) => {
 };
 
 
-
+// Returns details of the currently logged-in user.
 const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-password").lean();
@@ -205,7 +210,7 @@ const forgotPassword = async (req, res) => {
 
     await user.save();
 
-    // Since email service is not configured, return the token in response (DEV ONLY)
+    // Since email service is not configured, return the token in response (For Development)
     res.status(200).json({
       message: "Reset token generated successfully",
       resetToken: process.env.NODE_ENV === "production" ? undefined : resetToken,
@@ -218,6 +223,7 @@ const forgotPassword = async (req, res) => {
   }
 };
 
+// Resets password
 const resetPassword = async (req, res) => {
   try {
     const { token, newPassword } = req.body;
@@ -247,6 +253,7 @@ const resetPassword = async (req, res) => {
   }
 };
 
+// Allows logged-in users to change their password
 const changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -277,6 +284,7 @@ const changePassword = async (req, res) => {
   }
 };
 
+// Deletes the authenticated user's account
 const deleteAccount = async (req, res) => {
   try {
     const userId = req.user.id;
