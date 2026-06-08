@@ -3,10 +3,14 @@ const StrayReport = require("../models/StrayReport");
 // 1. CREATE REPORT
 exports.createReport = async (req, res) => {
   try {
-    const newReport = await StrayReport.create(req.body);
+    const reportData = { ...req.body };
+    if (req.user && req.user.id) {
+      reportData.reporterUserId = req.user.id;
+    }
+    const newReport = await StrayReport.create(reportData);
     res.status(201).json(newReport);
   } catch (error) {
-    res.status(500).json({ message: "Error creating report", error });
+    res.status(500).json({ message: "Error creating report", error: error.message });
   }
 };
 

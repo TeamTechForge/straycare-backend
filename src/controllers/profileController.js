@@ -6,7 +6,7 @@ const User = require("../models/User");
 
 const createGeneralProfile = async (req, res) => {
   try {
-    const { location, bio, profileImage } = req.body;
+    const { location, bio, profileImage, name } = req.body;
     const userId = req.user.id;
 
     const profile = await GeneralUserProfile.create({
@@ -16,7 +16,7 @@ const createGeneralProfile = async (req, res) => {
       profileImage, // Expecting URL from frontend or middleware
     });
 
-    await User.findByIdAndUpdate(userId, { profileCompleted: true });
+    await User.findByIdAndUpdate(userId, { name, profileCompleted: true });
 
     res.status(201).json({ message: "General profile created", profile });
   } catch (error) {
@@ -26,7 +26,7 @@ const createGeneralProfile = async (req, res) => {
 
 const createVolunteerProfile = async (req, res) => {
   try {
-    const { location, bio, profileImage } = req.body;
+    const { location, bio, profileImage, name } = req.body;
     const userId = req.user.id;
 
     const profile = await VolunteerProfile.create({
@@ -36,7 +36,7 @@ const createVolunteerProfile = async (req, res) => {
       profileImage,
     });
 
-    await User.findByIdAndUpdate(userId, { profileCompleted: true });
+    await User.findByIdAndUpdate(userId, { name, profileCompleted: true });
 
     res.status(201).json({ message: "Volunteer profile created", profile });
   } catch (error) {
@@ -46,7 +46,7 @@ const createVolunteerProfile = async (req, res) => {
 
 const createNGOProfile = async (req, res) => {
   try {
-    const { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId } = req.body;
+    const { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret } = req.body;
     const userId = req.user.id;
 
     const profile = await NGOProfile.create({
@@ -60,6 +60,7 @@ const createNGOProfile = async (req, res) => {
       profileImage,
       verificationDocument,
       merchantId,
+      merchantSecret,
     });
 
     await User.findByIdAndUpdate(userId, { profileCompleted: true });
@@ -72,7 +73,7 @@ const createNGOProfile = async (req, res) => {
 
 const createVetProfile = async (req, res) => {
   try {
-    const { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId } = req.body;
+    const { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret } = req.body;
     const userId = req.user.id;
 
     const profile = await VetProfile.create({
@@ -86,6 +87,7 @@ const createVetProfile = async (req, res) => {
       profileImage,
       licenseDocument,
       merchantId,
+      merchantSecret,
     });
 
     await User.findByIdAndUpdate(userId, { profileCompleted: true });
@@ -163,11 +165,11 @@ const updateVolunteerProfile = async (req, res) => {
 const updateNGOProfile = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId } = req.body;
+    const { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret } = req.body;
 
     const profile = await NGOProfile.findOneAndUpdate(
       { userId },
-      { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId },
+      { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret },
       { new: true, runValidators: true }
     );
 
@@ -182,11 +184,11 @@ const updateNGOProfile = async (req, res) => {
 const updateVetProfile = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId } = req.body;
+    const { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret } = req.body;
 
     const profile = await VetProfile.findOneAndUpdate(
       { userId },
-      { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId },
+      { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret },
       { new: true, runValidators: true }
     );
 

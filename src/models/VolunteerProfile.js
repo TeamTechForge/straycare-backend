@@ -19,6 +19,10 @@ const volunteerProfileSchema = new mongoose.Schema(
     profileImage: {
       type: String, // Cloudinary URL
     },
+    serviceArea: {
+      type: String,
+      default: "",
+    },
   },
   { timestamps: true }
 );

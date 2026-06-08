@@ -7,9 +7,10 @@ const {
   getAllReports,
   updateCaseStatus,
 } = require("../controllers/strayController");
+const { verifyToken } = require("../middleware/authMiddleware");
 
 // Create a new stray report
-router.post("/report", createReport);
+router.post("/report", verifyToken, createReport);
 
 // Get a single report by caseId
 router.get("/report/:caseId", getReportByCaseId);

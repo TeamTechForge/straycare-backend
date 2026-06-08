@@ -41,6 +41,21 @@ const vetProfileSchema = new mongoose.Schema(
     merchantId: {
       type: String,
     },
+    merchantSecret: {
+      type: String,
+    },
+    specialization: {
+      type: String,
+      default: "",
+    },
+    animalsTreated: {
+      type: Number,
+      default: 0,
+    },
+    emergencyAvailability: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );

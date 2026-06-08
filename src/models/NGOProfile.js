@@ -39,6 +39,17 @@ const ngoProfileSchema = new mongoose.Schema(
     merchantId: {
       type: String,
     },
+    merchantSecret: {
+      type: String,
+    },
+    totalAdoptions: {
+      type: Number,
+      default: 0,
+    },
+    donationCampaignCount: {
+      type: Number,
+      default: 0,
+    },
   },
   { timestamps: true }
 );

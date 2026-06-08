@@ -1,0 +1,197 @@
+const User = require("../models/User");
+const GeneralUserProfile = require("../models/GeneralUserProfile");
+const VolunteerProfile = require("../models/VolunteerProfile");
+const VetProfile = require("../models/VetProfile");
+const NGOProfile = require("../models/NGOProfile");
+const ForumPost = require("../models/ForumPost");
+const StrayReport = require("../models/StrayReport");
+const RescueHistory = require("../models/RescueHistory");
+const RescueRequest = require("../models/RescueRequest");
+const UserReport = require("../models/UserReport");
+
+// Fetch another user's public profile data (safe, sanitised)
+exports.getPublicProfile = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await User.findById(userId).select("-password -email -phone").lean();
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    let profileData = {};
+    let stats = {};
+
+    // Base stats common to all users
+    const postCount = await ForumPost.countDocuments({ userId });
+    stats.postsCount = postCount;
+
+    if (user.role === "general_user") {
+      const generalProfile = await GeneralUserProfile.findOne({ userId }).lean() || {};
+      const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
+      
+      profileData = {
+        location: generalProfile.location || "",
+        bio: generalProfile.bio || "",
+        profileImage: generalProfile.profileImage || "",
+      };
+      
+      stats.reportsCount = reportCount;
+
+    } else if (user.role === "volunteer") {
+      const volunteerProfile = await VolunteerProfile.findOne({ userId }).lean() || {};
+      const totalRescues = await RescueHistory.countDocuments({ rescuerId: userId });
+      const activeRescues = await RescueRequest.countDocuments({ 
+        rescuerId: userId, 
+        status: { $in: ["accepted", "under_rescue"] } 
+      });
+      
+      // Calculate completion rate based on history vs total attempts (completed + rejected)
+      const totalAttempts = await RescueRequest.countDocuments({ rescuerId: userId });
+      const completionRate = totalAttempts > 0 ? Math.round((totalRescues / totalAttempts) * 100) : 100;
+
+      profileData = {
+        location: volunteerProfile.location || "",
+        bio: volunteerProfile.bio || "",
+        profileImage: volunteerProfile.profileImage || "",
+        serviceArea: volunteerProfile.serviceArea || "",
+        rescueCompletionRate: completionRate,
+      };
+
+      stats.rescuesCompleted = totalRescues;
+      stats.activeRescues = activeRescues;
+
+    } else if (user.role === "vet") {
+      const vetProfile = await VetProfile.findOne({ userId }).lean() || {};
+      const totalRescues = await RescueHistory.countDocuments({ rescuerId: userId });
+
+      profileData = {
+        location: vetProfile.primaryLocation || "",
+        bio: vetProfile.bio || "",
+        profileImage: vetProfile.profileImage || "",
+        clinicName: vetProfile.clinicName || "",
+        clinicAddress: vetProfile.clinicAddress || "",
+        specialization: vetProfile.specialization || "",
+        animalsTreated: vetProfile.animalsTreated || 0,
+        emergencyAvailability: vetProfile.emergencyAvailability || false,
+      };
+
+      stats.rescuesCompleted = totalRescues;
+      stats.animalsTreated = vetProfile.animalsTreated || 0;
+
+    } else if (user.role === "ngo") {
+      const ngoProfile = await NGOProfile.findOne({ userId }).lean() || {};
+      const totalRescues = await RescueHistory.countDocuments({ rescuerId: userId });
+
+      profileData = {
+        location: ngoProfile.location || "",
+        bio: ngoProfile.bio || "",
+        profileImage: ngoProfile.profileImage || "",
+        orgName: ngoProfile.orgName || "",
+        totalAdoptions: ngoProfile.totalAdoptions || 0,
+        donationCampaignCount: ngoProfile.donationCampaignCount || 0,
+      };
+
+      stats.rescuesCompleted = totalRescues;
+      stats.totalAdoptions = ngoProfile.totalAdoptions || 0;
+      stats.donationCampaignCount = ngoProfile.donationCampaignCount || 0;
+    }
+
+    res.status(200).json({
+      user: {
+        id: user._id,
+        name: user.name,
+        role: user.role,
+        isApproved: user.isApproved,
+        createdAt: user.createdAt,
+      },
+      profile: profileData,
+      stats,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to fetch public profile",
+      error: error.message,
+    });
+  }
+};
+
+// Fetch user's posts
+exports.getUserPosts = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const posts = await ForumPost.find({ userId }).sort({ createdAt: -1 });
+    res.status(200).json(posts);
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to fetch user posts",
+      error: error.message,
+    });
+  }
+};
+
+// Fetch user's reports (public reports only)
+exports.getUserReports = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const reports = await StrayReport.find({ reporterUserId: userId, anonymous: false }).sort({ createdAt: -1 });
+    res.status(200).json(reports);
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to fetch user reports",
+      error: error.message,
+    });
+  }
+};
+
+// Create a report against a user
+exports.createUserReport = async (req, res) => {
+  try {
+    const { reportedUserId, reason, description } = req.body;
+    const reporterUserId = req.user.id; // From verifyToken
+
+    if (!reportedUserId || !reason || !description) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    if (description.length < 20) {
+      return res.status(400).json({ message: "Description must be at least 20 characters long" });
+    }
+
+    const newReport = await UserReport.create({
+      reportedUserId,
+      reporterUserId,
+      reason,
+      description,
+      status: "Pending",
+    });
+
+    res.status(201).json({
+      message: "Report submitted successfully",
+      report: newReport,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to submit user report",
+      error: error.message,
+    });
+  }
+};
+
+// Admin endpoint to view user reports
+exports.getUserReportsAdmin = async (req, res) => {
+  try {
+    // Note: In a real system, you would check if req.user.role === 'admin'
+    const reports = await UserReport.find()
+      .populate("reportedUserId", "name email role")
+      .populate("reporterUserId", "name email role")
+      .sort({ createdAt: -1 });
+      
+    res.status(200).json(reports);
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to fetch reports",
+      error: error.message,
+    });
+  }
+};
