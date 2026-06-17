@@ -2,6 +2,11 @@ const mongoose = require("mongoose");
 
 const forumPostSchema = new mongoose.Schema(
   {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: false,
+    },
     title: { type: String, required: true, trim: true },
     tag: { type: String, enum: ["GENERAL", "HEALTH"], default: "GENERAL" },
     author: { type: String, default: "You" },

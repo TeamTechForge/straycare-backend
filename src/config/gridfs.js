@@ -1,7 +1,10 @@
 const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
 
+console.log("MONGO_URI exists:", !!process.env.MONGO_URI);
+
 const { Readable } = require("stream");
+
 const mongoose = require("mongoose");
 const multer = require("multer");
 

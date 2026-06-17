@@ -77,17 +77,6 @@ const buildReportPayload = (req) => {
 
 exports.createReport = async (req, res) => {
   try {
-    console.log("📥 Incoming Report Data:", req.body); // ⭐ DEBUG LOG
-
-    const newReport = await StrayReport.create(req.body);
-    res.status(201).json(newReport);
-  } catch (error) {
-    res.status(500).json({ message: "Error creating report", error });
-  }
-};
-
-exports.createReport = async (req, res) => {
-  try {
     const reportPayload = buildReportPayload(req);
     console.log("[STRAY][POST] Creating report with payload:", { caseId: reportPayload.caseId, animalType: reportPayload.animalType, location: reportPayload.location });
 
@@ -119,9 +108,9 @@ exports.createReport = async (req, res) => {
     const message = isDuplicateKey
       ? "Case ID already exists"
       : isValidationError
-      ? "Invalid report payload"
-      : "Error creating report";
-    
+        ? "Invalid report payload"
+        : "Error creating report";
+
     console.error("[STRAY][ERROR] Failed to create report:", errorMessage);
     return res.status(statusCode).json({ message, error: errorMessage });
   }
