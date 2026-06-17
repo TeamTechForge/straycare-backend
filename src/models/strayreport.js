@@ -41,6 +41,15 @@ const StrayReportSchema = new mongoose.Schema({
 
   photos: [String],
 
+  // ⭐ NEW: Status history for timeline
+  history: [
+    {
+      status: { type: String },
+      message: { type: String },
+      timestamp: { type: Date, default: Date.now },
+    },
+  ],
+
   createdAt: {
     type: Date,
     default: Date.now,

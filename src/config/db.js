@@ -1,8 +1,17 @@
 const mongoose = require("mongoose");
 
 const connectDB = async () => {
+  const mongoURI = process.env.MONGO_URI;
+
+  if (!mongoURI) {
+    console.error(
+      "[DB] MONGO_URI is undefined. Add MONGO_URI to Backend/.env before starting the server."
+    );
+    process.exit(1);
+  }
+
   try {
-    await mongoose.connect(process.env.MONGO_URI, {
+    await mongoose.connect(mongoURI, {
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
     });

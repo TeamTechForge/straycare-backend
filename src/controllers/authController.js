@@ -10,6 +10,9 @@ const GeneralUserProfile = require("../models/GeneralUserProfile");
 
 // Creates a JWT containing the user's id and role.
 const generateToken = (userId, role) => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET is not configured on the server");
+  }
   return jwt.sign(
     { id: userId, role },
     process.env.JWT_SECRET,
@@ -18,9 +21,12 @@ const generateToken = (userId, role) => {
 };
 
 // Registers a new user with the default role "general_user"
-const register = async (req, res) => {
+const register = async (req, res, next) => {
+  let user;
   try {
     const { name, email, phone, password } = req.body;
+
+    console.log("Register request received for:", req.body.email);
 
     if (!name || !email || !phone || !password) {
       return res.status(400).json({ message: "All fields are required" });
@@ -34,7 +40,7 @@ const register = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await User.create({
+    user = await User.create({
       name,
       email,
       phone,
@@ -44,13 +50,17 @@ const register = async (req, res) => {
 
     const token = generateToken(user._id, user.role);
 
-    // Create welcome notification
-    await Notification.create({
-      userId: user._id,
-      title: "Welcome to StrayCare!",
-      message: `Hi ${name}, welcome to our community! Together we can save more stray animals. 🐾`,
-      type: "welcome",
-    });
+    // Create welcome notification gracefully
+    try {
+      await Notification.create({
+        userId: user._id,
+        title: "Welcome to StrayCare!",
+        message: `Hi ${name}, welcome to our community! Together we can save more stray animals. 🐾`,
+        type: "welcome",
+      });
+    } catch (notificationError) {
+      console.error("Notification creation failed gracefully:", notificationError);
+    }
 
     res.status(201).json({
       message: "Account created successfully",
@@ -66,16 +76,26 @@ const register = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({
-      message: "Registration failed",
-      error: error.message,
-    });
+    console.error("REGISTER ERROR:", error);
+
+    // Rollback user creation to prevent partial registration
+    if (user && user._id) {
+      try {
+        await User.findByIdAndDelete(user._id);
+        console.log(`Rolled back user creation for ID: ${user._id}`);
+      } catch (rollbackError) {
+        console.error("Rollback failed:", rollbackError);
+      }
+    }
+
+    // Pass the error to the Express global error handling middleware
+    next(error);
   }
 };
 
 // Authenticates a user by checking email and password.
 // If valid, returns a JWT and basic user details.
-const login = async (req, res) => {
+const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
@@ -111,15 +131,12 @@ const login = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({
-      message: "Login failed",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
 // Updates the logged-in user's role after registration.
-const selectRole = async (req, res) => {
+const selectRole = async (req, res, next) => {
   try {
     // userId comes from the verified JWT (set by authMiddleware),
     const userId = req.user.id;
@@ -161,16 +178,13 @@ const selectRole = async (req, res) => {
       user,
     });
   } catch (error) {
-    res.status(500).json({
-      message: "Role update failed",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
 
 // Returns details of the currently logged-in user.
-const getMe = async (req, res) => {
+const getMe = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id).select("-password").lean();
     if (!user) {
@@ -187,14 +201,11 @@ const getMe = async (req, res) => {
 
     res.status(200).json(user);
   } catch (error) {
-    res.status(500).json({
-      message: "Failed to fetch user details",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
-const forgotPassword = async (req, res) => {
+const forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
     const user = await User.findOne({ email });
@@ -216,15 +227,12 @@ const forgotPassword = async (req, res) => {
       resetToken: process.env.NODE_ENV === "production" ? undefined : resetToken,
     });
   } catch (error) {
-    res.status(500).json({
-      message: "Forgot password failed",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
 // Resets password
-const resetPassword = async (req, res) => {
+const resetPassword = async (req, res, next) => {
   try {
     const { token, newPassword } = req.body;
 
@@ -246,15 +254,12 @@ const resetPassword = async (req, res) => {
 
     res.status(200).json({ message: "Password reset successful" });
   } catch (error) {
-    res.status(500).json({
-      message: "Reset password failed",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
 // Allows logged-in users to change their password
-const changePassword = async (req, res) => {
+const changePassword = async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body;
     const userId = req.user.id;
@@ -277,15 +282,12 @@ const changePassword = async (req, res) => {
 
     res.status(200).json({ message: "Password updated successfully" });
   } catch (error) {
-    res.status(500).json({
-      message: "Password update failed",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
 // Deletes the authenticated user's account
-const deleteAccount = async (req, res) => {
+const deleteAccount = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId);
@@ -313,10 +315,7 @@ const deleteAccount = async (req, res) => {
 
     res.status(200).json({ message: "Account and associated data deleted successfully" });
   } catch (error) {
-    res.status(500).json({
-      message: "Failed to delete account",
-      error: error.message,
-    });
+    next(error);
   }
 };
 
