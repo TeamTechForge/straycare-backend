@@ -50,6 +50,23 @@ const userSchema = new mongoose.Schema(
 
     resetPasswordToken: String,
     resetPasswordExpires: Date,
+
+    // ── Chat & Call privacy ─────────────────────────────────────
+    // Controls who can initiate a message or voice call with this user.
+    // "everyone"     — any authenticated user
+    // "contacts"     — only users they've chatted with before
+    // "relatedOnly"  — only users with a shared rescue/adoption/consult
+    // "none"         — nobody (messages/calls blocked)
+    messagingPrivacy: {
+      type: String,
+      enum: ["everyone", "contacts", "relatedOnly", "none"],
+      default: "everyone",
+    },
+    callingPrivacy: {
+      type: String,
+      enum: ["everyone", "contacts", "relatedOnly", "none"],
+      default: "contacts",
+    },
   },
   { timestamps: true }
 );

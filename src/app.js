@@ -11,6 +11,7 @@ const strayRoutes = require("./routes/strayRoutes");
 const authRoutes = require("./routes/authRoutes");
 const profileRoutes = require("./routes/profileRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const chatRoutes = require("./routes/chatRoutes");
 const { userRouter, reportRouter, adminRouter } = require("./routes/userRoutes");
 const errorHandler = require("./middleware/errorHandler");
 
@@ -54,6 +55,7 @@ app.use(morgan("dev"));
 app.use("/api/auth", authRoutes);
 app.use("/api/profiles", profileRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/chat", chatRoutes);
 app.use("/api/users", userRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/admin", adminRouter);
