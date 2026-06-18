@@ -1,27 +1,24 @@
-// src/routes/rescueRoutes.js
+
 const express = require("express");
+const {
+  findNearestRescuer,
+  sendRescueRequest,
+  checkRequestStatus,
+  listRescuers,
+} = require("../controllers/rescueController");
+
 const router = express.Router();
-const rescueController = require("../controllers/rescueController");
 
-// Create rescue request
-router.post("/", rescueController.createRescueRequest);
+// List all rescuers (useful for testing in Postman to verify data exists)
+router.get("/rescuers", listRescuers);
 
-// List rescue requests (optional filters: reporterId, rescuerId, status)
-router.get("/", rescueController.listRescueRequests);
+// Find the nearest available rescuer to a given location
+router.post("/find-nearest", findNearestRescuer);
 
-// Get history for a user
-router.get("/history/:userId", rescueController.getRescueHistory);
+// Send a rescue request to a specific rescuer by their ID
+router.post("/send-request", sendRescueRequest);
 
-// Get one rescue request
-router.get("/:requestId", rescueController.getRescueRequest);
-
-// Accept rescue
-router.post("/:requestId/accept", rescueController.acceptRescue);
-
-// Reject rescue + fallback
-router.post("/:requestId/reject", rescueController.rejectRescue);
-
-// Update status
-router.patch("/:requestId/status", rescueController.updateRescueStatus);
+// Check the current status of a rescue request (pending / accepted / rejected)
+router.get("/status/:requestId", checkRequestStatus);
 
 module.exports = router;

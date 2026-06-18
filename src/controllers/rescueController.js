@@ -1,386 +1,492 @@
-// src/controllers/rescueController.js
-const RescueRequest = require("../models/RescueRequest");
+// This file contains the actual logic for each rescue-related API endpoint.
+// Each function is called by a route in rescueRoutes.js.
+
+const mongoose = require("mongoose");
 const Rescuer = require("../models/Rescuer");
+const RescueRequest = require("../models/RescueRequest");
 const RescueHistory = require("../models/RescueHistory");
+const { getDistance } = require("../utils/distance");
 
-const toId = (value) => (value ? String(value) : null);
-
-const getRescueNamespace = (req) => {
-  const io = req.app.get("io");
-  return io ? io.of("/rescue") : null;
+const findRequestByIdOrCustomId = async (id) => {
+  let request = null;
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    request = await RescueRequest.findById(id).populate("rescuerId");
+  }
+  if (!request) {
+    request = await RescueRequest.findOne({ rescueRequestId: id }).populate("rescuerId");
+  }
+  return request;
 };
 
-const emitRescueEvent = (req, request, eventName, payload = {}) => {
-  const rescueNamespace = getRescueNamespace(req);
-  if (!rescueNamespace || !request?._id) return;
+const FALLBACK_RESCUE_LOCATION = {
+  latitude: 6.9271,
+  longitude: 79.8612,
+  address: "Colombo, Sri Lanka",
+};
 
-  const requestId = String(request._id);
-  const eventPayload = {
-    requestId,
-    status: request.status,
-    rescuerId: request.rescuerId,
-    ...payload,
+const DEFAULT_RESCUE_PHOTO = "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=600&h=400&fit=crop&q=80";
+
+const toNumber = (value, fallback = null) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const normalizeLocation = (value, fallback = FALLBACK_RESCUE_LOCATION, offset = 0) => {
+  if (value && typeof value === "object") {
+    const latitude = toNumber(value.latitude ?? value.lat, null);
+    const longitude = toNumber(value.longitude ?? value.lng, null);
+
+    if (latitude !== null && longitude !== null) {
+      return {
+        lat: latitude,
+        lng: longitude,
+        latitude,
+        longitude,
+        address: value.address || "",
+      };
+    }
+  }
+
+  return {
+    lat: fallback.latitude + offset,
+    lng: fallback.longitude + offset,
+    latitude: fallback.latitude + offset,
+    longitude: fallback.longitude + offset,
+    address: value?.address || fallback.address || "",
   };
-
-  rescueNamespace.emit(eventName, eventPayload);
-  rescueNamespace.to(requestId).emit(eventName, eventPayload);
 };
 
-const getRescuersByDistance = async (coordinates) => {
-  const [lng, lat] = coordinates;
-  console.log("[RESCUE][QUERY] Searching rescuers near [lng, lat]:", [lng, lat], "with isAvailable: true");
+const deriveDistance = (from, to) => {
+  if (!from || !to) return 0;
+  return Number(getDistance(from.latitude, from.longitude, to.latitude, to.longitude).toFixed(2));
+};
 
-  const rescuers = await Rescuer.aggregate([
-    {
-      $geoNear: {
-        near: { type: "Point", coordinates: [lng, lat] },
-        distanceField: "distanceMeters",
-        spherical: true,
-        query: { isAvailable: true },
-      },
+const deriveEta = (distanceKm) => Math.max(5, Math.round(distanceKm * 6));
+
+const getIsoString = (value) => {
+  if (!value) return new Date().toISOString();
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : new Date().toISOString();
+};
+
+const toArray = (value) => (Array.isArray(value) ? value : value ? [value] : []);
+
+const normalizePhotoList = (value) => {
+  const photos = toArray(value).filter((photo) => typeof photo === "string" && photo.trim().length > 0);
+  return photos.length ? photos : [DEFAULT_RESCUE_PHOTO];
+};
+
+const formatCaseRecord = ({ request, rescuer = null, history = null }) => {
+  const requestId = String(request.rescueRequestId || request._id);
+  const rescueLocation = normalizeLocation(
+    request.rescueLocation || rescuer?.location,
+    rescuer?.location || FALLBACK_RESCUE_LOCATION,
+    0
+  );
+  const reporterLocation = normalizeLocation(request.reporterLocation, rescueLocation, 0.008);
+  const distanceKm = toNumber(request.distanceKm, deriveDistance(reporterLocation, rescueLocation));
+  const etaMinutes = toNumber(request.etaMinutes, deriveEta(distanceKm));
+  const rescuerFromModel = rescuer
+    ? {
+      id: String(rescuer._id),
+      name: rescuer.name,
+      avatar: rescuer.avatar || "",
+      phone: rescuer.phone || "",
+      location: normalizeLocation(rescuer.location, FALLBACK_RESCUE_LOCATION, 0),
+    }
+    : null;
+
+  const rescuerFromData = history || request.rescuerName
+    ? {
+      id: history?.rescuerId || request.rescuerId || "",
+      name: history?.rescuerName || request.rescuerName || "",
+      avatar: history?.rescuerAvatar || request.rescuerAvatar || "",
+      phone: history?.rescuerPhone || request.rescuerPhone || "",
+      location: normalizeLocation(history?.rescuerLocation || request.rescueLocation, rescueLocation, 0),
+    }
+    : null;
+
+  const photosList = normalizePhotoList(request.photos || history?.photos);
+
+  return {
+    rescueRequestId: requestId,
+    caseId: request.caseId || requestId,
+    status: history ? history.status : request.status,
+    animalType: request.animalType || history?.animalType || "Rescue case",
+    description: request.description || history?.description || "Pending rescue request",
+    photos: photosList,
+    photoUrl: photosList[0] || DEFAULT_RESCUE_PHOTO,
+    createdAt: getIsoString(request.createdAt),
+    updatedAt: getIsoString(request.updatedAt || request.createdAt),
+    completedAt: history?.completedAt ? getIsoString(history.completedAt) : null,
+    reporter: {
+      id: request.reporterId || requestId,
+      name: request.reporterName || history?.reporterName || "Reporter",
+      phone: request.reporterPhone || history?.reporterPhone || "",
+      avatar: request.reporterAvatar || history?.reporterAvatar || "",
+      location: reporterLocation,
     },
-    {
-      $project: {
-        _id: 1,
-        userId: 1,
-        name: 1,
-        phone: 1,
-        email: 1,
-        location: 1,
-        distanceMeters: 1,
-      },
+    user: {
+      name: request.reporterName || history?.reporterName || "Reporter",
+      phone: request.reporterPhone || history?.reporterPhone || "",
     },
-  ]);
-
-  console.log("[RESCUE][RESULT] Found", rescuers.length, "available rescuers. Ranked by distance:", rescuers.map(r => ({ name: r.name, distance: Math.round(r.distanceMeters) + "m" })));
-  return rescuers;
-};
-
-const getAssignedRescuerInfo = async (rescuerId) => {
-  if (!rescuerId) return null;
-  const rescuer = await Rescuer.findById(rescuerId).lean();
-  if (!rescuer) return null;
-
-  return {
-    _id: String(rescuer._id),
-    userId: rescuer.userId,
-    name: rescuer.name,
-    location: rescuer.location,
+    rescuer: rescuerFromModel || rescuerFromData,
+    location: rescueLocation,
+    distanceKm,
+    etaMinutes,
+    summary: request.summary || history?.summary || "Pending rescue request",
   };
 };
 
-const attachAssignedRescuer = async (requestDoc) => {
-  const request = requestDoc.toObject ? requestDoc.toObject() : requestDoc;
-  const assignedRescuer = await getAssignedRescuerInfo(request.rescuerId);
-  return {
-    ...request,
-    assignedRescuer,
-  };
-};
-
-const assignNextRescuerOrBroadcast = async (req, request, options = {}) => {
-  const {
-    rejectedRescuerId = null,
-    rejectionReason = "rejected",
-  } = options;
-
-  const rejectedId = toId(rejectedRescuerId);
-  const triedSet = new Set((request.triedRescuerIds || []).map(String));
-  if (rejectedId) {
-    console.log("[RESCUE][FALLBACK] Rejecting rescuer:", rejectedId, "reason:", rejectionReason);
-    triedSet.add(rejectedId);
-  }
-
-  let rankedIds = (request.rankedRescuerIds || []).map(String);
-  if (rankedIds.length === 0) {
-    console.log("[RESCUE][ASSIGN] Initial assignment. Ranking rescuers by distance...");
-    const rescuerRankings = await getRescuersByDistance(request.location.coordinates);
-    rankedIds = rescuerRankings.map((rescuer) => toId(rescuer._id));
-    request.rankedRescuerIds = rankedIds;
-    console.log("[RESCUE][ASSIGN] Ranked", rankedIds.length, "rescuers");
-  }
-
-  const nextRescuerId = rankedIds.find((id) => !triedSet.has(String(id)));
-
-  if (nextRescuerId) {
-    console.log("[RESCUE][ASSIGN] Found next rescuer:", nextRescuerId);
-    request.rescuerId = String(nextRescuerId);
-    request.status = "assigned";
-    request.broadcasted = false;
-    triedSet.add(String(nextRescuerId));
-    request.triedRescuerIds = Array.from(triedSet);
-    request.assignmentStep = (request.assignmentStep || 0) + 1;
-    await request.save();
-
-    const assignedRescuer = await getAssignedRescuerInfo(nextRescuerId);
-    console.log("[RESCUE][ASSIGN] Assigned to:", assignedRescuer?.name);
-
-    emitRescueEvent(req, request, "rescue-assigned", {
-      assignedRescuer,
-      fallback: Boolean(rejectedId),
-      rejectionReason,
-      assignmentStep: request.assignmentStep,
-    });
-
-    return {
-      mode: "assigned",
-      request,
-      assignedRescuer,
-    };
-  }
-
-  console.log("[RESCUE][BROADCAST] No more rescuers. Broadcasting to all.");
-  request.rescuerId = null;
-  request.status = "broadcast";
-  request.broadcasted = true;
-  request.triedRescuerIds = Array.from(triedSet);
-  request.assignmentStep = (request.assignmentStep || 0) + 1;
-  await request.save();
-
-  emitRescueEvent(req, request, "rescue-broadcast", {
-    message: "Request sent",
-    rejectionReason,
-    assignmentStep: request.assignmentStep,
-  });
-
-  return {
-    mode: "broadcast",
-    request,
-    assignedRescuer: null,
-  };
-};
-
-// Create rescue request
-exports.createRescueRequest = async (req, res) => {
+// Returns all rescuers in the database.
+exports.listRescuers = async (req, res) => {
   try {
-    const {
-      reporterId,
-      animalDetails = {},
-      location,
-    } = req.body;
+    const rescuers = await Rescuer.find({});
+    console.log(`[RESCUE] Found ${rescuers.length} rescuers in database`);
+    return res.json({ count: rescuers.length, rescuers });
+  } catch (err) {
+    console.error("[RESCUE][listRescuers] Error:", err.message);
+    return res.status(500).json({ error: "Something went wrong" });
+  }
+};
 
-    console.log("[RESCUE][POST] /api/rescues from", req.ip, "reporterId:", reporterId);
+// ─────────────────────────────────────────────────────────────
+// POST /api/rescue/find-nearest
+// Takes a latitude and longitude in the request body.
+// Looks through all available rescuers and returns the closest one.
+// Uses the Haversine formula to calculate distance in km.
+// ─────────────────────────────────────────────────────────────
+exports.findNearestRescuer = async (req, res) => {
+  try {
+    const { latitude, longitude } = req.body;
+    console.log(`[RESCUE] Finding nearest rescuer to lat:${latitude} lng:${longitude}`);
 
-    if (!reporterId) {
-      return res.status(400).json({ message: "reporterId is required" });
+    if (latitude === undefined || longitude === undefined) {
+      return res.status(400).json({ error: "latitude and longitude are required" });
     }
 
-    if (!location || !Array.isArray(location.coordinates) || location.coordinates.length !== 2) {
-      return res.status(400).json({ message: "location.coordinates [lng, lat] is required" });
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(400).json({ error: "latitude and longitude must be valid numbers" });
+    }
+
+    const rescuers = await Rescuer.find({ isAvailable: true });
+    console.log(`[RESCUE] ${rescuers.length} rescuers are available`);
+
+    if (!rescuers.length) {
+      return res.status(404).json({ error: "No rescuers available right now. Please try again later." });
+    }
+
+    let nearest = null;
+    let minDistance = Infinity;
+
+    rescuers.forEach((rescuer) => {
+      const dist = getDistance(lat, lng, rescuer.location.latitude, rescuer.location.longitude);
+      console.log(`  - ${rescuer.name}: ${dist.toFixed(3)} km away`);
+
+      if (dist < minDistance) {
+        minDistance = dist;
+        nearest = rescuer;
+      }
+    });
+
+    console.log(`[RESCUE] Nearest rescuer: ${nearest.name} at ${minDistance.toFixed(2)} km`);
+
+    return res.json({
+      rescuer: nearest,
+      distance: minDistance.toFixed(2),
+    });
+  } catch (err) {
+    console.error("[RESCUE][findNearestRescuer] Error:", err.message);
+    return res.status(500).json({ error: "Something went wrong" });
+  }
+};
+
+// POST /api/rescue/send-request
+// Creates a new rescue request for a specific rescuer.
+// The request starts as "pending" and later resolves into a history entry.
+exports.sendRescueRequest = async (req, res) => {
+  try {
+    const {
+      rescuerId,
+      caseId,
+      animalType,
+      description,
+      photos,
+      reporterName,
+      reporterAvatar,
+      reporterLocation,
+      rescueLocation,
+      distanceKm,
+      etaMinutes,
+      summary,
+      userId,
+    } = req.body;
+    console.log(`[RESCUE] Sending request to rescuer ID: ${rescuerId} for user ID: ${userId || "logged-in-user"}`);
+
+    if (!rescuerId) {
+      return res.status(400).json({ error: "rescuerId is required" });
+    }
+
+    const rescuer = await Rescuer.findById(rescuerId);
+    if (!rescuer) {
+      return res.status(404).json({ error: "Rescuer not found" });
     }
 
     const request = await RescueRequest.create({
-      reporterId,
-      rescuerId: null,
-      animalDetails,
-      location: {
-        type: "Point",
-        coordinates: location.coordinates,
-      },
+      rescuerId,
+      userId: userId || req.body.reporterId || "logged-in-user",
       status: "pending",
+      caseId: caseId || "",
+      animalType: animalType || "Unknown animal",
+      description: description || "Pending rescue request",
+      photos: normalizePhotoList(photos),
+      reporterName: reporterName || "Reporter",
+      reporterPhone: req.body.reporterPhone || "",
+      reporterAvatar: reporterAvatar || "",
+      reporterLocation: reporterLocation || undefined,
+      rescueLocation: rescueLocation || undefined,
+      distanceKm: distanceKm ?? null,
+      etaMinutes: etaMinutes ?? null,
+      summary: summary || "Pending rescue request",
+      rescuerName: rescuer.name,
+      rescuerPhone: rescuer.phone || "",
+      rescuerAvatar: rescuer.avatar || "",
     });
 
-    const assignmentResult = await assignNextRescuerOrBroadcast(req, request, {
-      rejectionReason: "initial-assignment",
-    });
+    console.log(`[RESCUE] Request ${request._id} created for ${rescuer.name}`);
 
-    const hydratedRequest = await attachAssignedRescuer(assignmentResult.request);
+    setTimeout(async () => {
+      try {
+        const accepted = Math.random() > 0.3;
+        request.status = accepted ? "completed" : "rejected";
+        await request.save();
 
-    if (assignmentResult.mode === "broadcast") {
-      return res.status(201).json({
-        message: "No available rescuers nearby. Request sent",
-        request: hydratedRequest,
-      });
-    }
+        if (accepted) {
+          await RescueHistory.findOneAndUpdate(
+            { rescueRequestId: String(request._id) },
+            {
+              $set: {
+                rescueRequestId: String(request._id),
+                userId: request.userId || "logged-in-user",
+                caseId: request.caseId || String(request._id),
+                status: "completed",
+                animalType: request.animalType,
+                description: request.description,
+                photos: request.photos || [],
+                reporterName: request.reporterName,
+                reporterPhone: request.reporterPhone,
+                reporterAvatar: request.reporterAvatar,
+                reporterLocation: request.reporterLocation,
+                rescuerId: String(rescuer._id),
+                rescuerName: rescuer.name,
+                rescuerPhone: rescuer.phone || "",
+                rescuerAvatar: rescuer.avatar || "",
+                rescuerLocation: rescuer.location,
+                location: request.rescueLocation || rescuer.location,
+                distanceKm: request.distanceKm,
+                etaMinutes: request.etaMinutes,
+                summary: request.summary || "Rescue completed",
+                outcome: request.summary || "completed",
+                completedAt: new Date(),
+              },
+            },
+            { upsert: true, new: true }
+          );
+        }
 
-    return res.status(201).json({
-      message: "Rescue request created and assigned to nearest rescuer",
-      request: hydratedRequest,
+        console.log(`[RESCUE] Request ${request._id} resolved to: ${request.status}`);
+      } catch (e) {
+        console.error("[RESCUE] Auto-resolve failed:", e.message);
+      }
+    }, 4000);
+
+    return res.json({
+      requestId: String(request._id),
+      status: "pending",
+      rescuer: {
+        _id: String(rescuer._id),
+        name: rescuer.name,
+        phone: rescuer.phone,
+        avatar: rescuer.avatar || "",
+        location: rescuer.location,
+      },
     });
   } catch (err) {
-    return res.status(500).json({ message: "Error creating rescue request", error: err.message });
+    console.error("[RESCUE][sendRescueRequest] Error:", err.message);
+    return res.status(500).json({ error: "Something went wrong" });
   }
 };
 
-// List rescue requests
-exports.listRescueRequests = async (req, res) => {
+exports.listPendingRescues = async (req, res) => {
   try {
-    const { reporterId, rescuerId, status } = req.query;
-    console.log("[RESCUE][GET] /api/rescues from", req.ip, "query:", req.query);
+    const pending = await RescueRequest.find({ status: "pending" })
+      .sort({ createdAt: -1 })
+      .populate("rescuerId");
 
-    const filter = {};
-    if (reporterId) filter.reporterId = reporterId;
-    if (rescuerId) filter.rescuerId = rescuerId;
-    if (status) filter.status = status;
-
-    const requests = await RescueRequest.find(filter).sort({ _id: -1 });
-    const hydratedRequests = await Promise.all(requests.map((request) => attachAssignedRescuer(request)));
-    return res.json(hydratedRequests);
+    return res.json(pending.map((request) => formatCaseRecord({ request, rescuer: request.rescuerId || null })));
   } catch (err) {
-    return res.status(500).json({ message: "Error fetching rescue requests", error: err.message });
+    console.error("[RESCUE][listPendingRescues] Error:", err.message);
+    return res.status(500).json({ error: "Something went wrong" });
   }
 };
 
-// Get one rescue request
-exports.getRescueRequest = async (req, res) => {
+exports.listCompletedRescues = async (req, res) => {
   try {
-    const { requestId } = req.params;
-    console.log("[RESCUE][GET] /api/rescues/" + requestId, "from", req.ip);
+    const historyEntries = await RescueHistory.find({ status: "completed" }).sort({ completedAt: -1, createdAt: -1 });
 
-    const request = await RescueRequest.findById(requestId);
-    if (!request) return res.status(404).json({ message: "Request not found" });
-
-    const hydratedRequest = await attachAssignedRescuer(request);
-    return res.json(hydratedRequest);
+    return res.json(historyEntries.map((history) => formatCaseRecord({ request: history, history })));
   } catch (err) {
-    return res.status(500).json({ message: "Error fetching rescue request", error: err.message });
+    console.error("[RESCUE][listCompletedRescues] Error:", err.message);
+    return res.status(500).json({ error: "Something went wrong" });
   }
 };
 
-// Accept a rescue request
-exports.acceptRescue = async (req, res) => {
+exports.listAllRescues = async (req, res) => {
   try {
-    const { requestId } = req.params;
-    const rescuerId = req.userId || req.body?.rescuerId || req.query?.rescuerId;
-    console.log("[RESCUE][POST] /api/rescues/" + requestId + "/accept from", req.ip, "rescuerId:", rescuerId);
+    const [pending, completed] = await Promise.all([
+      RescueRequest.find({ status: "pending" }).sort({ createdAt: -1 }).populate("rescuerId"),
+      RescueHistory.find({ status: "completed" }).sort({ completedAt: -1, createdAt: -1 }),
+    ]);
 
-    if (!rescuerId) {
-      return res.status(400).json({ message: "rescuerId is required" });
-    }
-
-    const request = await RescueRequest.findById(requestId);
-    if (!request) return res.status(404).json({ message: "Request not found" });
-
-    request.rescuerId = toId(rescuerId);
-    request.status = "accepted";
-    request.broadcasted = false;
-    request.triedRescuerIds = Array.from(new Set([...(request.triedRescuerIds || []).map(String), toId(rescuerId)]));
-    await request.save();
-
-    const assignedRescuer = await getAssignedRescuerInfo(request.rescuerId);
-
-    emitRescueEvent(req, request, "rescue-assigned", {
-      assignedRescuer,
-      accepted: true,
-      assignmentStep: request.assignmentStep,
+    const all = [
+      ...pending.map((request) => formatCaseRecord({ request, rescuer: request.rescuerId || null })),
+      ...completed.map((history) => formatCaseRecord({ request: history, history })),
+    ].sort((left, right) => {
+      const leftTime = new Date(left.completedAt || left.createdAt).getTime();
+      const rightTime = new Date(right.completedAt || right.createdAt).getTime();
+      return rightTime - leftTime;
     });
 
-    const hydratedRequest = await attachAssignedRescuer(request);
-    return res.json({ message: "Rescue accepted", request: hydratedRequest });
+    return res.json(all);
   } catch (err) {
-    return res.status(500).json({ message: "Error accepting rescue", error: err.message });
+    console.error("[RESCUE][listAllRescues] Error:", err.message);
+    return res.status(500).json({ error: "Something went wrong" });
   }
 };
 
-// Reject a rescue request + fallback
-exports.rejectRescue = async (req, res) => {
+exports.listUserRescues = async (req, res) => {
   try {
-    const { requestId } = req.params;
-    const rescuerId = req.userId || req.body?.rescuerId || req.query?.rescuerId;
-    console.log("[RESCUE][POST] /api/rescues/" + requestId + "/reject from", req.ip, "rescuerId:", rescuerId);
+    const userId = req.params.userId || req.query.userId || "logged-in-user";
+    console.log(`[RESCUE] Listing rescues for user ID: ${userId}`);
 
-    const request = await RescueRequest.findById(requestId);
-    if (!request) return res.status(404).json({ message: "Request not found" });
+    const [pending, completed] = await Promise.all([
+      RescueRequest.find({ userId, status: "pending" }).sort({ createdAt: -1 }).populate("rescuerId"),
+      RescueHistory.find({ userId, status: "completed" }).sort({ completedAt: -1, createdAt: -1 }),
+    ]);
 
-    const rejectedRescuerId = toId(rescuerId) || toId(request.rescuerId);
-
-    emitRescueEvent(req, request, "rescue-rejected", {
-      rejectedRescuerId,
-      reason: "rejected",
+    const all = [
+      ...pending.map((request) => formatCaseRecord({ request, rescuer: request.rescuerId || null })),
+      ...completed.map((history) => formatCaseRecord({ request: history, history })),
+    ].sort((left, right) => {
+      const leftTime = new Date(left.completedAt || left.createdAt).getTime();
+      const rightTime = new Date(right.completedAt || right.createdAt).getTime();
+      return rightTime - leftTime;
     });
 
-    const assignmentResult = await assignNextRescuerOrBroadcast(req, request, {
-      rejectedRescuerId,
-      rejectionReason: "rejected",
-    });
+    console.log(`[RESCUE] Found ${all.length} rescues for user ID: ${userId}`);
+    return res.json(all);
+  } catch (err) {
+    console.error("[RESCUE][listUserRescues] Error:", err.message);
+    return res.status(500).json({ error: "Something went wrong" });
+  }
+};
 
-    const hydratedRequest = await attachAssignedRescuer(assignmentResult.request);
-
-    if (assignmentResult.mode === "broadcast") {
+exports.getRescueById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const history = await RescueHistory.findOne({ rescueRequestId: id });
+    if (history) {
+      const formatted = formatCaseRecord({ request: history, history });
       return res.json({
-        message: "All rescuers rejected or timed out. Request sent",
-        request: hydratedRequest,
+        ...formatted,
+        reporterLocation: formatted.reporter.location,
+        rescuerLocation: formatted.rescuer?.location || null,
+        distanceKm: formatted.distanceKm,
+        etaMinutes: formatted.etaMinutes,
+        lastUpdatedAt: getIsoString(history.completedAt || history.createdAt),
       });
+    }
+
+    const pendingRequest = await findRequestByIdOrCustomId(id);
+
+    if (pendingRequest) {
+      const formatted = formatCaseRecord({ request: pendingRequest, rescuer: pendingRequest.rescuerId || null });
+      return res.json({
+        ...formatted,
+        reporterLocation: formatted.reporter.location,
+        rescuerLocation: formatted.rescuer?.location || null,
+        distanceKm: formatted.distanceKm,
+        etaMinutes: formatted.etaMinutes,
+        lastUpdatedAt: getIsoString(pendingRequest.updatedAt || pendingRequest.createdAt),
+      });
+    }
+
+    return res.status(404).json({ error: "Rescue not found" });
+  } catch (err) {
+    console.error("[RESCUE][getRescueById] Error:", err.message);
+    return res.status(500).json({ error: "Something went wrong" });
+  }
+};
+
+exports.getLiveTracking = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const request = await findRequestByIdOrCustomId(requestId);
+
+    if (!request) {
+      return res.status(404).json({ error: "Request not found" });
+    }
+
+    const formatted = formatCaseRecord({ request, rescuer: request.rescuerId || null });
+    return res.json({
+      ...formatted,
+      reporterLocation: formatted.reporter.location,
+      rescuerLocation: formatted.rescuer?.location || null,
+      distanceKm: formatted.distanceKm,
+      etaMinutes: formatted.etaMinutes,
+      lastUpdatedAt: getIsoString(request.updatedAt || request.createdAt),
+    });
+  } catch (err) {
+    console.error("[RESCUE][getLiveTracking] Error:", err.message);
+    return res.status(500).json({ error: "Something went wrong" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/rescue/status/:requestId
+// Checks the current status of a rescue request.
+// The app polls this every few seconds while waiting for a response.
+// Returns: "pending", "accepted", or "rejected"
+// ─────────────────────────────────────────────────────────────
+exports.checkRequestStatus = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    console.log(`[RESCUE] Checking status of request: ${requestId}`);
+
+    const request = await findRequestByIdOrCustomId(requestId);
+
+    if (!request) {
+      return res.status(404).json({ error: "Request not found" });
     }
 
     return res.json({
-      message: "Rescue rejected, reassigned to next nearest rescuer",
-      request: hydratedRequest,
-      fallbackRescuer: assignmentResult.assignedRescuer,
+      requestId: String(request._id),
+      status: request.status,
+      rescuer: request.rescuerId
+        ? {
+          _id: String(request.rescuerId._id),
+          name: request.rescuerId.name,
+          phone: request.rescuerId.phone,
+          avatar: request.rescuerId.avatar || "",
+          location: request.rescuerId.location,
+        }
+        : null,
     });
   } catch (err) {
-    return res.status(500).json({ message: "Error rejecting rescue", error: err.message });
-  }
-};
-
-// Update rescue status (e.g., under_rescue, completed)
-exports.updateRescueStatus = async (req, res) => {
-  try {
-    const { requestId } = req.params;
-    const { status } = req.body;
-    console.log("[RESCUE][PATCH] /api/rescues/" + requestId + "/status from", req.ip, "status:", status);
-
-    const allowedStatuses = ["pending", "assigned", "accepted", "rejected", "under_rescue", "completed", "broadcast", "timed_out"];
-    if (!allowedStatuses.includes(status)) {
-      return res.status(400).json({ message: "Invalid status", allowedStatuses });
-    }
-
-    const request = await RescueRequest.findById(requestId);
-    if (!request) return res.status(404).json({ message: "Request not found" });
-
-    if (status === "timed_out") {
-      const timedOutRescuerId = toId(request.rescuerId);
-
-      emitRescueEvent(req, request, "rescue-rejected", {
-        rejectedRescuerId: timedOutRescuerId,
-        reason: "timed_out",
-      });
-
-      const assignmentResult = await assignNextRescuerOrBroadcast(req, request, {
-        rejectedRescuerId: timedOutRescuerId,
-        rejectionReason: "timed_out",
-      });
-
-      const hydratedRequest = await attachAssignedRescuer(assignmentResult.request);
-      if (assignmentResult.mode === "broadcast") {
-        return res.json({ message: "All rescuers timed out. Request sent", request: hydratedRequest });
-      }
-
-      return res.json({ message: "Timed out. Reassigned to next nearest rescuer", request: hydratedRequest });
-    }
-
-    request.status = status;
-    await request.save();
-
-    // If completed, move to history
-    if (status === "completed") {
-      await RescueHistory.create({
-        rescueId: request._id,
-        rescuerId: request.rescuerId,
-        reporterId: request.reporterId,
-        outcome: "Rescue completed"
-      });
-    }
-
-    const hydratedRequest = await attachAssignedRescuer(request);
-    return res.json({ message: "Status updated", request: hydratedRequest });
-  } catch (err) {
-    return res.status(500).json({ message: "Error updating status", error: err.message });
-  }
-};
-
-// Get rescue history for a user or rescuer
-exports.getRescueHistory = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    console.log("[RESCUE][GET] /api/rescues/history/" + userId, "from", req.ip);
-
-    const history = await RescueHistory.find({
-      $or: [{ rescuerId: userId }, { reporterId: userId }]
-    });
-
-    return res.json(history);
-  } catch (err) {
-    return res.status(500).json({ message: "Error fetching history", error: err.message });
+    console.error("[RESCUE][checkRequestStatus] Error:", err.message);
+    return res.status(500).json({ error: "Something went wrong" });
   }
 };

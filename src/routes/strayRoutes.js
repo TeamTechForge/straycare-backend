@@ -1,11 +1,8 @@
 const express = require("express");
 const router = express.Router();
-<<<<<<< HEAD
 const multer = require("multer");
 const path = require("path");
-=======
-const { upload, uploadToGridFs } = require("../config/gridfs");
->>>>>>> 0af9fd1 (Merge nearby and image uploading part)
+const { upload: gridFsUpload, uploadToGridFs } = require("../config/gridfs");
 
 const {
   createReport,
@@ -25,10 +22,10 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage });
+const diskUpload = multer({ storage });
 
 // ------------------ UPLOAD ROUTE ------------------
-router.post("/upload", upload.single("image"), (req, res) => {
+router.post("/upload", diskUpload.single("image"), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded" });
   }
@@ -40,17 +37,14 @@ router.post("/upload", upload.single("image"), (req, res) => {
 
 // ------------------ EXISTING ROUTES ------------------
 router.post("/report", createReport);
-<<<<<<< HEAD
-=======
 
 // One-step submission flow (multipart + photos)
-router.post("/report/submit", upload.array("photos", 5), uploadToGridFs, createReport);
+router.post("/report/submit", gridFsUpload.array("photos", 5), uploadToGridFs, createReport);
 
 // Compatibility route for merged clients posting to /reports
 router.post("/reports", createReport);
 
 // Get a single report by caseId
->>>>>>> 0af9fd1 (Merge nearby and image uploading part)
 router.get("/report/:caseId", getReportByCaseId);
 router.get("/reports", getAllReports);
 router.patch("/report/:caseId/status", updateCaseStatus);

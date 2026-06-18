@@ -1,43 +1,66 @@
+// This file defines what a Rescue Request looks like in the database.
+// When a user taps "Request Help", a new RescueRequest document is created.
+// The status starts as "pending" and changes to "accepted" or "rejected".
+
 const mongoose = require("mongoose");
 
 const rescueRequestSchema = new mongoose.Schema({
-  reporterId: String,
-  rescuerId: String,
-  status: { type: String, default: "pending" }, 
-  animalDetails: Object,
-  location: {
-    type: { type: String, default: "Point" },
-    coordinates: [Number]
+  // Which rescuer this request was sent to
+  rescuerId: { type: mongoose.Schema.Types.ObjectId, ref: "Rescuer" },
+
+  // Which user created this request
+  userId: { type: String, default: "", index: true },
+
+  caseId: { type: String, default: "" },
+
+  rescueRequestId: { type: String, default: "" },
+
+  animalType: { type: String, default: "Unknown animal" },
+
+  description: { type: String, default: "Pending rescue request" },
+
+  photos: { type: [String], default: [] },
+
+  reporterName: { type: String, default: "Reporter" },
+
+  reporterPhone: { type: String, default: "" },
+
+  reporterAvatar: { type: String, default: "" },
+
+  reporterLocation: {
+    latitude: { type: Number, default: null },
+    longitude: { type: Number, default: null },
+    address: { type: String, default: "" },
   },
-  rankedRescuerIds: {
-    type: [String],
-    default: [],
+
+  rescueLocation: {
+    latitude: { type: Number, default: null },
+    longitude: { type: Number, default: null },
+    address: { type: String, default: "" },
   },
-  triedRescuerIds: {
-    type: [String],
-    default: [],
+
+  rescuerName: { type: String, default: "" },
+
+  rescuerPhone: { type: String, default: "" },
+
+  rescuerAvatar: { type: String, default: "" },
+
+  distanceKm: { type: Number, default: null },
+
+  etaMinutes: { type: Number, default: null },
+
+  summary: { type: String, default: "Pending rescue request" },
+
+  // Current state of the request
+  status: {
+    type: String,
+    enum: ["pending", "accepted", "rejected", "completed"], // completed supports finished cases in the new history tabs
+    default: "pending",
   },
-  broadcasted: {
-    type: Boolean,
-    default: false,
-  },
-  assignmentStep: {
-    type: Number,
-    default: 0,
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now,
-  },
+
+  // When the request was created
+  createdAt: { type: Date, default: Date.now },
 });
 
-rescueRequestSchema.pre("save", function updateTimestamp(next) {
-  this.updatedAt = new Date();
-  next();
-});
-
+// Export so rescueController.js can create and query requests
 module.exports = mongoose.model("RescueRequest", rescueRequestSchema);
