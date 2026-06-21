@@ -1,0 +1,59 @@
+const mongoose = require("mongoose");
+
+const StrayReportSchema = new mongoose.Schema({
+  caseId: {
+    type: String,
+    required: true,
+    unique: true,
+  },
+
+  reporterUserId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: false,
+  },
+
+  animalType: {
+    type: String,
+    required: true,
+  },
+
+  breed: String,
+
+  status: {
+    type: String,
+    enum: ["Needs Help", "Under Rescue", "Treated", "Ready for Adoption"],
+    default: "Needs Help",
+  },
+
+  notes: String,
+
+  anonymous: {
+    type: Boolean,
+    default: false,
+  },
+
+  location: {
+    lat: { type: Number, required: true },
+    lng: { type: Number, required: true },
+    address: { type: String },
+  },
+
+  photos: [String],
+
+  // ⭐ NEW: Status history for timeline
+  history: [
+    {
+      status: { type: String },
+      message: { type: String },
+      timestamp: { type: Date, default: Date.now },
+    },
+  ],
+
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+module.exports = mongoose.model("StrayReport", StrayReportSchema);
