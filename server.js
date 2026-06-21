@@ -1,5 +1,5 @@
 ﻿const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, ".env"), override: true });
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const express = require("express");
 const cors = require("cors");
@@ -8,17 +8,13 @@ const authMiddleware = require("./src/middleware/authMiddleware");
 
 const app = express();
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Connect to MongoDB
 connectDB();
 
-
 // PayHere callbacks
-
 app.get("/payhere/return", (req, res) => {
   const { status } = req.query;
   if (status === "2") {
@@ -36,10 +32,9 @@ app.post("/payhere/notify", async (req, res) => {
   res.sendStatus(200);
 });
 
-// Auth routes (login)
+// Auth routes
 const authRoutes = require("./src/routes/authRoutes");
 app.use("/api/admin", authRoutes);
-
 
 // Main API routes
 const donationRoutes = require("./src/routes/donation.routes");
@@ -47,26 +42,22 @@ const organizationRoutes = require("./src/routes/organization.routes");
 const rescueRoutes = require("./src/routes/rescues");
 const userRoutes = require("./src/routes/users.routes");
 const adminNotificationRoutes = require("./src/routes/adminNotifications.routes");
+const adminManagementRoutes = require("./src/routes/adminRoutes");
 
-// Donations - auth handled inside route file
 app.use("/api/donations", donationRoutes);
-
-// Organizations - dropdown data
 app.use("/api/organizations", organizationRoutes);
-
-// Admin Notifications - announcements
 app.use("/api/admin-notifications", adminNotificationRoutes);
-
-// Protected routes
+app.use("/api/admins", adminManagementRoutes);
 app.use("/api/users", authMiddleware, userRoutes);
 app.use("/api", authMiddleware, rescueRoutes);
 
-// Utility routes
+// Utility
 app.get("/ping", (req, res) => res.send("pong"));
 
-// Server start
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
+  console.log("MERCHANT ID:", process.env.PAYHERE_MERCHANT_ID);
+  console.log("MERCHANT SECRET:", process.env.PAYHERE_MERCHANT_SECRET);
+  console.log("BACKEND URL:", process.env.BACKEND_URL);
 });
-
