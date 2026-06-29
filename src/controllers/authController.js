@@ -8,7 +8,6 @@ const VolunteerProfile = require("../models/VolunteerProfile");
 const VetProfile = require("../models/VetProfile");
 const GeneralUserProfile = require("../models/GeneralUserProfile");
 
-// Creates a JWT containing the user's id and role.
 const generateToken = (userId, role) => {
   if (!process.env.JWT_SECRET) {
     throw new Error("JWT_SECRET is not configured on the server");
@@ -20,7 +19,6 @@ const generateToken = (userId, role) => {
   );
 };
 
-// Registers a new user with the default role "general_user"
 const register = async (req, res, next) => {
   let user;
   try {
@@ -50,7 +48,6 @@ const register = async (req, res, next) => {
 
     const token = generateToken(user._id, user.role);
 
-    // Create welcome notification gracefully
     try {
       await Notification.create({
         userId: user._id,
@@ -78,7 +75,6 @@ const register = async (req, res, next) => {
   } catch (error) {
     console.error("REGISTER ERROR:", error);
 
-    // Rollback user creation to prevent partial registration
     if (user && user._id) {
       try {
         await User.findByIdAndDelete(user._id);
@@ -88,13 +84,10 @@ const register = async (req, res, next) => {
       }
     }
 
-    // Pass the error to the Express global error handling middleware
     next(error);
   }
 };
 
-// Authenticates a user by checking email and password.
-// If valid, returns a JWT and basic user details.
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -108,7 +101,7 @@ const login = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
-    // Compare entered password with the hashed password
+
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
@@ -135,26 +128,19 @@ const login = async (req, res, next) => {
   }
 };
 
-// Updates the logged-in user's role after registration.
 const selectRole = async (req, res, next) => {
   try {
-    // userId comes from the verified JWT (set by authMiddleware),
     const userId = req.user.id;
     const { role } = req.body;
 
-    // Only allow roles supported by the StrayCare system.
     const allowedRoles = ["general_user", "volunteer", "ngo", "vet"];
 
     if (!role) {
-      return res.status(400).json({
-        message: "Role is required",
-      });
+      return res.status(400).json({ message: "Role is required" });
     }
 
     if (!allowedRoles.includes(role)) {
-      return res.status(400).json({
-        message: "Invalid role selected",
-      });
+      return res.status(400).json({ message: "Invalid role selected" });
     }
 
     const user = await User.findByIdAndUpdate(
@@ -164,12 +150,9 @@ const selectRole = async (req, res, next) => {
     ).select("-password");
 
     if (!user) {
-      return res.status(404).json({
-        message: "User not found",
-      });
+      return res.status(404).json({ message: "User not found" });
     }
 
-    // Issue a new token so the client's stored token reflects the new role.
     const token = generateToken(user._id, user.role);
 
     res.status(200).json({
@@ -182,8 +165,6 @@ const selectRole = async (req, res, next) => {
   }
 };
 
-
-// Returns details of the currently logged-in user.
 const getMe = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id).select("-password").lean();
@@ -191,7 +172,6 @@ const getMe = async (req, res, next) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // If NGO, try to get organization name
     if (user.role === "ngo") {
       const ngoProfile = await NGOProfile.findOne({ userId: user._id });
       if (ngoProfile) {
@@ -214,14 +194,12 @@ const forgotPassword = async (req, res, next) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Generate reset token
     const resetToken = crypto.randomBytes(20).toString("hex");
     user.resetPasswordToken = resetToken;
-    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+    user.resetPasswordExpires = Date.now() + 3600000;
 
     await user.save();
 
-    // Since email service is not configured, return the token in response (For Development)
     res.status(200).json({
       message: "Reset token generated successfully",
       resetToken: process.env.NODE_ENV === "production" ? undefined : resetToken,
@@ -231,7 +209,6 @@ const forgotPassword = async (req, res, next) => {
   }
 };
 
-// Resets password
 const resetPassword = async (req, res, next) => {
   try {
     const { token, newPassword } = req.body;
@@ -258,7 +235,6 @@ const resetPassword = async (req, res, next) => {
   }
 };
 
-// Allows logged-in users to change their password
 const changePassword = async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -286,7 +262,6 @@ const changePassword = async (req, res, next) => {
   }
 };
 
-// Deletes the authenticated user's account
 const deleteAccount = async (req, res, next) => {
   try {
     const userId = req.user.id;
@@ -296,7 +271,6 @@ const deleteAccount = async (req, res, next) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Delete role-specific profile
     if (user.role === "ngo") {
       await NGOProfile.findOneAndDelete({ userId });
     } else if (user.role === "volunteer") {
@@ -307,10 +281,8 @@ const deleteAccount = async (req, res, next) => {
       await GeneralUserProfile.findOneAndDelete({ userId });
     }
 
-    // Delete User record
     await User.findByIdAndDelete(userId);
 
-    // Delete associated notifications
     await Notification.deleteMany({ userId });
 
     res.status(200).json({ message: "Account and associated data deleted successfully" });

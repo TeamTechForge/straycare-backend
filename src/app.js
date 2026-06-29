@@ -1,4 +1,4 @@
-// src/app.js
+﻿// src/app.js
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
@@ -9,9 +9,12 @@ const forumRoutes = require("./routes/forumRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const strayRoutes = require("./routes/strayRoutes");
 const authRoutes = require("./routes/authRoutes");
+const adminAuthRoutes = require("./routes/adminAuthRoutes");
 const profileRoutes = require("./routes/profileRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const { userRouter, reportRouter, adminRouter } = require("./routes/userRoutes");
+const donationRoutes = require("./routes/donation.routes");
+const organizationRoutes = require("./routes/organization.routes");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -28,10 +31,14 @@ const allowedOrigins = [
   "http://192.168.8.142:8082",
 ].filter(Boolean);
 
+app.use((req, res, next) => {
+  res.setHeader("ngrok-skip-browser-warning", "true");
+  next();
+});
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Expo Go / native fetch often sends no Origin header.
       if (!origin) return callback(null, true);
 
       const isAllowed =
@@ -48,15 +55,18 @@ app.use(
   })
 );
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(morgan("dev"));
 
-
 app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminAuthRoutes);
 app.use("/api/profiles", profileRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/users", userRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/donations", donationRoutes);
+app.use("/api/organizations", organizationRoutes);
 
 app.get("/ping", (req, res) => {
   return res.status(200).json({
@@ -66,18 +76,15 @@ app.get("/ping", (req, res) => {
   });
 });
 
-
 app.use("/api/nearby", nearbyRoutes);
 app.use("/api/rescues", rescueRoutes);
 
-// Add logging for forum API hits
 app.use("/api/forum", (req, res, next) => {
   console.log("[API HIT]", req.method, req.originalUrl, "from", req.ip);
   next();
 });
 app.use("/api/forum", forumRoutes);
 
-// Upload + Stray routes (your workflow)
 app.use("/api/upload", uploadRoutes);
 app.use("/api/strays", strayRoutes);
 
@@ -86,12 +93,11 @@ app.get("/test", (req, res) => {
 });
 
 console.log("AUTH ROUTES LOADED");
-// Base Route
+
 app.get("/", (req, res) => {
   res.send("StrayCare Backend API Running");
 });
 
-// Error handling middleware
 app.use(errorHandler);
 
 module.exports = app;

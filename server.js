@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 require("dotenv").config();
 
 const http = require("http");
@@ -22,6 +22,24 @@ if (!process.env.MONGO_URI) {
 
 connectDB();
 
+// PayHere callbacks
+app.get("/payhere/return", (req, res) => {
+  const { status } = req.query;
+  if (status === "2") {
+    return res.send("<html><body><h1>status=2</h1></body></html>");
+  }
+  return res.send("<html><body><h1>status=0</h1></body></html>");
+});
+
+app.get("/payhere/cancel", (req, res) => {
+  return res.send("<html><body><h1>cancelled</h1></body></html>");
+});
+
+app.post("/payhere/notify", async (req, res) => {
+  console.log("PAYHERE NOTIFY:", req.body);
+  res.sendStatus(200);
+});
+
 // Create HTTP server for socket.io
 const server = http.createServer(app);
 
@@ -39,7 +57,7 @@ app.set("io", io);
 require("./src/sockets/rescueSocket")(io);
 require("./src/sockets/chatSocket")(io);
 
-//  Serve uploaded images BEFORE routes
+// Serve uploaded images BEFORE routes
 app.use("/uploads", express.static("uploads"));
 
 // Register global error handler for any late routes
@@ -52,6 +70,9 @@ const HOST = process.env.HOST || "0.0.0.0";
 
 server.listen(PORT, HOST, () => {
   console.log(`Server running on http://${HOST}:${PORT}`);
+  console.log("MERCHANT ID:", process.env.PAYHERE_MERCHANT_ID);
+  console.log("MERCHANT SECRET:", process.env.PAYHERE_MERCHANT_SECRET);
+  console.log("BACKEND URL:", process.env.BACKEND_URL);
 });
 
 server.on("error", (err) => {
