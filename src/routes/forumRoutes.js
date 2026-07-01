@@ -3,11 +3,13 @@ const express = require("express");
 const router = express.Router();
 const forumController = require("../controllers/forumController");
 
+const { verifyToken } = require("../middleware/authMiddleware");
+
 // List all posts
 router.get("/posts", forumController.listPosts);
 
 // Create a post
-router.post("/posts", forumController.createPost);
+router.post("/posts", verifyToken, forumController.createPost);
 
 // Like / unlike a post
 router.patch("/posts/:postId/like", forumController.togglePostLike);

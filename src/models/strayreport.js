@@ -7,6 +7,12 @@ const StrayReportSchema = new mongoose.Schema({
     unique: true,
   },
 
+  reporterUserId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: false,
+  },
+
   animalType: {
     type: String,
     required: true,

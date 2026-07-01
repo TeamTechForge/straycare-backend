@@ -9,6 +9,9 @@ router.post("/", rescueController.createRescueRequest);
 // List rescue requests (optional filters: reporterId, rescuerId, status)
 router.get("/", rescueController.listRescueRequests);
 
+// Get history for a user
+router.get("/history/:userId", rescueController.getRescueHistory);
+
 // Get one rescue request
 router.get("/:requestId", rescueController.getRescueRequest);
 
@@ -20,8 +23,5 @@ router.post("/:requestId/reject", rescueController.rejectRescue);
 
 // Update status
 router.patch("/:requestId/status", rescueController.updateRescueStatus);
-
-// Get history for a user
-router.get("/history/:userId", rescueController.getRescueHistory);
 
 module.exports = router;

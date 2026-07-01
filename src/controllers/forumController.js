@@ -1,5 +1,6 @@
 const Forum = require("../models/Forum");
 const ForumPost = require("../models/ForumPost");
+const User = require("../models/User");
 
 exports.listPosts = async (req, res) => {
   try {
@@ -13,17 +14,28 @@ exports.listPosts = async (req, res) => {
 
 exports.createPost = async (req, res) => {
   try {
-    const { title, tag = "GENERAL", author = "You" } = req.body;
+    const { title, tag = "GENERAL", author } = req.body;
     console.log("[FORUM][POST] /api/forum/posts from", req.ip, "title:", title);
 
     if (!title || !String(title).trim()) {
       return res.status(400).json({ message: "Post title is required" });
     }
 
+    let authorName = author || "You";
+    const userId = req.user ? req.user.id : null;
+
+    if (userId) {
+      const user = await User.findById(userId);
+      if (user) {
+        authorName = user.name;
+      }
+    }
+
     const post = await ForumPost.create({
       title: String(title).trim(),
       tag,
-      author,
+      author: authorName,
+      userId,
     });
 
     // Keep a thread document ready for comments so GET/POST thread endpoints stay simple.
