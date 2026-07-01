@@ -136,6 +136,7 @@ exports.getAllReports = async (req, res) => {
       {},
       { status: 1, location: 1, caseId: 1 }
     );
+    console.log("[STRAY][GET] Fetched all reports:", reports.length);
     res.json(reports);
   } catch (error) {
     const errorMessage = error?.message || String(error);

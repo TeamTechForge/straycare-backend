@@ -41,7 +41,7 @@ const StrayReportSchema = new mongoose.Schema({
 
   photos: [String],
 
-  // ⭐ NEW: Status history for timeline
+  // Status history for timeline
   history: [
     {
       status: { type: String },
