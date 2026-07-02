@@ -1,82 +1,182 @@
-﻿const express = require("express");
+// ──────────────────────────────────────────────────────────────────────────────
+// server.js — Backend entry point
+//
+// Startup order (strictly sequential — one step must succeed before the next):
+//   1. Check Node version compatibility
+//   2. Validate required environment variables
+//   3. Find a free port (or use the one in .env)
+//   4. Connect to MongoDB
+//   5. Start HTTP server + Socket.IO
+//   6. Print all mounted routes so we can see exactly what loaded
+// ──────────────────────────────────────────────────────────────────────────────
+
+"use strict";
+
+const express = require("express");
+
+// Load .env variables before anything else
 require("dotenv").config();
 
-const http = require("http");
+const http   = require("http");
+const net    = require("net");        // used to check if a port is free
 const { Server } = require("socket.io");
 
-const app = require("./src/app"); // Express app with middleware
+const app       = require("./src/app");
+
 const connectDB = require("./src/config/db");
 
+// ─── 1. Node version check ────────────────────────────────────────────────────
+// multer-gridfs-storage is broken on Node 23+. Recommend Node 20 LTS.
 const nodeMajor = Number(process.versions.node.split(".")[0]);
-if (Number.isFinite(nodeMajor) && nodeMajor >= 23) {
-  console.warn(
-    `[ENV WARNING] Detected Node ${process.versions.node}. multer-gridfs-storage is known to be unstable on Node 23+; use Node 20 LTS.`
-  );
+if (nodeMajor >= 23) {
+  console.warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.warn(`⚠️  NODE VERSION WARNING`);
+  console.warn(`   You are running Node ${process.versions.node}.`);
+  console.warn(`   multer-gridfs-storage is known to crash on Node 23+.`);
+  console.warn(`   Please switch to Node 20 LTS: https://nodejs.org/en/download`);
+  console.warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 }
 
+// ─── 2. Environment variable check ───────────────────────────────────────────
 if (!process.env.MONGO_URI) {
-  console.error(
-    "[ENV ERROR] MONGO_URI is missing before startup. Check Backend/.env and dotenv loading order."
-  );
+  console.error("[STARTUP] ❌ MONGO_URI is not set in Backend/.env — server cannot start.");
+  process.exit(1); // stop immediately, don't half-start
 }
 
-// 1. CONNECT TO DATABASE
-connectDB();
+// ─── 3. Port helper functions ─────────────────────────────────────────────────
 
-// PayHere callbacks
-app.get("/payhere/return", (req, res) => {
-  const { status } = req.query;
-  if (status === "2") {
-    return res.send("<html><body><h1>status=2</h1></body></html>");
+/**
+ * Check if a given port is currently free.
+ * Returns true if nobody is using it, false if something is already there.
+ */
+function isPortFree(port) {
+  return new Promise((resolve) => {
+    const tester = net.createServer();
+    tester.once("error", () => resolve(false)); // port is in use
+    tester.once("listening", () => {
+      tester.close(() => resolve(true)); // port is free
+    });
+    tester.listen(port, "0.0.0.0");
+  });
+}
+
+/**
+ * Starting from `startPort`, find the first port that is free.
+ * Tries up to 10 ports before giving up.
+ */
+async function findFreePort(startPort) {
+  for (let port = startPort; port < startPort + 10; port++) {
+    if (await isPortFree(port)) return port;
+    console.warn(`[STARTUP] ⚠️  Port ${port} is in use, trying ${port + 1}...`);
   }
-  return res.send("<html><body><h1>status=0</h1></body></html>");
-});
+  throw new Error(`No free port found in range ${startPort}–${startPort + 9}`);
+}
 
-app.get("/payhere/cancel", (req, res) => {
-  return res.send("<html><body><h1>cancelled</h1></body></html>");
-});
+// ─── 4. Main startup function ─────────────────────────────────────────────────
+// Everything runs in order. If any step fails, the server stops cleanly.
 
-app.post("/payhere/notify", async (req, res) => {
-  console.log("PAYHERE NOTIFY:", req.body);
-  res.sendStatus(200);
-});
+async function startup() {
+  const preferredPort = Number(process.env.PORT) || 5000;
+  const HOST          = process.env.HOST || "0.0.0.0";
 
-// Create HTTP server for socket.io
-const server = http.createServer(app);
+  // Find a free port (prefers 5000, tries 5001, 5002... if taken)
+  let PORT;
+  try {
+    PORT = await findFreePort(preferredPort);
+    if (PORT !== preferredPort) {
+      console.warn(`[STARTUP] ⚠️  Port ${preferredPort} was busy — using port ${PORT} instead.`);
+      console.warn(`[STARTUP]    Update EXPO_PUBLIC_API_URL in frontend-mobile/.env if this changes.`);
+    }
+  } catch (portErr) {
+    console.error("[STARTUP] ❌ Could not find a free port:", portErr.message);
+    console.error("[STARTUP]    Run this to free port 5000:");
+    console.error("             npm run kill-port");
+    process.exit(1);
+  }
 
-// 3. INITIALIZE SOCKET.IO
-const io = new Server(server, {
-  cors: {
-    origin: "*", // Allow all origins (dev mode)
-    methods: ["GET", "POST", "PATCH"],
-  },
-});
+  // Connect to MongoDB FIRST — don't start the server if DB is down
+  console.log("[STARTUP] Connecting to MongoDB...");
+  try {
+    await connectDB();
+  } catch (dbErr) {
+    console.error("[STARTUP] ❌ MongoDB connection failed — server will not start.");
+    console.error("           Error:", dbErr.message);
+    process.exit(1);
+  }
 
-// Load socket handlers
-app.set("io", io);
+  app.get("/payhere/return", (req, res) => {
+    const { status } = req.query;
+    if (status === "2") {
+      return res.send("<html><body><h1>status=2</h1></body></html>");
+    }
+    return res.send("<html><body><h1>status=0</h1></body></html>");
+  });
 
-require("./src/sockets/rescueSocket")(io);
-require("./src/sockets/chatSocket")(io);
+  app.get("/payhere/cancel", (req, res) => {
+    return res.send("<html><body><h1>cancelled</h1></body></html>");
+  });
 
-// Serve uploaded images BEFORE routes
-app.use("/uploads", express.static("uploads"));
+  app.post("/payhere/notify", async (req, res) => {
+    console.log("PAYHERE NOTIFY:", req.body);
+    res.sendStatus(200);
+  });
 
-// Register global error handler for any late routes
-const errorHandler = require("./src/middleware/errorHandler");
-app.use(errorHandler);
+  // Wrap the Express app in an HTTP server so Socket.IO can attach
+  const server = http.createServer(app);
 
-// 7. START SERVER
-const PORT = process.env.PORT || 5000;
-const HOST = process.env.HOST || "0.0.0.0"; // Expose to LAN
+  // Set up Socket.IO for real-time events (rescue status, chat)
+  const io = new Server(server, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST", "PATCH"],
+    },
+  });
 
-server.listen(PORT, HOST, () => {
-  console.log(`Server running on http://${HOST}:${PORT}`);
-  console.log("MERCHANT ID:", process.env.PAYHERE_MERCHANT_ID);
-  console.log("MERCHANT SECRET:", process.env.PAYHERE_MERCHANT_SECRET);
-  console.log("BACKEND URL:", process.env.BACKEND_URL);
-});
+  // Make io available to any route handler via req.app.get("io")
+  app.set("io", io);
 
-// 8. ERROR HANDLING FOR SERVER STARTUP
-server.on("error", (err) => {
-  console.error("Server failed to start:", err.message);
+  // Load real-time event handlers
+  require("./src/sockets/rescueSocket")(io);
+  require("./src/sockets/chatSocket")(io);
+
+  // Serve uploaded files as static assets
+  // e.g. GET http://localhost:5000/uploads/photo.jpg
+  app.use("/uploads", express.static("uploads"));
+
+  // Start listening — wrapped in a Promise so errors are caught cleanly
+  await new Promise((resolve, reject) => {
+    server.listen(PORT, HOST, resolve);
+    server.once("error", reject);
+  });
+
+  // ─── 5. Startup complete — print summary ────────────────────────────────────
+  console.log("");
+  console.log("╔══════════════════════════════════════════════════╗");
+  console.log(`║  ✅ Server running on http://${HOST}:${PORT}  `);
+  console.log("╠══════════════════════════════════════════════════╣");
+  console.log("║  Routes mounted:                                 ║");
+  console.log("║   GET  /ping                  → health check     ║");
+  console.log("║   *    /api/nearby            → nearby rescuers  ║");
+  console.log("║   *    /api/rescue            → rescue requests  ║");
+  console.log("║   *    /api/forum             → discussion forum ║");
+  console.log("║   *    /api/upload            → file uploads     ║");
+  console.log("║   *    /api/stray             → stray reports    ║");
+  console.log("╚══════════════════════════════════════════════════╝");
+  console.log("");
+
+  // Graceful shutdown on Ctrl+C so the port is freed cleanly
+  process.on("SIGINT", () => {
+    console.log("\n[SHUTDOWN] Ctrl+C received — shutting down cleanly...");
+    server.close(() => {
+      console.log("[SHUTDOWN] HTTP server closed. Goodbye!");
+      process.exit(0);
+    });
+  });
+}
+
+// Run the startup function, catch any unexpected error
+startup().catch((err) => {
+  console.error("[STARTUP] ❌ Unexpected startup failure:", err.message);
+  process.exit(1);
+
 });

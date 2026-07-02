@@ -1,102 +1,67 @@
 require("dotenv").config();
-
 const mongoose = require("mongoose");
 const connectDB = require("./src/config/db");
 const Rescuer = require("./src/models/Rescuer");
 
+// 5 sample rescuers near Colombo, Sri Lanka (lat/lng format matching the model)
 const sampleRescuers = [
   {
     name: "Nimal Perera",
     phone: "+94-77-123-4567",
-    email: "nimal.perera.rescuer@example.com",
-    role: "rescuer",
+    avatar: "",
     isAvailable: true,
-    location: {
-      type: "Point",
-      coordinates: [79.8612, 6.9271],
-    },
+    location: { latitude: 6.9271, longitude: 79.8612 },
   },
   {
     name: "Kasuni Fernando",
     phone: "+94-71-234-5678",
-    email: "kasuni.fernando.rescuer@example.com",
-    role: "rescuer",
+    avatar: "",
     isAvailable: true,
-    location: {
-      type: "Point",
-      coordinates: [79.8725, 6.9147],
-    },
+    location: { latitude: 6.9147, longitude: 79.8725 },
   },
   {
     name: "Ravindu Jayasuriya",
     phone: "+94-76-345-6789",
-    email: "ravindu.jayasuriya.rescuer@example.com",
-    role: "rescuer",
+    avatar: "",
     isAvailable: true,
-    location: {
-      type: "Point",
-      coordinates: [79.9022, 6.9069],
-    },
+    location: { latitude: 6.9069, longitude: 79.9022 },
   },
   {
     name: "Tharushi Silva",
     phone: "+94-75-456-7890",
-    email: "tharushi.silva.rescuer@example.com",
-    role: "rescuer",
+    avatar: "",
     isAvailable: true,
-    location: {
-      type: "Point",
-      coordinates: [79.8458, 6.9446],
-    },
+    location: { latitude: 6.9446, longitude: 79.8458 },
   },
   {
     name: "Isuru Wickramasinghe",
     phone: "+94-78-567-8901",
-    email: "isuru.wickramasinghe.rescuer@example.com",
-    role: "rescuer",
+    avatar: "",
     isAvailable: true,
-    location: {
-      type: "Point",
-      coordinates: [79.8807, 6.9561],
-    },
+    location: { latitude: 6.9561, longitude: 79.8807 },
   },
 ];
 
 const seedRescuers = async () => {
   try {
     await connectDB();
+    console.log("[SEED] Connected to MongoDB");
 
-    const emails = sampleRescuers.map((rescuer) => rescuer.email);
-    const existingRescuers = await Rescuer.find(
-      {
-        role: "rescuer",
-        email: { $in: emails },
-      },
-      { email: 1 }
-    ).lean();
+    // Clear existing rescuers first so seeding is idempotent
+    await Rescuer.deleteMany({});
+    console.log("[SEED] Cleared existing rescuers");
 
-    const existingEmailSet = new Set(existingRescuers.map((rescuer) => rescuer.email));
-
-    const rescuersToInsert = sampleRescuers.filter(
-      (rescuer) => !existingEmailSet.has(rescuer.email)
-    );
-
-    if (rescuersToInsert.length === 0) {
-      console.log("No new rescuers inserted. Sample rescuers already exist.");
-      return;
-    }
-
-    const inserted = await Rescuer.insertMany(rescuersToInsert, { ordered: false });
-
-    console.log(`Inserted ${inserted.length} sample rescuers.`);
-    inserted.forEach((rescuer) => {
-      console.log(`- ${rescuer.name} (${rescuer.email}) @ [${rescuer.location.coordinates.join(", ")}]`);
+    const inserted = await Rescuer.insertMany(sampleRescuers);
+    console.log(`[SEED] Inserted ${inserted.length} rescuers:`);
+    inserted.forEach((r) => {
+      console.log(`  - ${r.name} | ${r.phone} | lat:${r.location.latitude} lng:${r.location.longitude}`);
     });
   } catch (error) {
-    console.error("Failed to seed rescuers:", error.message);
+    console.error("[SEED] Failed to seed rescuers:", error.message);
     process.exitCode = 1;
   } finally {
     await mongoose.connection.close();
+    console.log("[SEED] Done.");
   }
 };
 

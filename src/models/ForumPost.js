@@ -1,3 +1,7 @@
+// This file defines a Forum Post — the main post that appears in the discussion list.
+// Each post has a title, a tag (GENERAL or HEALTH), who wrote it,
+// how many likes it has, and a count of how many comments are in its thread.
+
 const mongoose = require("mongoose");
 
 const forumPostSchema = new mongoose.Schema(
@@ -13,8 +17,10 @@ const forumPostSchema = new mongoose.Schema(
     likes: { type: Number, default: 0 },
     likedByUsers: { type: [String], default: [] },
     commentCount: { type: Number, default: 0 },
+
   },
-  { timestamps: true }
+  { timestamps: true } // automatically adds createdAt and updatedAt fields
 );
 
+// Export so forumController.js can create and query posts
 module.exports = mongoose.model("ForumPost", forumPostSchema);

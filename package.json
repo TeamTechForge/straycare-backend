@@ -6,7 +6,9 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "kill-port": "node kill-port.js",
+    "fresh-start": "node kill-port.js && node server.js"
   },
   "engines": {
     "node": ">=20 <23"
