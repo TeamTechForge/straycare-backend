@@ -5,7 +5,7 @@ const router = express.Router();
 
 console.log("AUTH ROUTES FILE ACTIVE");
 
-const { register, login, selectRole, getMe, forgotPassword, resetPassword, changePassword, deleteAccount } = require("../controllers/authController");
+const { register, login, googleAuth, selectRole, getMe, forgotPassword, resetPassword, changePassword, deleteAccount } = require("../controllers/authController");
 const { verifyToken } = require("../middleware/authMiddleware");
 
 router.get("/test", (req, res) => {
@@ -14,6 +14,7 @@ router.get("/test", (req, res) => {
 
 router.post("/register", register);
 router.post("/login", login);
+router.post("/google", googleAuth);
 router.put("/select-role", verifyToken, selectRole);
 router.get("/me", verifyToken, getMe);
 router.delete("/me", verifyToken, deleteAccount);

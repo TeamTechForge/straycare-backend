@@ -1,8 +1,11 @@
 const admin = require("firebase-admin");
-const serviceAccount = require("../firebase-service.json");
+const serviceAccount = require("./serviceAccountKey.json");
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+// Prevent re-initialization when nodemon restarts
+if (admin.apps.length === 0) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+}
 
 module.exports = admin;

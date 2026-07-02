@@ -18,12 +18,16 @@ const userSchema = new mongoose.Schema(
 
     phone: {
       type: String,
-      required: true,
+      required: function () {
+        return this.authProvider !== "google";
+      },
     },
 
     password: {
       type: String,
-      required: true,
+      required: function () {
+        return this.authProvider !== "google";
+      },
     },
 
     role: {
@@ -36,6 +40,15 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["local", "google"],
       default: "local",
+    },
+
+    googleId: {
+      type: String,
+      sparse: true,
+    },
+
+    avatar: {
+      type: String,
     },
 
     profileCompleted: {
@@ -54,4 +67,4 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model("User", userSchema);
+module.exports = mongoose.model("User", userSchema);
