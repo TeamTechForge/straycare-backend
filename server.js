@@ -12,6 +12,8 @@
 
 "use strict";
 
+const express = require("express");
+
 // Load .env variables before anything else
 require("dotenv").config();
 
@@ -20,6 +22,7 @@ const net    = require("net");        // used to check if a port is free
 const { Server } = require("socket.io");
 
 const app       = require("./src/app");
+
 const connectDB = require("./src/config/db");
 
 // ─── 1. Node version check ────────────────────────────────────────────────────
@@ -101,6 +104,23 @@ async function startup() {
     process.exit(1);
   }
 
+  app.get("/payhere/return", (req, res) => {
+    const { status } = req.query;
+    if (status === "2") {
+      return res.send("<html><body><h1>status=2</h1></body></html>");
+    }
+    return res.send("<html><body><h1>status=0</h1></body></html>");
+  });
+
+  app.get("/payhere/cancel", (req, res) => {
+    return res.send("<html><body><h1>cancelled</h1></body></html>");
+  });
+
+  app.post("/payhere/notify", async (req, res) => {
+    console.log("PAYHERE NOTIFY:", req.body);
+    res.sendStatus(200);
+  });
+
   // Wrap the Express app in an HTTP server so Socket.IO can attach
   const server = http.createServer(app);
 
@@ -121,7 +141,6 @@ async function startup() {
 
   // Serve uploaded files as static assets
   // e.g. GET http://localhost:5000/uploads/photo.jpg
-  const express = require("express");
   app.use("/uploads", express.static("uploads"));
 
   // Start listening — wrapped in a Promise so errors are caught cleanly
@@ -159,4 +178,5 @@ async function startup() {
 startup().catch((err) => {
   console.error("[STARTUP] ❌ Unexpected startup failure:", err.message);
   process.exit(1);
+
 });

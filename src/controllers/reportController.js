@@ -73,19 +73,7 @@ const buildReportPayload = (req) => {
   return payload;
 };
 
-// 1. CREATE REPORT
-
-exports.createReport = async (req, res) => {
-  try {
-    console.log("📥 Incoming Report Data:", req.body); // ⭐ DEBUG LOG
-
-    const newReport = await StrayReport.create(req.body);
-    res.status(201).json(newReport);
-  } catch (error) {
-    res.status(500).json({ message: "Error creating report", error });
-  }
-};
-
+//  1. CREATE REPORT
 exports.createReport = async (req, res) => {
   try {
     const reportPayload = buildReportPayload(req);
@@ -105,6 +93,15 @@ exports.createReport = async (req, res) => {
       return res.status(400).json({ message: "location with lat/lng is required" });
     }
 
+    // Initial timeline entry
+    reportPayload.timeline = [
+      {
+        status: reportPayload.status,
+        message: "Case created",
+        timestamp: new Date(),
+      },
+    ];
+
     const newReport = await StrayReport.create(reportPayload);
     console.log("[STRAY][SUCCESS] Report created:", newReport._id);
     return res.status(201).json({
@@ -119,9 +116,9 @@ exports.createReport = async (req, res) => {
     const message = isDuplicateKey
       ? "Case ID already exists"
       : isValidationError
-      ? "Invalid report payload"
-      : "Error creating report";
-    
+        ? "Invalid report payload"
+        : "Error creating report";
+
     console.error("[STRAY][ERROR] Failed to create report:", errorMessage);
     return res.status(statusCode).json({ message, error: errorMessage });
   }
@@ -131,7 +128,11 @@ exports.createReport = async (req, res) => {
 exports.getReportByCaseId = async (req, res) => {
   try {
     const report = await StrayReport.findOne({ caseId: req.params.caseId });
-    if (!report) return res.status(404).json({ message: "Report not found" });
+
+    if (!report) {
+      return res.status(404).json({ message: "Report not found" });
+    }
+
     res.json(report);
   } catch (error) {
     const errorMessage = error?.message || String(error);
@@ -145,8 +146,9 @@ exports.getAllReports = async (req, res) => {
   try {
     const reports = await StrayReport.find(
       {},
-      { status: 1, location: 1, caseId: 1 }
+      { status: 1, location: 1, caseId: 1, animalType: 1 }
     );
+    console.log("[STRAY][GET] Fetched all reports:", reports.length);
     res.json(reports);
   } catch (error) {
     const errorMessage = error?.message || String(error);
@@ -155,22 +157,28 @@ exports.getAllReports = async (req, res) => {
   }
 };
 
-// 4. UPDATE CASE STATUS + PUSH HISTORY
+// 4. UPDATE CASE STATUS
 exports.updateCaseStatus = async (req, res) => {
   try {
     const { caseId } = req.params;
     const { status } = req.body;
 
     const report = await StrayReport.findOne({ caseId });
+
     if (!report) {
       return res.status(404).json({ message: "Case not found" });
     }
 
-    // Update status
+    // Update main status
     report.status = status;
 
-    // ⭐ Add history entry
-    report.history.push({
+    // Ensure timeline exists
+    if (!report.timeline) {
+      report.timeline = [];
+    }
+
+    // Add new timeline entry
+    report.timeline.push({
       status,
       message: `Status changed to ${status}`,
       timestamp: new Date(),

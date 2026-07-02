@@ -6,16 +6,18 @@ const mongoose = require("mongoose");
 
 const forumPostSchema = new mongoose.Schema(
   {
-    title: { type: String, required: true, trim: true }, // The post's main text
-    tag: {
-      type: String,
-      enum: ["GENERAL", "HEALTH"],   // Post must be tagged as one of these
-      default: "GENERAL",
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: false,
     },
-    author: { type: String, default: "You" },             // Name of the person who posted
-    likes: { type: Number, default: 0 },                  // Total like count
-    likedByUsers: { type: [String], default: [] },        // List of user IDs who liked this post (prevents double-liking)
-    commentCount: { type: Number, default: 0 },           // How many comments this post has
+    title: { type: String, required: true, trim: true },
+    tag: { type: String, enum: ["GENERAL", "HEALTH"], default: "GENERAL" },
+    author: { type: String, default: "You" },
+    likes: { type: Number, default: 0 },
+    likedByUsers: { type: [String], default: [] },
+    commentCount: { type: Number, default: 0 },
+
   },
   { timestamps: true } // automatically adds createdAt and updatedAt fields
 );

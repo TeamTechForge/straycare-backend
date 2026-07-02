@@ -4,11 +4,16 @@ const express = require("express");
 const router = express.Router();
 const forumController = require("../controllers/forumController");
 
-// Get all forum posts (newest first)
-router.get("/", forumController.listPosts);
+const { verifyToken } = require("../middleware/authMiddleware");
 
-// Create a new forum post
-router.post("/", forumController.createPost);
+// List all posts
+router.get("/", forumController.listPosts);
+router.get("/posts", forumController.listPosts);
+
+// Create a post
+router.post("/", verifyToken, forumController.createPost);
+router.post("/posts", verifyToken, forumController.createPost);
+
 
 // Like or unlike a post — must be defined BEFORE /:rescueId so it doesn't get confused
 router.post("/:postId/like", forumController.togglePostLike);

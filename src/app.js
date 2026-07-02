@@ -10,12 +10,21 @@ const cors = require("cors");
 const morgan = require("morgan");
 
 // Import all route files
+
 const nearbyRoutes = require("./routes/nearbyRoutes");
 const rescueRoutes = require("./routes/rescueRoutes");
 const rescuesRoutes = require("./routes/rescuesRoutes");
 const forumRoutes = require("./routes/forumRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
-const strayRoutes = require("./routes/strayRoutes");
+const strayReportRoutes = require("./routes/reportRoutes");
+const authRoutes = require("./routes/authRoutes");
+const adminAuthRoutes = require("./routes/adminAuthRoutes");
+const profileRoutes = require("./routes/profileRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
+const { userRouter, reportRouter, adminRouter } = require("./routes/userRoutes");
+const donationRoutes = require("./routes/donation.routes");
+const organizationRoutes = require("./routes/organization.routes");
+const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
 
@@ -29,13 +38,22 @@ const allowedOrigins = [
   "http://127.0.0.1:8082",
   "http://192.168.8.161:8081",
   "http://192.168.8.161:8082",
-].filter(Boolean); // remove any undefined values
+  "http://127.0.0.1:8082",
+  "http://192.168.8.161:8081",
+  "http://192.168.8.161:8082",
+  "http://192.168.8.142:8081",
+  "http://192.168.8.142:8082",
+].filter(Boolean);
 
-// CORS setup — decides who can call this API
+app.use((req, res, next) => {
+  res.setHeader("ngrok-skip-browser-warning", "true");
+  next();
+});
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Expo Go on a real device often sends no Origin header — always allow those
+
       if (!origin) return callback(null, true);
 
       const isAllowed =
@@ -55,18 +73,27 @@ app.use(
       console.warn(`[CORS] Blocked origin: ${origin}`);
       return callback(new Error("Not allowed by CORS"));
     },
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+
     credentials: false,
   })
 );
 
 // Parse incoming JSON request bodies (needed for POST/PATCH requests)
 app.use(express.json());
-
-// Log every request in the terminal so we can see what's being called
+app.use(express.urlencoded({ extended: true }));
 app.use(morgan("dev"));
 
-// Simple health-check route — call GET /ping to confirm the server is running
+app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminAuthRoutes);
+app.use("/api/profiles", profileRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/users", userRouter);
+app.use("/api/reports", reportRouter);
+app.use("/api/admin", adminRouter);
+app.use("/api/donations", donationRoutes);
+app.use("/api/organizations", organizationRoutes);
+
 app.get("/ping", (req, res) => {
   return res.status(200).json({
     ok: true,
@@ -74,8 +101,6 @@ app.get("/ping", (req, res) => {
     time: new Date().toISOString(),
   });
 });
-
-// Each route file handles a specific part of the app
 
 app.use("/api/nearby", nearbyRoutes);   // Finding nearby rescuers on the map
 app.use("/api/rescue", rescueRoutes);   // Rescue requests (find, send, status)
@@ -85,9 +110,14 @@ app.use("/api/rescues", rescuesRoutes); // Rescue history + live tracking
 app.use("/api/forum", (req, res, next) => {
   console.log("[API HIT]", req.method, req.originalUrl, "from", req.ip);
   next();
+
+app.use("/api/forum", (req, res, next) => {
+  console.log("[API HIT]", req.method, req.originalUrl, "from", req.ip);
+  next();
 });
 app.use("/api/forum", forumRoutes);     // Discussion forum (posts, comments, likes)
 
+app.use("/api/forum", forumRoutes);     // Discussion forum (posts, comments, likes)
 app.use("/api/upload", uploadRoutes);   // File/image uploads
 app.use("/api/stray", strayRoutes);     // Stray animal reports
 app.use("/api/strays", strayRoutes);    // Same routes, alternate URL
@@ -111,9 +141,11 @@ app.use((err, req, res, next) => {
 });
 
 // Basic home route — just to confirm the server is up when you visit in a browser
+
 app.get("/", (req, res) => {
   res.send("StrayCare Backend API Running");
 });
 
 // Export the app so server.js can use it
+
 module.exports = app;
