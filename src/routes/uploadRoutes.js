@@ -1,3 +1,7 @@
+/**
+ * Handles image uploads using Multer (local disk storage).
+ * This route, Accepts a single image file under the field name "image", Saves it to /uploads folder, Returns a public URL for the uploaded file
+ */
 const express = require("express");
 const mongoose = require("mongoose");
 
@@ -11,7 +15,6 @@ const {
 } = require("../config/cloudinary");
 
 const router = express.Router();
-
 
 // =========================
 // GRIDFS UPLOAD

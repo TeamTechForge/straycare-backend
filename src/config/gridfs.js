@@ -8,6 +8,7 @@ const { Readable } = require("stream");
 const mongoose = require("mongoose");
 const multer = require("multer");
 
+// MongoDB connection string from environment variables
 const mongoURI = process.env.MONGO_URI;
 
 if (!mongoURI) {

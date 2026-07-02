@@ -4,7 +4,7 @@ require("dotenv").config();
 const http = require("http");
 const { Server } = require("socket.io");
 
-const app = require("./src/app");
+const app = require("./src/app"); // Express app with middleware
 const connectDB = require("./src/config/db");
 
 const nodeMajor = Number(process.versions.node.split(".")[0]);
@@ -20,6 +20,7 @@ if (!process.env.MONGO_URI) {
   );
 }
 
+// 1. CONNECT TO DATABASE
 connectDB();
 
 // PayHere callbacks
@@ -43,12 +44,12 @@ app.post("/payhere/notify", async (req, res) => {
 // Create HTTP server for socket.io
 const server = http.createServer(app);
 
-// Initialize socket.io
+// 3. INITIALIZE SOCKET.IO
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST", "PATCH"]
-  }
+    origin: "*", // Allow all origins (dev mode)
+    methods: ["GET", "POST", "PATCH"],
+  },
 });
 
 // Load socket handlers
@@ -64,9 +65,9 @@ app.use("/uploads", express.static("uploads"));
 const errorHandler = require("./src/middleware/errorHandler");
 app.use(errorHandler);
 
-// Start server
+// 7. START SERVER
 const PORT = process.env.PORT || 5000;
-const HOST = process.env.HOST || "0.0.0.0";
+const HOST = process.env.HOST || "0.0.0.0"; // Expose to LAN
 
 server.listen(PORT, HOST, () => {
   console.log(`Server running on http://${HOST}:${PORT}`);
@@ -75,7 +76,7 @@ server.listen(PORT, HOST, () => {
   console.log("BACKEND URL:", process.env.BACKEND_URL);
 });
 
+// 8. ERROR HANDLING FOR SERVER STARTUP
 server.on("error", (err) => {
   console.error("Server failed to start:", err.message);
 });
-
