@@ -3,11 +3,12 @@ const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
 
+// Import route modules
 const nearbyRoutes = require("./routes/nearbyRoutes");
 const rescueRoutes = require("./routes/rescueRoutes");
 const forumRoutes = require("./routes/forumRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
-const strayRoutes = require("./routes/strayRoutes");
+const strayReportRoutes = require("./routes/reportRoutes");
 const authRoutes = require("./routes/authRoutes");
 const adminAuthRoutes = require("./routes/adminAuthRoutes");
 const profileRoutes = require("./routes/profileRoutes");
@@ -77,6 +78,8 @@ app.get("/ping", (req, res) => {
 });
 
 app.use("/api/nearby", nearbyRoutes);
+
+// Rescue team routes
 app.use("/api/rescues", rescueRoutes);
 
 app.use("/api/forum", (req, res, next) => {
@@ -86,7 +89,7 @@ app.use("/api/forum", (req, res, next) => {
 app.use("/api/forum", forumRoutes);
 
 app.use("/api/upload", uploadRoutes);
-app.use("/api/strays", strayRoutes);
+app.use("/api/strays", strayReportRoutes);
 
 app.get("/test", (req, res) => {
   res.send("Backend test route working");
