@@ -1,6 +1,7 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
+const admin = require("../config/firebase");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
 const NGOProfile = require("../models/NGOProfile");
@@ -291,9 +292,93 @@ const deleteAccount = async (req, res, next) => {
   }
 };
 
+const googleAuth = async (req, res, next) => {
+  try {
+    const { idToken } = req.body;
+
+    if (!idToken) {
+      return res.status(400).json({ message: "Firebase ID token is required" });
+    }
+
+    // Verify the Firebase ID token
+    let decodedToken;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(idToken);
+    } catch (error) {
+      console.error("Firebase token verification failed:", error.message);
+      return res.status(401).json({ message: "Invalid or expired Firebase token" });
+    }
+
+    const { uid, email, name: displayName, picture } = decodedToken;
+
+    if (!email) {
+      return res.status(400).json({
+        message: "Google account does not have an email address.",
+      });
+    }
+
+    // Check if user already exists by email
+    let user = await User.findOne({ email });
+    let isNewUser = false;
+
+    if (user) {
+      // Existing user — update googleId and avatar if not already set
+      if (!user.googleId) user.googleId = uid;
+      if (!user.avatar && picture) user.avatar = picture;
+      await user.save();
+    } else {
+      // New user — create account
+      isNewUser = true;
+      user = await User.create({
+        name: displayName || email.split("@")[0],
+        email,
+        googleId: uid,
+        authProvider: "google",
+        avatar: picture || "",
+        role: "general_user",
+      });
+
+      // Welcome notification
+      try {
+        await Notification.create({
+          userId: user._id,
+          title: "Welcome to StrayCare!",
+          message: `Hi ${user.name}, welcome to our community! Together we can save more stray animals. 🐾`,
+          type: "welcome",
+        });
+      } catch (notificationError) {
+        console.error("Notification creation failed gracefully:", notificationError);
+      }
+    }
+
+    const token = generateToken(user._id, user.role);
+
+    res.status(200).json({
+      success: true,
+      message: isNewUser ? "Account created successfully" : "Login successful",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        avatar: user.avatar,
+        profileCompleted: user.profileCompleted,
+        isApproved: user.isApproved,
+      },
+      isNewUser,
+    });
+  } catch (error) {
+    console.error("GOOGLE AUTH ERROR:", error);
+    next(error);
+  }
+};
+
 module.exports = {
   register,
   login,
+  googleAuth,
   selectRole,
   getMe,
   forgotPassword,
