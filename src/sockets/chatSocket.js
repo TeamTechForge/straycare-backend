@@ -19,16 +19,26 @@ module.exports = (io) => {
 
       socket.userId = userId;
 
+      // Join a personal room keyed by userId so controllers can emit
+      // directly to this user regardless of which conversation rooms
+      // they have joined.
+      socket.join(`user:${userId}`);
+
       // Track all sockets for this user (supports multiple devices)
       if (!onlineUsers.has(userId)) {
         onlineUsers.set(userId, new Set());
       }
       onlineUsers.get(userId).add(socket.id);
 
-      // Broadcast online status to all connected clients
-      chatNamespace.emit("user:online", { userId });
+      // Send the FULL list of currently online user IDs to the joining socket
+      // so it can immediately display correct online/offline indicators.
+      const onlineList = Array.from(onlineUsers.keys());
+      socket.emit("users:online-list", { users: onlineList });
 
-      console.log(`[Chat Socket] User ${userId} online (${onlineUsers.get(userId).size} connections)`);
+      // Broadcast online status to all OTHER connected clients
+      socket.broadcast.emit("user:online", { userId });
+
+      console.log(`[Chat Socket] User ${userId} online (${onlineUsers.get(userId).size} connections). Total online: ${onlineList.length}`);
     });
 
     // ── Join a conversation room ─────────────────────────────
@@ -43,6 +53,7 @@ module.exports = (io) => {
     socket.on("leave_chat", (conversationId) => {
       if (!conversationId) return;
       socket.leave(conversationId);
+      console.log(`[Chat Socket] ${socket.userId || socket.id} left room ${conversationId}`);
     });
 
     // ── Typing indicators ────────────────────────────────────

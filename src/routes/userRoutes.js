@@ -5,11 +5,13 @@ const {
   getUserReports,
   createUserReport,
   getUserReportsAdmin,
+  searchUsers,
 } = require("../controllers/userController");
 const { verifyToken } = require("../middleware/authMiddleware");
 
 // Router for user profile endpoints
 const userRouter = express.Router();
+userRouter.get("/search", verifyToken, searchUsers);
 userRouter.get("/:userId/public-profile", getPublicProfile);
 userRouter.get("/:userId/posts", getUserPosts);
 userRouter.get("/:userId/reports", getUserReports);

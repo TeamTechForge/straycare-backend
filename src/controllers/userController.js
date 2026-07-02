@@ -195,3 +195,33 @@ exports.getUserReportsAdmin = async (req, res) => {
     });
   }
 };
+
+// Search registered users by name or email (username), excluding current logged-in user
+exports.searchUsers = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const { query = "" } = req.query;
+
+    if (!query.trim()) {
+      return res.status(200).json([]);
+    }
+
+    const users = await User.find({
+      _id: { $ne: currentUserId },
+      $or: [
+        { name: { $regex: query, $options: "i" } },
+        { email: { $regex: query, $options: "i" } },
+      ],
+    })
+      .select("name email role profileCompleted")
+      .limit(20)
+      .lean();
+
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to search users",
+      error: error.message,
+    });
+  }
+};

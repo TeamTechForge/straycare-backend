@@ -10,8 +10,12 @@ const User = require("../models/User");
  * based on the recipient's messagingPrivacy setting.
  */
 const canMessage = async (senderId, recipientId) => {
+  console.log(`[chatController Helpers] Checking privacy settings. Sender: ${senderId}, Recipient: ${recipientId}`);
   const recipient = await User.findById(recipientId).select("messagingPrivacy").lean();
-  if (!recipient) return { allowed: false, reason: "User not found" };
+  if (!recipient) {
+    console.warn(`[chatController Helpers] Recipient user ${recipientId} not found`);
+    return { allowed: false, reason: "User not found" };
+  }
 
   switch (recipient.messagingPrivacy) {
     case "everyone":
@@ -56,6 +60,7 @@ const getChatNamespace = (req) => {
 const getConversations = async (req, res, next) => {
   try {
     const userId = req.user.id;
+    console.log(`[chatController] 🔍 getConversations. User: ${userId}`);
 
     const conversations = await Conversation.find({
       participants: userId,
@@ -64,8 +69,10 @@ const getConversations = async (req, res, next) => {
       .sort({ "lastMessage.createdAt": -1, updatedAt: -1 })
       .lean();
 
+    console.log(`[chatController] ✅ Found ${conversations.length} conversations for User: ${userId}`);
     return res.status(200).json(conversations);
   } catch (error) {
+    console.error(`[chatController] ❌ Error in getConversations: ${error.message}`);
     next(error);
   }
 };
@@ -77,6 +84,7 @@ const getOrCreateConversation = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { participantId, conversationType, relatedEntity } = req.body;
+    console.log(`[chatController] 🔍 getOrCreateConversation. User: ${userId}, Participant: ${participantId}`);
 
     if (!participantId) {
       return res.status(400).json({ message: "participantId is required" });
@@ -89,6 +97,7 @@ const getOrCreateConversation = async (req, res, next) => {
     // Privacy check
     const privacyResult = await canMessage(userId, participantId);
     if (!privacyResult.allowed) {
+      console.warn(`[chatController] ❌ Privacy Blocked: ${privacyResult.reason}`);
       return res.status(403).json({ message: privacyResult.reason });
     }
 
@@ -100,10 +109,12 @@ const getOrCreateConversation = async (req, res, next) => {
       .lean();
 
     if (conversation) {
+      console.log(`[chatController] ✅ Found existing conversation: ${conversation._id}`);
       return res.status(200).json(conversation);
     }
 
     // Create new conversation
+    console.log(`[chatController] 🆕 Creating new conversation session. User: ${userId}, Participant: ${participantId}`);
     const newConversation = await Conversation.create({
       participants: [userId, participantId],
       conversationType: conversationType || "direct",
@@ -115,8 +126,10 @@ const getOrCreateConversation = async (req, res, next) => {
       .populate("participants", "name email role profileCompleted")
       .lean();
 
+    console.log(`[chatController] ✅ Conversation created: ${conversation._id}`);
     return res.status(201).json(conversation);
   } catch (error) {
+    console.error(`[chatController] ❌ Error in getOrCreateConversation: ${error.message}`);
     next(error);
   }
 };
@@ -129,6 +142,7 @@ const getMessages = async (req, res, next) => {
     const userId = req.user.id;
     const { conversationId } = req.params;
     const { before, limit = 30 } = req.query;
+    console.log(`[chatController] 🔍 getMessages. User: ${userId}, Conversation: ${conversationId}, Limit: ${limit}`);
 
     // Verify user is a participant
     const conversation = await Conversation.findOne({
@@ -137,6 +151,7 @@ const getMessages = async (req, res, next) => {
     }).lean();
 
     if (!conversation) {
+      console.warn(`[chatController] ❌ Conversation ${conversationId} not found or user is not a participant`);
       return res.status(404).json({ message: "Conversation not found" });
     }
 
@@ -151,8 +166,10 @@ const getMessages = async (req, res, next) => {
       .populate("sender", "name")
       .lean();
 
+    console.log(`[chatController] ✅ Found ${messages.length} messages for Conversation: ${conversationId}`);
     return res.status(200).json(messages);
   } catch (error) {
+    console.error(`[chatController] ❌ Error in getMessages: ${error.message}`);
     next(error);
   }
 };
@@ -170,6 +187,7 @@ const sendMessage = async (req, res, next) => {
       imagePublicId,
       location,
     } = req.body;
+    console.log(`[chatController] ✉️ sendMessage. User: ${userId}, Conversation: ${conversationId}, Type: ${type}`);
 
     if (!conversationId) {
       return res.status(400).json({ message: "conversationId is required" });
@@ -182,6 +200,7 @@ const sendMessage = async (req, res, next) => {
     });
 
     if (!conversation) {
+      console.warn(`[chatController] ❌ Conversation ${conversationId} not found or user is not a participant`);
       return res.status(404).json({ message: "Conversation not found" });
     }
 
@@ -218,23 +237,40 @@ const sendMessage = async (req, res, next) => {
     }
 
     await conversation.save();
+    console.log(`[chatController] ✅ Message ${message._id} saved and conversation snapshot updated`);
 
     // Populate sender info for the socket event
     const populatedMessage = await Message.findById(message._id)
       .populate("sender", "name")
       .lean();
 
-    // Emit real-time event to all participants in this conversation's room
+    // Emit real-time event to:
+    // 1. The conversation room (for users who have this chat screen open)
+    // 2. Each participant's personal room (for users on the chat list screen)
     const chatNamespace = getChatNamespace(req);
     if (chatNamespace) {
-      chatNamespace.to(conversationId).emit("message:new", {
+      const payload = {
         message: populatedMessage,
         conversationId,
-      });
+      };
+
+      // Emit to the conversation room
+      chatNamespace.to(conversationId).emit("message:new", payload);
+
+      // Also emit to each participant's personal room so their
+      // conversation list can update even if they haven't joined
+      // this specific conversation room.
+      for (const pid of conversation.participants) {
+        const participantId = String(pid);
+        chatNamespace.to(`user:${participantId}`).emit("message:new", payload);
+      }
+
+      console.log(`[chatController] ✅ Emitted message:new to room ${conversationId} and ${conversation.participants.length} participant personal rooms`);
     }
 
     return res.status(201).json(populatedMessage);
   } catch (error) {
+    console.error(`[chatController] ❌ Error in sendMessage: ${error.message}`);
     next(error);
   }
 };
@@ -245,6 +281,7 @@ const markAsRead = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { conversationId } = req.params;
+    console.log(`[chatController] 📖 markAsRead. User: ${userId}, Conversation: ${conversationId}`);
 
     // Verify user is a participant
     const conversation = await Conversation.findOne({
@@ -253,11 +290,12 @@ const markAsRead = async (req, res, next) => {
     });
 
     if (!conversation) {
+      console.warn(`[chatController] ❌ Conversation ${conversationId} not found or user is not a participant`);
       return res.status(404).json({ message: "Conversation not found" });
     }
 
     // Add userId to readBy for all unread messages in this conversation
-    await Message.updateMany(
+    const updateResult = await Message.updateMany(
       {
         conversationId,
         readBy: { $ne: userId },
@@ -268,6 +306,7 @@ const markAsRead = async (req, res, next) => {
     // Reset unread count for this user
     conversation.unreadCounts.set(userId, 0);
     await conversation.save();
+    console.log(`[chatController] ✅ Marked messages as read. Updated ${updateResult.modifiedCount} messages for user: ${userId}`);
 
     // Notify other participants via socket
     const chatNamespace = getChatNamespace(req);
@@ -276,10 +315,12 @@ const markAsRead = async (req, res, next) => {
         conversationId,
         readBy: userId,
       });
+      console.log(`[chatController] ✅ Emitted message:read-ack to room ${conversationId}`);
     }
 
     return res.status(200).json({ message: "Messages marked as read" });
   } catch (error) {
+    console.error(`[chatController] ❌ Error in markAsRead: ${error.message}`);
     next(error);
   }
 };
