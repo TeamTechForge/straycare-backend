@@ -43,6 +43,11 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
 
+    roleSelected: {
+      type: Boolean,
+      default: false,
+    },
+
     isApproved: {
       type: Boolean,
       default: false,

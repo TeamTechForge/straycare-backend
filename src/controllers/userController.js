@@ -8,6 +8,7 @@ const StrayReport = require("../models/strayreport");
 const RescueHistory = require("../models/RescueHistory");
 const RescueRequest = require("../models/RescueRequest");
 const UserReport = require("../models/UserReport");
+const Notification = require("../models/Notification");
 
 // Fetch another user's public profile data (safe, sanitised)
 exports.getPublicProfile = async (req, res) => {
@@ -221,6 +222,67 @@ exports.searchUsers = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Failed to search users",
+      error: error.message,
+    });
+  }
+};
+
+// Admin endpoint to approve a user account (NGO / Vet)
+exports.approveUser = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Access denied. Admins only." });
+    }
+
+    const { userId } = req.params;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.isApproved) {
+      return res.status(400).json({ message: "User is already approved" });
+    }
+
+    user.isApproved = true;
+    await user.save();
+
+    // Update profile status as well
+    if (user.role === "ngo") {
+      await NGOProfile.findOneAndUpdate({ userId: user._id }, { status: "Verified" });
+    } else if (user.role === "vet") {
+      await VetProfile.findOneAndUpdate({ userId: user._id }, { status: "Verified" });
+    }
+
+    // Create in-app success notification
+    const notification = await Notification.create({
+      userId: user._id,
+      title: "Account Verified!",
+      message: "Congratulations! Your account verification is complete. You now have full access to StrayCare features. 🐾",
+      type: "success",
+    });
+
+    // Emit real-time update via Socket.IO
+    const io = req.app.get("io");
+    if (io) {
+      io.of("/chat").to(`user:${user._id}`).emit("user:approved", {
+        message: "Your account has been verified",
+        notification,
+      });
+    }
+
+    res.status(200).json({
+      message: "User approved successfully",
+      user: {
+        id: user._id,
+        name: user.name,
+        role: user.role,
+        isApproved: user.isApproved,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to approve user",
       error: error.message,
     });
   }

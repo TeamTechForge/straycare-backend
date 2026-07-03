@@ -72,6 +72,7 @@ const register = async (req, res, next) => {
         phone: user.phone,
         role: user.role,
         profileCompleted: user.profileCompleted,
+        roleSelected: user.roleSelected,
         isApproved: user.isApproved,
       },
     });
@@ -127,6 +128,7 @@ const login = async (req, res, next) => {
         phone: user.phone,
         role: user.role,
         profileCompleted: user.profileCompleted,
+        roleSelected: user.roleSelected,
         isApproved: user.isApproved,
       },
     });
@@ -159,7 +161,7 @@ const selectRole = async (req, res, next) => {
 
     const user = await User.findByIdAndUpdate(
       userId,
-      { role },
+      { role, roleSelected: true },
       { new: true }
     ).select("-password");
 

@@ -50,6 +50,11 @@ const ngoProfileSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    status: {
+      type: String,
+      enum: ["Pending", "Verified", "Rejected"],
+      default: "Pending",
+    },
   },
   { timestamps: true }
 );

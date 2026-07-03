@@ -6,6 +6,7 @@ const {
   createUserReport,
   getUserReportsAdmin,
   searchUsers,
+  approveUser,
 } = require("../controllers/userController");
 const { verifyToken } = require("../middleware/authMiddleware");
 
@@ -23,6 +24,7 @@ reportRouter.post("/user", verifyToken, createUserReport);
 // Router for admin endpoints
 const adminRouter = express.Router();
 adminRouter.get("/user-reports", verifyToken, getUserReportsAdmin);
+adminRouter.patch("/approve-user/:userId", verifyToken, approveUser);
 
 module.exports = {
   userRouter,
