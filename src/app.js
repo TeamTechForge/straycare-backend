@@ -15,6 +15,12 @@ const notificationRoutes = require("./routes/notificationRoutes");
 const { userRouter, reportRouter, adminRouter } = require("./routes/userRoutes");
 const donationRoutes = require("./routes/donation.routes");
 const organizationRoutes = require("./routes/organization.routes");
+const rescueCasesRoutes = require("./routes/rescues");
+const usersManagementRoutes = require("./routes/users.routes");
+const reportedUsersRoutes = require("./routes/reportedUsers.routes");
+const moderationRoutes = require("./routes/moderationRoutes");
+const adminNotificationsRoutes = require("./routes/adminNotifications.routes");
+const adminManagementRoutes = require("./routes/adminRoutes");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -67,6 +73,12 @@ app.use("/api/reports", reportRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/donations", donationRoutes);
 app.use("/api/organizations", organizationRoutes);
+app.use("/api", rescueCasesRoutes);
+app.use("/api/users", usersManagementRoutes);
+app.use("/api/admin", reportedUsersRoutes);
+app.use("/api/moderation", moderationRoutes);
+app.use("/api/admin-notifications", adminNotificationsRoutes);
+app.use("/api/admins", adminManagementRoutes);
 
 app.get("/ping", (req, res) => {
   return res.status(200).json({
