@@ -87,6 +87,7 @@ const getConversations = async (req, res, next) => {
 
     const conversations = await Conversation.find({
       participants: userId,
+      deletedFor: { $ne: userId },
     })
       .populate("participants", "name email role profileCompleted profileImage")
       .sort({ "lastMessage.createdAt": -1, updatedAt: -1 })
@@ -144,6 +145,10 @@ const getOrCreateConversation = async (req, res, next) => {
       .lean();
 
     if (conversation) {
+      // Reactivate conversation if it was soft-deleted by user
+      if (conversation.deletedFor && conversation.deletedFor.includes(userId)) {
+        await Conversation.findByIdAndUpdate(conversation._id, { $pull: { deletedFor: userId } });
+      }
       // Self-healing check
       if (conversation.participants) {
         for (let p of conversation.participants) {
@@ -209,7 +214,10 @@ const getMessages = async (req, res, next) => {
       return res.status(404).json({ message: "Conversation not found" });
     }
 
-    const query = { conversationId };
+    const query = { 
+      conversationId,
+      deletedFor: { $ne: userId }
+    };
     if (before) {
       query._id = { $lt: before };
     }
@@ -220,8 +228,25 @@ const getMessages = async (req, res, next) => {
       .populate("sender", "name")
       .lean();
 
-    console.log(`[chatController] ✅ Found ${messages.length} messages for Conversation: ${conversationId}`);
-    return res.status(200).json(messages);
+    const processedMessages = messages.map((msg) => {
+      if (msg.isDeletedForEveryone) {
+        return {
+          _id: msg._id,
+          conversationId: msg.conversationId,
+          sender: msg.sender,
+          type: "text",
+          text: "This message was deleted.",
+          readBy: msg.readBy,
+          createdAt: msg.createdAt,
+          updatedAt: msg.updatedAt,
+          isDeletedForEveryone: true,
+        };
+      }
+      return msg;
+    });
+
+    console.log(`[chatController] ✅ Found ${processedMessages.length} messages for Conversation: ${conversationId}`);
+    return res.status(200).json(processedMessages);
   } catch (error) {
     console.error(`[chatController] ❌ Error in getMessages: ${error.message}`);
     next(error);
@@ -289,6 +314,8 @@ const sendMessage = async (req, res, next) => {
         conversation.unreadCounts.set(participantId, current + 1);
       }
     }
+
+    conversation.deletedFor = []; // Reactivate conversation for all participants when a new message is sent
 
     await conversation.save();
     console.log(`[chatController] ✅ Message ${message._id} saved and conversation snapshot updated`);
@@ -379,10 +406,110 @@ const markAsRead = async (req, res, next) => {
   }
 };
 
+// ── DELETE /api/chat/conversations/:conversationId ──────────────
+// Soft deletes a conversation for the current user.
+const deleteConversation = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { conversationId } = req.params;
+
+    const conversation = await Conversation.findOneAndUpdate(
+      { _id: conversationId, participants: userId },
+      { $addToSet: { deletedFor: userId } },
+      { new: true }
+    );
+
+    if (!conversation) {
+      return res.status(404).json({ message: "Conversation not found or access denied" });
+    }
+
+    console.log(`[chatController] 🗑️ Conversation ${conversationId} soft deleted for User: ${userId}`);
+    return res.status(200).json({ message: "Conversation deleted successfully", conversationId });
+  } catch (error) {
+    console.error(`[chatController] ❌ Error in deleteConversation: ${error.message}`);
+    next(error);
+  }
+};
+
+// ── DELETE /api/chat/messages/:messageId ────────────────────────
+// Deletes a message (Delete for Me or Delete for Everyone).
+const deleteMessage = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { messageId } = req.params;
+    const { type } = req.body; // "me" or "everyone"
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    // Verify participant
+    const conversation = await Conversation.findOne({
+      _id: message.conversationId,
+      participants: userId,
+    });
+    if (!conversation) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    if (type === "me") {
+      // Add user to deletedFor array
+      await Message.findByIdAndUpdate(messageId, { $addToSet: { deletedFor: userId } });
+      console.log(`[chatController] 🗑️ Message ${messageId} deleted for user ${userId}`);
+    } else if (type === "everyone") {
+      // Verify that the sender is the one deleting for everyone
+      if (message.sender.toString() !== userId) {
+        return res.status(403).json({ message: "Cannot delete another user's message for everyone" });
+      }
+
+      message.isDeletedForEveryone = true;
+      // Clear actual content for security/privacy
+      message.text = "This message was deleted.";
+      message.imageUrl = undefined;
+      message.imagePublicId = undefined;
+      message.location = undefined;
+      message.type = "text";
+      await message.save();
+
+      // If this message was the lastMessage preview on the conversation, update it
+      if (conversation.lastMessage && conversation.lastMessage.createdAt.getTime() === message.createdAt.getTime()) {
+        conversation.lastMessage.text = "This message was deleted.";
+        conversation.lastMessage.type = "text";
+        await conversation.save();
+      }
+
+      console.log(`[chatController] 🗑️ Message ${messageId} deleted for everyone`);
+
+      // Notify other participant via socket
+      const chatNamespace = getChatNamespace(req);
+      if (chatNamespace) {
+        const payload = {
+          messageId: message._id,
+          conversationId: message.conversationId,
+        };
+        chatNamespace.to(message.conversationId.toString()).emit("message:delete", payload);
+        for (const pid of conversation.participants) {
+          chatNamespace.to(`user:${pid}`).emit("message:delete", payload);
+        }
+      }
+    } else {
+      return res.status(400).json({ message: "Invalid delete type" });
+    }
+
+    return res.status(200).json({ message: "Message deleted successfully", messageId });
+  } catch (error) {
+    console.error(`[chatController] ❌ Error in deleteMessage: ${error.message}`);
+    next(error);
+  }
+};
+
 module.exports = {
   getConversations,
   getOrCreateConversation,
   getMessages,
   sendMessage,
   markAsRead,
+  deleteConversation,
+  deleteMessage,
 };

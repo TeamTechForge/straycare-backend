@@ -42,6 +42,12 @@ const conversationSchema = new mongoose.Schema(
       kind: { type: String },           // model name, e.g. "RescueRequest"
       item: { type: mongoose.Schema.Types.ObjectId }, // the document _id
     },
+    deletedFor: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   { timestamps: true }
 );

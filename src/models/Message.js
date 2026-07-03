@@ -38,6 +38,9 @@ const messageSchema = new mongoose.Schema(
 
     // Array of user IDs who have read this message.
     readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+
+    deletedFor: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    isDeletedForEveryone: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
