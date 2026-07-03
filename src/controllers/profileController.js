@@ -15,7 +15,7 @@ const createGeneralProfile = async (req, res) => {
       { new: true, upsert: true, runValidators: true }
     );
 
-    await User.findByIdAndUpdate(userId, { name, profileCompleted: true });
+    await User.findByIdAndUpdate(userId, { name, profileCompleted: true, profileImage: profile.profileImage || "" });
 
     res.status(201).json({ message: "General profile created", profile });
   } catch (error) {
@@ -35,7 +35,7 @@ const createVolunteerProfile = async (req, res) => {
       { new: true, upsert: true, runValidators: true }
     );
 
-    await User.findByIdAndUpdate(userId, { name, profileCompleted: true });
+    await User.findByIdAndUpdate(userId, { name, profileCompleted: true, profileImage: profile.profileImage || "" });
 
     res.status(201).json({ message: "Volunteer profile created", profile });
   } catch (error) {
@@ -66,7 +66,7 @@ const createNGOProfile = async (req, res) => {
       { new: true, upsert: true, runValidators: true }
     );
 
-    await User.findByIdAndUpdate(userId, { profileCompleted: true });
+    await User.findByIdAndUpdate(userId, { profileCompleted: true, profileImage: profile.profileImage || "" });
 
     res.status(201).json({ message: "NGO profile created", profile });
   } catch (error) {
@@ -97,7 +97,7 @@ const createVetProfile = async (req, res) => {
       { new: true, upsert: true, runValidators: true }
     );
 
-    await User.findByIdAndUpdate(userId, { profileCompleted: true });
+    await User.findByIdAndUpdate(userId, { profileCompleted: true, profileImage: profile.profileImage || "" });
 
     res.status(201).json({ message: "Vet profile created", profile });
   } catch (error) {
@@ -146,6 +146,8 @@ const updateGeneralProfile = async (req, res) => {
 
     if (!profile) return res.status(404).json({ message: "Profile not found" });
 
+    await User.findByIdAndUpdate(userId, { profileImage: profile.profileImage || "" });
+
     res.status(200).json({ message: "Profile updated successfully", profile });
   } catch (error) {
     console.error("Error in updateGeneralProfile:", error);
@@ -165,6 +167,8 @@ const updateVolunteerProfile = async (req, res) => {
     );
 
     if (!profile) return res.status(404).json({ message: "Profile not found" });
+
+    await User.findByIdAndUpdate(userId, { profileImage: profile.profileImage || "" });
 
     res.status(200).json({ message: "Profile updated successfully", profile });
   } catch (error) {
@@ -186,6 +190,8 @@ const updateNGOProfile = async (req, res) => {
 
     if (!profile) return res.status(404).json({ message: "Profile not found" });
 
+    await User.findByIdAndUpdate(userId, { profileImage: profile.profileImage || "" });
+
     res.status(200).json({ message: "Profile updated successfully", profile });
   } catch (error) {
     console.error("Error in updateNGOProfile:", error);
@@ -205,6 +211,8 @@ const updateVetProfile = async (req, res) => {
     );
 
     if (!profile) return res.status(404).json({ message: "Profile not found" });
+
+    await User.findByIdAndUpdate(userId, { profileImage: profile.profileImage || "" });
 
     res.status(200).json({ message: "Profile updated successfully", profile });
   } catch (error) {

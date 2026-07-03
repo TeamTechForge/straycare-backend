@@ -50,6 +50,29 @@ const canMessage = async (senderId, recipientId) => {
   }
 };
 
+const getProfileImageForUser = async (uId, role) => {
+  try {
+    let profile = null;
+    if (role === "general_user") {
+      const GeneralUserProfile = require("../models/GeneralUserProfile");
+      profile = await GeneralUserProfile.findOne({ userId: uId }).lean();
+    } else if (role === "volunteer") {
+      const VolunteerProfile = require("../models/VolunteerProfile");
+      profile = await VolunteerProfile.findOne({ userId: uId }).lean();
+    } else if (role === "ngo") {
+      const NGOProfile = require("../models/NGOProfile");
+      profile = await NGOProfile.findOne({ userId: uId }).lean();
+    } else if (role === "vet") {
+      const VetProfile = require("../models/VetProfile");
+      profile = await VetProfile.findOne({ userId: uId }).lean();
+    }
+    return profile?.profileImage || "";
+  } catch (err) {
+    console.error(`Error in getProfileImageForUser helper:`, err);
+    return "";
+  }
+};
+
 const getChatNamespace = (req) => {
   const io = req.app.get("io");
   return io ? io.of("/chat") : null;
@@ -65,9 +88,21 @@ const getConversations = async (req, res, next) => {
     const conversations = await Conversation.find({
       participants: userId,
     })
-      .populate("participants", "name email role profileCompleted")
+      .populate("participants", "name email role profileCompleted profileImage")
       .sort({ "lastMessage.createdAt": -1, updatedAt: -1 })
       .lean();
+
+    // Self-healing check
+    for (let conv of conversations) {
+      if (conv.participants) {
+        for (let p of conv.participants) {
+          if (p.profileImage === undefined || p.profileImage === null) {
+            p.profileImage = await getProfileImageForUser(p._id, p.role);
+            await User.findByIdAndUpdate(p._id, { profileImage: p.profileImage });
+          }
+        }
+      }
+    }
 
     console.log(`[chatController] ✅ Found ${conversations.length} conversations for User: ${userId}`);
     return res.status(200).json(conversations);
@@ -105,10 +140,19 @@ const getOrCreateConversation = async (req, res, next) => {
     let conversation = await Conversation.findOne({
       participants: { $all: [userId, participantId], $size: 2 },
     })
-      .populate("participants", "name email role profileCompleted")
+      .populate("participants", "name email role profileCompleted profileImage")
       .lean();
 
     if (conversation) {
+      // Self-healing check
+      if (conversation.participants) {
+        for (let p of conversation.participants) {
+          if (p.profileImage === undefined || p.profileImage === null) {
+            p.profileImage = await getProfileImageForUser(p._id, p.role);
+            await User.findByIdAndUpdate(p._id, { profileImage: p.profileImage });
+          }
+        }
+      }
       console.log(`[chatController] ✅ Found existing conversation: ${conversation._id}`);
       return res.status(200).json(conversation);
     }
@@ -123,8 +167,18 @@ const getOrCreateConversation = async (req, res, next) => {
     });
 
     conversation = await Conversation.findById(newConversation._id)
-      .populate("participants", "name email role profileCompleted")
+      .populate("participants", "name email role profileCompleted profileImage")
       .lean();
+
+    // Self-healing check
+    if (conversation && conversation.participants) {
+      for (let p of conversation.participants) {
+        if (p.profileImage === undefined || p.profileImage === null) {
+          p.profileImage = await getProfileImageForUser(p._id, p.role);
+          await User.findByIdAndUpdate(p._id, { profileImage: p.profileImage });
+        }
+      }
+    }
 
     console.log(`[chatController] ✅ Conversation created: ${conversation._id}`);
     return res.status(201).json(conversation);

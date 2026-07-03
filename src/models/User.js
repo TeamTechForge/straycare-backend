@@ -72,6 +72,10 @@ const userSchema = new mongoose.Schema(
       enum: ["everyone", "contacts", "relatedOnly", "none"],
       default: "contacts",
     },
+    profileImage: {
+      type: String,
+      default: "",
+    },
   },
   { timestamps: true }
 );

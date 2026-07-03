@@ -197,6 +197,26 @@ exports.getUserReportsAdmin = async (req, res) => {
   }
 };
 
+// Helper to get and cache profile image
+const getProfileImageForUser = async (uId, role) => {
+  try {
+    let profile = null;
+    if (role === "general_user") {
+      profile = await GeneralUserProfile.findOne({ userId: uId }).lean();
+    } else if (role === "volunteer") {
+      profile = await VolunteerProfile.findOne({ userId: uId }).lean();
+    } else if (role === "ngo") {
+      profile = await NGOProfile.findOne({ userId: uId }).lean();
+    } else if (role === "vet") {
+      profile = await VetProfile.findOne({ userId: uId }).lean();
+    }
+    return profile?.profileImage || "";
+  } catch (err) {
+    console.error(`Error in getProfileImageForUser helper:`, err);
+    return "";
+  }
+};
+
 // Search registered users by name or email (username), excluding current logged-in user
 exports.searchUsers = async (req, res) => {
   try {
@@ -214,9 +234,17 @@ exports.searchUsers = async (req, res) => {
         { email: { $regex: query, $options: "i" } },
       ],
     })
-      .select("name email role profileCompleted")
+      .select("name email role profileCompleted profileImage")
       .limit(20)
       .lean();
+
+    // Self-healing check
+    for (let u of users) {
+      if (u.profileImage === undefined || u.profileImage === null) {
+        u.profileImage = await getProfileImageForUser(u._id, u.role);
+        await User.findByIdAndUpdate(u._id, { profileImage: u.profileImage });
+      }
+    }
 
     res.status(200).json(users);
   } catch (error) {
