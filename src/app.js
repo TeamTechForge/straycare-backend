@@ -124,13 +124,7 @@ app.use("/api/rescues", rescuesRoutes); // Rescue history + live tracking
 app.use("/api/forum", (req, res, next) => {
   console.log("[API HIT]", req.method, req.originalUrl, "from", req.ip);
   next();
-
-app.use("/api/forum", (req, res, next) => {
-  console.log("[API HIT]", req.method, req.originalUrl, "from", req.ip);
-  next();
 });
-app.use("/api/forum", forumRoutes);     // Discussion forum (posts, comments, likes)
-
 app.use("/api/forum", forumRoutes);     // Discussion forum (posts, comments, likes)
 app.use("/api/upload", uploadRoutes);   // File/image uploads
 app.use("/api/stray", strayRoutes);     // Stray animal reports
