@@ -97,4 +97,4 @@ const uploadToGridFs = async (req, res, next) => {
   }
 };
 
-module.exports = { upload, uploadToGridFs };
+module.exports = { upload, uploadToGridFs, uploadSingleFileToGridFs };

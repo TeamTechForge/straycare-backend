@@ -5,11 +5,14 @@ const {
   getUserReports,
   createUserReport,
   getUserReportsAdmin,
+  searchUsers,
+  approveUser,
 } = require("../controllers/userController");
 const { verifyToken } = require("../middleware/authMiddleware");
 
 // Router for user profile endpoints
 const userRouter = express.Router();
+userRouter.get("/search", verifyToken, searchUsers);
 userRouter.get("/:userId/public-profile", getPublicProfile);
 userRouter.get("/:userId/posts", getUserPosts);
 userRouter.get("/:userId/reports", getUserReports);
@@ -21,6 +24,7 @@ reportRouter.post("/user", verifyToken, createUserReport);
 // Router for admin endpoints
 const adminRouter = express.Router();
 adminRouter.get("/user-reports", verifyToken, getUserReportsAdmin);
+adminRouter.patch("/approve-user/:userId", verifyToken, approveUser);
 
 module.exports = {
   userRouter,
