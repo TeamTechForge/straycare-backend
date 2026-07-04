@@ -127,8 +127,8 @@ app.use("/api/forum", (req, res, next) => {
 });
 app.use("/api/forum", forumRoutes);     // Discussion forum (posts, comments, likes)
 app.use("/api/upload", uploadRoutes);   // File/image uploads
-app.use("/api/stray", strayRoutes);     // Stray animal reports
-app.use("/api/strays", strayRoutes);    // Same routes, alternate URL
+app.use("/api/stray", strayReportRoutes);     // Stray animal reports
+app.use("/api/strays", strayReportRoutes);    // Same routes, alternate URL
 
 // If someone calls an /api/... route that doesn't exist, return JSON (not HTML)
 app.use("/api", (req, res) => {
