@@ -1,9 +1,7 @@
 
 // Handles all routes related to creating a stray report, fetching reports, updating report status, uploading photos (local storage)
 const express = require("express");
-const multer = require("multer");
-const path = require("path");
-const { upload, uploadToGridFs } = require("../config/gridfs");
+const { upload } = require("../config/gridfs");
 
 const router = express.Router();
 
@@ -16,28 +14,20 @@ const {
 } = require("../controllers/reportController");
 const { verifyToken } = require("../middleware/authMiddleware");
 
-//Multer Storage Configuration , specify the destination folder and how to name the files
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/"); // Save files in /uploads
-  },
-  filename: (req, file, cb) => {
-    const unique =
-      Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, unique + path.extname(file.originalname));
-  },
-});
-
-const uploadDisk = multer({ storage });
+const { uploadFileToCloudinary } = require("../utils/cloudinaryUpload");
 
 // ------------------ UPLOAD ROUTE ------------------
-router.post("/upload", uploadDisk.single("image"), (req, res) => {
+router.post("/upload", upload.single("image"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded" });
   }
 
-  const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-  res.json({ url: fileUrl });
+  try {
+    const url = await uploadFileToCloudinary(req.file);
+    res.json({ url });
+  } catch (error) {
+    res.status(500).json({ message: "Upload failed", error: error.message });
+  }
 });
 
 
@@ -45,7 +35,24 @@ router.post("/upload", uploadDisk.single("image"), (req, res) => {
 router.post("/report", verifyToken, createReport);
 
 // One-step submission flow (multipart + photos)
-router.post("/report/submit", verifyToken, uploadDisk.array("photos", 5), uploadToGridFs, createReport);
+router.post(
+  "/report/submit",
+  verifyToken,
+  upload.array("photos", 5),
+  async (req, res, next) => {
+    try {
+      if (req.files && req.files.length > 0) {
+        const uploadPromises = req.files.map(file => uploadFileToCloudinary(file));
+        const urls = await Promise.all(uploadPromises);
+        req.body.photos = JSON.stringify(urls);
+      }
+      next();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to upload photos", error: error.message });
+    }
+  },
+  createReport
+);
 
 // Compatibility route for merged clients posting to /reports
 router.post("/reports", verifyToken, createReport);
