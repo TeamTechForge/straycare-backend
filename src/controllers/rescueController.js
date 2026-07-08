@@ -15,6 +15,9 @@ const findRequestByIdOrCustomId = async (id) => {
   if (!request) {
     request = await RescueRequest.findOne({ rescueRequestId: id }).populate("rescuerId");
   }
+  if (!request) {
+    request = await RescueRequest.findOne({ caseId: id }).populate("rescuerId");
+  }
   return request;
 };
 
@@ -158,8 +161,8 @@ exports.listRescuers = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 exports.findNearestRescuer = async (req, res) => {
   try {
-    const { latitude, longitude } = req.body;
-    console.log(`[RESCUE] Finding nearest rescuer to lat:${latitude} lng:${longitude}`);
+    const { latitude, longitude, excludeIds, caseId } = req.body;
+    console.log(`[RESCUE] Finding nearest rescuer to lat:${latitude} lng:${longitude}, excluding: ${excludeIds || "none"}, caseId: ${caseId || "none"}`);
 
     if (latitude === undefined || longitude === undefined) {
       return res.status(400).json({ error: "latitude and longitude are required" });
@@ -172,7 +175,35 @@ exports.findNearestRescuer = async (req, res) => {
       return res.status(400).json({ error: "latitude and longitude must be valid numbers" });
     }
 
-    const rescuers = await Rescuer.find({ isAvailable: true });
+    let reporterUserId = null;
+    if (caseId) {
+      const StrayReport = require("../models/strayreport");
+      const report = await StrayReport.findOne({ caseId });
+      if (report && report.reporterUserId) {
+        reporterUserId = report.reporterUserId;
+        console.log(`[RESCUE] Case reported by user: ${reporterUserId}. Exclude from rescue requests.`);
+      }
+    }
+
+    const query = { isAvailable: true };
+
+    const ninIds = [];
+    if (excludeIds && Array.isArray(excludeIds) && excludeIds.length > 0) {
+      excludeIds.forEach((id) => {
+        if (mongoose.Types.ObjectId.isValid(id)) {
+          ninIds.push(new mongoose.Types.ObjectId(id));
+        }
+      });
+    }
+    if (ninIds.length > 0) {
+      query._id = { $nin: ninIds };
+    }
+
+    if (reporterUserId) {
+      query.userId = { $ne: new mongoose.Types.ObjectId(reporterUserId) };
+    }
+
+    const rescuers = await Rescuer.find(query);
     console.log(`[RESCUE] ${rescuers.length} rescuers are available`);
 
     if (!rescuers.length) {
@@ -258,50 +289,51 @@ exports.sendRescueRequest = async (req, res) => {
 
     console.log(`[RESCUE] Request ${request._id} created for ${rescuer.name}`);
 
-    setTimeout(async () => {
+    const Notification = require("../models/Notification");
+
+    if (rescuer.userId) {
       try {
-        const accepted = Math.random() > 0.3;
-        request.status = accepted ? "completed" : "rejected";
-        await request.save();
-
-        if (accepted) {
-          await RescueHistory.findOneAndUpdate(
-            { rescueRequestId: String(request._id) },
-            {
-              $set: {
-                rescueRequestId: String(request._id),
-                userId: request.userId || "logged-in-user",
-                caseId: request.caseId || String(request._id),
-                status: "completed",
-                animalType: request.animalType,
-                description: request.description,
-                photos: request.photos || [],
-                reporterName: request.reporterName,
-                reporterPhone: request.reporterPhone,
-                reporterAvatar: request.reporterAvatar,
-                reporterLocation: request.reporterLocation,
-                rescuerId: String(rescuer._id),
-                rescuerName: rescuer.name,
-                rescuerPhone: rescuer.phone || "",
-                rescuerAvatar: rescuer.avatar || "",
-                rescuerLocation: rescuer.location,
-                location: request.rescueLocation || rescuer.location,
-                distanceKm: request.distanceKm,
-                etaMinutes: request.etaMinutes,
-                summary: request.summary || "Rescue completed",
-                outcome: request.summary || "completed",
-                completedAt: new Date(),
-              },
-            },
-            { upsert: true, new: true }
-          );
-        }
-
-        console.log(`[RESCUE] Request ${request._id} resolved to: ${request.status}`);
-      } catch (e) {
-        console.error("[RESCUE] Auto-resolve failed:", e.message);
+        await Notification.create({
+          userId: rescuer.userId,
+          title: "New Rescue Request",
+          message: `A new rescue request for a ${animalType || "stray animal"} is near you.`,
+          type: "info",
+        });
+        console.log(`[RESCUE] Created notification for registered rescuer ${rescuer.userId}`);
+      } catch (err) {
+        console.error("[RESCUE] Failed to create notification for rescuer:", err.message);
       }
-    }, 4000);
+    }
+
+    if (!rescuer.userId) {
+      setTimeout(async () => {
+        try {
+          const accepted = Math.random() > 0.3;
+          request.status = accepted ? "accepted" : "rejected";
+          await request.save();
+
+          console.log(`[RESCUE] Request ${request._id} resolved to: ${request.status}`);
+
+          if (accepted && request.userId && mongoose.Types.ObjectId.isValid(request.userId)) {
+            try {
+              await Notification.create({
+                userId: request.userId,
+                title: "Rescue Request Accepted",
+                message: `${rescuer.name} has accepted your rescue request and is on their way!`,
+                type: "success",
+              });
+              console.log(`[RESCUE] Created success notification for reporter ${request.userId}`);
+            } catch (err) {
+              console.error("[RESCUE] Failed to create notification for reporter:", err.message);
+            }
+          }
+        } catch (e) {
+          console.error("[RESCUE] Auto-resolve failed:", e.message);
+        }
+      }, 4000);
+    } else {
+      console.log(`[RESCUE] Matched rescuer ${rescuer.name} is a registered user (${rescuer.userId}). Waiting for real response...`);
+    }
 
     return res.json({
       requestId: String(request._id),
@@ -322,7 +354,7 @@ exports.sendRescueRequest = async (req, res) => {
 
 exports.listPendingRescues = async (req, res) => {
   try {
-    const pending = await RescueRequest.find({ status: "pending" })
+    const pending = await RescueRequest.find({ status: { $in: ["pending", "accepted"] } })
       .sort({ createdAt: -1 })
       .populate("rescuerId");
 
@@ -347,7 +379,7 @@ exports.listCompletedRescues = async (req, res) => {
 exports.listAllRescues = async (req, res) => {
   try {
     const [pending, completed] = await Promise.all([
-      RescueRequest.find({ status: "pending" }).sort({ createdAt: -1 }).populate("rescuerId"),
+      RescueRequest.find({ status: { $in: ["pending", "accepted"] } }).sort({ createdAt: -1 }).populate("rescuerId"),
       RescueHistory.find({ status: "completed" }).sort({ completedAt: -1, createdAt: -1 }),
     ]);
 
@@ -369,12 +401,29 @@ exports.listAllRescues = async (req, res) => {
 
 exports.listUserRescues = async (req, res) => {
   try {
-    const userId = req.params.userId || req.query.userId || "logged-in-user";
+    const userId = (req.params && req.params.userId) || (req.query && req.query.userId) || "logged-in-user";
     console.log(`[RESCUE] Listing rescues for user ID: ${userId}`);
 
+    const User = require("../models/User");
+    let user = null;
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      user = await User.findById(userId);
+    }
+
+    let pendingQuery = { userId, status: { $in: ["pending", "accepted"] } };
+    let completedQuery = { userId, status: "completed" };
+
+    if (user && (user.role === "volunteer" || user.role === "ngo" || user.role === "vet")) {
+      const rescuer = await Rescuer.findOne({ userId: user._id });
+      if (rescuer) {
+        pendingQuery = { rescuerId: rescuer._id, status: { $in: ["pending", "accepted"] } };
+        completedQuery = { rescuerId: String(rescuer._id), status: "completed" };
+      }
+    }
+
     const [pending, completed] = await Promise.all([
-      RescueRequest.find({ userId, status: "pending" }).sort({ createdAt: -1 }).populate("rescuerId"),
-      RescueHistory.find({ userId, status: "completed" }).sort({ completedAt: -1, createdAt: -1 }),
+      RescueRequest.find(pendingQuery).sort({ createdAt: -1 }).populate("rescuerId"),
+      RescueHistory.find(completedQuery).sort({ completedAt: -1, createdAt: -1 }),
     ]);
 
     const all = [
@@ -397,7 +446,11 @@ exports.listUserRescues = async (req, res) => {
 exports.getRescueById = async (req, res) => {
   try {
     const { id } = req.params;
-    const history = await RescueHistory.findOne({ rescueRequestId: id });
+    let history = await RescueHistory.findOne({ rescueRequestId: id });
+    if (!history) {
+      history = await RescueHistory.findOne({ caseId: id });
+    }
+
     if (history) {
       const formatted = formatCaseRecord({ request: history, history });
       return res.json({
@@ -488,5 +541,133 @@ exports.checkRequestStatus = async (req, res) => {
   } catch (err) {
     console.error("[RESCUE][checkRequestStatus] Error:", err.message);
     return res.status(500).json({ error: "Something went wrong" });
+  }
+};
+
+// GET /api/rescue/active-request
+exports.getActiveRescuerRequest = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    // Find the Rescuer document for this user
+    const rescuer = await Rescuer.findOne({ userId });
+    if (!rescuer) {
+      return res.json({ request: null });
+    }
+
+    // Find the latest pending request for this rescuer
+    const pendingRequest = await RescueRequest.findOne({
+      rescuerId: rescuer._id,
+      status: "pending",
+    }).sort({ createdAt: -1 });
+
+    return res.json({ request: pendingRequest });
+  } catch (err) {
+    console.error("[RESCUE] getActiveRescuerRequest error:", err.message);
+    return res.status(500).json({ error: "Failed to fetch active request" });
+  }
+};
+
+// PATCH /api/rescue/request/:id/respond
+exports.respondToRescueRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action } = req.body; // "accept" or "reject"
+
+    if (action !== "accept" && action !== "reject") {
+      return res.status(400).json({ error: "Invalid action" });
+    }
+
+    const request = await RescueRequest.findById(id);
+    if (!request) {
+      return res.status(404).json({ error: "Request not found" });
+    }
+
+    request.status = action === "accept" ? "accepted" : "rejected";
+    await request.save();
+
+    console.log(`[RESCUE] Rescuer responded to request ${id} with: ${request.status}`);
+
+    if (action === "accept" && request.userId && mongoose.Types.ObjectId.isValid(request.userId)) {
+      try {
+        const Notification = require("../models/Notification");
+        const rescuer = await Rescuer.findById(request.rescuerId);
+        await Notification.create({
+          userId: request.userId,
+          title: "Rescue Request Accepted",
+          message: `${rescuer.name} has accepted your rescue request and is on their way!`,
+          type: "success",
+        });
+      } catch (err) {
+        console.error("[RESCUE] Failed to create notification for reporter:", err.message);
+      }
+    }
+
+    return res.json({ success: true, request });
+  } catch (err) {
+    console.error("[RESCUE] respondToRescueRequest error:", err.message);
+    return res.status(500).json({ error: "Failed to respond to request" });
+  }
+};
+
+// PATCH /api/rescue/request/:id/details
+// Updates the summary/tracking notes for a rescue request or completion history
+exports.updateRescueDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { summary } = req.body;
+
+    if (!summary) {
+      return res.status(400).json({ error: "Details/summary are required" });
+    }
+
+    let request = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      request = await RescueRequest.findById(id);
+    }
+    if (!request) {
+      request = await RescueRequest.findOne({ rescueRequestId: id });
+    }
+    if (!request) {
+      request = await RescueRequest.findOne({ caseId: id });
+    }
+
+    let history = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      history = await RescueHistory.findById(id);
+    }
+    if (!history) {
+      history = await RescueHistory.findOne({ rescueRequestId: id });
+    }
+    if (!history) {
+      history = await RescueHistory.findOne({ caseId: id });
+    }
+
+    const timestamp = new Date().toLocaleString("en-US", { hour12: true });
+    const newUpdate = `[${timestamp}] ${summary}`;
+
+    if (request) {
+      if (request.summary && request.summary !== "Pending rescue request" && request.summary !== "Completed rescue" && request.summary.trim() !== "") {
+        request.summary = `${newUpdate}\n${request.summary}`;
+      } else {
+        request.summary = newUpdate;
+      }
+      await request.save();
+      return res.json({ success: true, request });
+    }
+
+    if (history) {
+      if (history.summary && history.summary !== "Pending rescue request" && history.summary !== "Completed rescue" && history.summary.trim() !== "") {
+        history.summary = `${newUpdate}\n${history.summary}`;
+      } else {
+        history.summary = newUpdate;
+      }
+      await history.save();
+      return res.json({ success: true, history });
+    }
+
+    return res.status(404).json({ error: "Rescue request or history not found" });
+  } catch (err) {
+    console.error("[RESCUE][updateRescueDetails] Error:", err.message);
+    return res.status(500).json({ error: "Failed to update details" });
   }
 };

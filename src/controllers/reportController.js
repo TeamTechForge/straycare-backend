@@ -70,6 +70,10 @@ const buildReportPayload = (req) => {
     payload.caseId = `CASE-${Date.now()}`;
   }
 
+  if (req.user && req.user.id) {
+    payload.reporterUserId = req.user.id;
+  }
+
   return payload;
 };
 

@@ -41,14 +41,20 @@ exports.getPublicProfile = async (req, res) => {
 
     } else if (user.role === "volunteer") {
       const volunteerProfile = await VolunteerProfile.findOne({ userId }).lean() || {};
-      const totalRescues = await RescueHistory.countDocuments({ rescuerId: userId });
+      const Rescuer = require("../models/Rescuer");
+      const rescuer = await Rescuer.findOne({ userId });
+      const rescuerIdQuery = rescuer ? rescuer._id : userId;
+
+      const totalRescues = await RescueHistory.countDocuments({ 
+        $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
+      });
       const activeRescues = await RescueRequest.countDocuments({ 
-        rescuerId: userId, 
+        rescuerId: rescuerIdQuery, 
         status: { $in: ["accepted", "under_rescue"] } 
       });
       
       // Calculate completion rate based on history vs total attempts (completed + rejected)
-      const totalAttempts = await RescueRequest.countDocuments({ rescuerId: userId });
+      const totalAttempts = await RescueRequest.countDocuments({ rescuerId: rescuerIdQuery });
       const completionRate = totalAttempts > 0 ? Math.round((totalRescues / totalAttempts) * 100) : 100;
 
       profileData = {
@@ -59,12 +65,22 @@ exports.getPublicProfile = async (req, res) => {
         rescueCompletionRate: completionRate,
       };
 
-      stats.rescuesCompleted = totalRescues;
+      stats.rescuesCompleted = totalRescues + activeRescues;
       stats.activeRescues = activeRescues;
 
     } else if (user.role === "vet") {
       const vetProfile = await VetProfile.findOne({ userId }).lean() || {};
-      const totalRescues = await RescueHistory.countDocuments({ rescuerId: userId });
+      const Rescuer = require("../models/Rescuer");
+      const rescuer = await Rescuer.findOne({ userId });
+      const rescuerIdQuery = rescuer ? rescuer._id : userId;
+
+      const totalRescues = await RescueHistory.countDocuments({ 
+        $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
+      });
+      const activeRescues = await RescueRequest.countDocuments({ 
+        rescuerId: rescuerIdQuery, 
+        status: { $in: ["accepted", "under_rescue"] } 
+      });
 
       profileData = {
         location: vetProfile.primaryLocation || "",
@@ -77,12 +93,22 @@ exports.getPublicProfile = async (req, res) => {
         emergencyAvailability: vetProfile.emergencyAvailability || false,
       };
 
-      stats.rescuesCompleted = totalRescues;
+      stats.rescuesCompleted = totalRescues + activeRescues;
       stats.animalsTreated = vetProfile.animalsTreated || 0;
 
     } else if (user.role === "ngo") {
       const ngoProfile = await NGOProfile.findOne({ userId }).lean() || {};
-      const totalRescues = await RescueHistory.countDocuments({ rescuerId: userId });
+      const Rescuer = require("../models/Rescuer");
+      const rescuer = await Rescuer.findOne({ userId });
+      const rescuerIdQuery = rescuer ? rescuer._id : userId;
+
+      const totalRescues = await RescueHistory.countDocuments({ 
+        $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
+      });
+      const activeRescues = await RescueRequest.countDocuments({ 
+        rescuerId: rescuerIdQuery, 
+        status: { $in: ["accepted", "under_rescue"] } 
+      });
 
       profileData = {
         location: ngoProfile.location || "",
@@ -93,7 +119,7 @@ exports.getPublicProfile = async (req, res) => {
         donationCampaignCount: ngoProfile.donationCampaignCount || 0,
       };
 
-      stats.rescuesCompleted = totalRescues;
+      stats.rescuesCompleted = totalRescues + activeRescues;
       stats.totalAdoptions = ngoProfile.totalAdoptions || 0;
       stats.donationCampaignCount = ngoProfile.donationCampaignCount || 0;
     }
@@ -131,11 +157,33 @@ exports.getUserPosts = async (req, res) => {
   }
 };
 
-// Fetch user's reports (public reports only)
+// Fetch user's reports (public reports only, or all if requesting user is self)
 exports.getUserReports = async (req, res) => {
   try {
     const { userId } = req.params;
-    const reports = await StrayReport.find({ reporterUserId: userId, anonymous: false }).sort({ createdAt: -1 });
+    
+    // Check if the requesting user is self to include anonymous reports
+    const authHeader = req.headers["authorization"];
+    let isSelf = false;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.split(" ")[1];
+      try {
+        const jwt = require("jsonwebtoken");
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (decoded.id === userId) {
+          isSelf = true;
+        }
+      } catch (err) {
+        // Ignore token verification errors
+      }
+    }
+
+    const query = { reporterUserId: userId };
+    if (!isSelf) {
+      query.anonymous = false;
+    }
+
+    const reports = await StrayReport.find(query).sort({ createdAt: -1 });
     res.status(200).json(reports);
   } catch (error) {
     res.status(500).json({

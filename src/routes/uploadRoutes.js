@@ -170,20 +170,6 @@ router.get("/files/:id", async (req, res) => {
     });
 
   }
-
-  const fileIds = req.files.map((file) => String(file.id));
-  const files = req.files.map((file) => ({
-    id: String(file.id),
-    filename: file.filename,
-    url: `/api/upload/files/${file.id}`,
-  }));
-
-  return res.status(201).json({
-    fileIds,
-    photos: fileIds,
-    files,
-  });
-
 });
 
 module.exports = router;

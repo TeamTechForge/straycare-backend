@@ -5,7 +5,11 @@ const {
   sendRescueRequest,
   checkRequestStatus,
   listRescuers,
+  getActiveRescuerRequest,
+  respondToRescueRequest,
+  updateRescueDetails,
 } = require("../controllers/rescueController");
+const { verifyToken } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
@@ -20,5 +24,10 @@ router.post("/send-request", sendRescueRequest);
 
 // Check the current status of a rescue request (pending / accepted / rejected)
 router.get("/status/:requestId", checkRequestStatus);
+
+// Rescuer active request polling & real-time acceptance response
+router.get("/active-request", verifyToken, getActiveRescuerRequest);
+router.patch("/request/:id/respond", verifyToken, respondToRescueRequest);
+router.patch("/request/:id/details", verifyToken, updateRescueDetails);
 
 module.exports = router;

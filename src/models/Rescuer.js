@@ -5,6 +5,7 @@
 const mongoose = require("mongoose");
 
 const rescuerSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
   name: { type: String, required: true },     // Rescuer's full name
   phone: { type: String, default: "" },        // Contact phone number
   avatar: { type: String, default: "" },       // URL of their profile picture (optional)
