@@ -53,7 +53,7 @@ const uploadSingleFileToGridFs = (bucket, file) =>
 
 const uploadToGridFs = async (req, res, next) => {
   try {
-    if (!mongoURI) {
+    if (!process.env.MONGO_URI) {
       return res.status(500).json({
         message: "File upload is unavailable because MONGO_URI is missing.",
       });

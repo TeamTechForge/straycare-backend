@@ -39,8 +39,7 @@ if (nodeMajor >= 23) {
 
 // ─── 2. Environment variable check ───────────────────────────────────────────
 if (!process.env.MONGO_URI) {
-  console.error("[STARTUP] ❌ MONGO_URI is not set in Backend/.env — server cannot start.");
-  process.exit(1); // stop immediately, don't half-start
+  console.warn("[STARTUP] ⚠️  MONGO_URI is not set in Backend/.env — will fall back to in-memory MongoDB.");
 }
 
 // ─── 3. Port helper functions ─────────────────────────────────────────────────

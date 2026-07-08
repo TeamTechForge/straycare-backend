@@ -37,6 +37,24 @@ const createVolunteerProfile = async (req, res) => {
 
     await User.findByIdAndUpdate(userId, { name, profileCompleted: true, profileImage: profile.profileImage || "" });
 
+    const user = await User.findById(userId);
+    const Rescuer = require("../models/Rescuer");
+    await Rescuer.findOneAndUpdate(
+      { userId },
+      {
+        userId,
+        name: user.name,
+        phone: user.phone || "",
+        avatar: profile.profileImage || "",
+        isAvailable: true,
+        location: {
+          latitude: Number(req.body.latitude) || 6.9271,
+          longitude: Number(req.body.longitude) || 79.8612,
+        },
+      },
+      { upsert: true, new: true }
+    );
+
     res.status(201).json({ message: "Volunteer profile created", profile });
   } catch (error) {
     console.error("Error in createVolunteerProfile:", error);
@@ -68,6 +86,24 @@ const createNGOProfile = async (req, res) => {
 
     await User.findByIdAndUpdate(userId, { profileCompleted: true, profileImage: profile.profileImage || "" });
 
+    const user = await User.findById(userId);
+    const Rescuer = require("../models/Rescuer");
+    await Rescuer.findOneAndUpdate(
+      { userId },
+      {
+        userId,
+        name: user.name || orgName || "NGO Rescuer",
+        phone: user.phone || "",
+        avatar: profile.profileImage || "",
+        isAvailable: true,
+        location: {
+          latitude: Number(req.body.latitude) || 6.9271,
+          longitude: Number(req.body.longitude) || 79.8612,
+        },
+      },
+      { upsert: true, new: true }
+    );
+
     res.status(201).json({ message: "NGO profile created", profile });
   } catch (error) {
     console.error("Error in createNGOProfile:", error);
@@ -98,6 +134,24 @@ const createVetProfile = async (req, res) => {
     );
 
     await User.findByIdAndUpdate(userId, { profileCompleted: true, profileImage: profile.profileImage || "" });
+
+    const user = await User.findById(userId);
+    const Rescuer = require("../models/Rescuer");
+    await Rescuer.findOneAndUpdate(
+      { userId },
+      {
+        userId,
+        name: user.name || clinicName || "Vet Rescuer",
+        phone: user.phone || "",
+        avatar: profile.profileImage || "",
+        isAvailable: true,
+        location: {
+          latitude: Number(req.body.latitude) || 6.9271,
+          longitude: Number(req.body.longitude) || 79.8612,
+        },
+      },
+      { upsert: true, new: true }
+    );
 
     res.status(201).json({ message: "Vet profile created", profile });
   } catch (error) {
