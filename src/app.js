@@ -31,6 +31,7 @@ const reportedUsersRoutes = require("./routes/reportedUsers.routes");
 const moderationRoutes = require("./routes/moderationRoutes");
 const adminNotificationsRoutes = require("./routes/adminNotifications.routes");
 const adminManagementRoutes = require("./routes/adminRoutes");
+const searchRoutes = require("./routes/searchRoutes");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -94,6 +95,7 @@ app.use(morgan("dev"));
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminAuthRoutes);
 app.use("/api/profiles", profileRoutes);
+app.use("/api/search", searchRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/users", userRouter);
