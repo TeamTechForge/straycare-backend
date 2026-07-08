@@ -7,6 +7,7 @@ const {
   listRescuers,
   getActiveRescuerRequest,
   respondToRescueRequest,
+  updateRescueDetails,
 } = require("../controllers/rescueController");
 const { verifyToken } = require("../middleware/authMiddleware");
 
@@ -27,5 +28,6 @@ router.get("/status/:requestId", checkRequestStatus);
 // Rescuer active request polling & real-time acceptance response
 router.get("/active-request", verifyToken, getActiveRescuerRequest);
 router.patch("/request/:id/respond", verifyToken, respondToRescueRequest);
+router.patch("/request/:id/details", verifyToken, updateRescueDetails);
 
 module.exports = router;

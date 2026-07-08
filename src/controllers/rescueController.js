@@ -15,6 +15,9 @@ const findRequestByIdOrCustomId = async (id) => {
   if (!request) {
     request = await RescueRequest.findOne({ rescueRequestId: id }).populate("rescuerId");
   }
+  if (!request) {
+    request = await RescueRequest.findOne({ caseId: id }).populate("rescuerId");
+  }
   return request;
 };
 
@@ -398,12 +401,29 @@ exports.listAllRescues = async (req, res) => {
 
 exports.listUserRescues = async (req, res) => {
   try {
-    const userId = req.params.userId || req.query.userId || "logged-in-user";
+    const userId = (req.params && req.params.userId) || (req.query && req.query.userId) || "logged-in-user";
     console.log(`[RESCUE] Listing rescues for user ID: ${userId}`);
 
+    const User = require("../models/User");
+    let user = null;
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      user = await User.findById(userId);
+    }
+
+    let pendingQuery = { userId, status: { $in: ["pending", "accepted"] } };
+    let completedQuery = { userId, status: "completed" };
+
+    if (user && (user.role === "volunteer" || user.role === "ngo" || user.role === "vet")) {
+      const rescuer = await Rescuer.findOne({ userId: user._id });
+      if (rescuer) {
+        pendingQuery = { rescuerId: rescuer._id, status: { $in: ["pending", "accepted"] } };
+        completedQuery = { rescuerId: String(rescuer._id), status: "completed" };
+      }
+    }
+
     const [pending, completed] = await Promise.all([
-      RescueRequest.find({ userId, status: { $in: ["pending", "accepted"] } }).sort({ createdAt: -1 }).populate("rescuerId"),
-      RescueHistory.find({ userId, status: "completed" }).sort({ completedAt: -1, createdAt: -1 }),
+      RescueRequest.find(pendingQuery).sort({ createdAt: -1 }).populate("rescuerId"),
+      RescueHistory.find(completedQuery).sort({ completedAt: -1, createdAt: -1 }),
     ]);
 
     const all = [
@@ -426,7 +446,11 @@ exports.listUserRescues = async (req, res) => {
 exports.getRescueById = async (req, res) => {
   try {
     const { id } = req.params;
-    const history = await RescueHistory.findOne({ rescueRequestId: id });
+    let history = await RescueHistory.findOne({ rescueRequestId: id });
+    if (!history) {
+      history = await RescueHistory.findOne({ caseId: id });
+    }
+
     if (history) {
       const formatted = formatCaseRecord({ request: history, history });
       return res.json({
@@ -582,5 +606,68 @@ exports.respondToRescueRequest = async (req, res) => {
   } catch (err) {
     console.error("[RESCUE] respondToRescueRequest error:", err.message);
     return res.status(500).json({ error: "Failed to respond to request" });
+  }
+};
+
+// PATCH /api/rescue/request/:id/details
+// Updates the summary/tracking notes for a rescue request or completion history
+exports.updateRescueDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { summary } = req.body;
+
+    if (!summary) {
+      return res.status(400).json({ error: "Details/summary are required" });
+    }
+
+    let request = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      request = await RescueRequest.findById(id);
+    }
+    if (!request) {
+      request = await RescueRequest.findOne({ rescueRequestId: id });
+    }
+    if (!request) {
+      request = await RescueRequest.findOne({ caseId: id });
+    }
+
+    let history = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      history = await RescueHistory.findById(id);
+    }
+    if (!history) {
+      history = await RescueHistory.findOne({ rescueRequestId: id });
+    }
+    if (!history) {
+      history = await RescueHistory.findOne({ caseId: id });
+    }
+
+    const timestamp = new Date().toLocaleString("en-US", { hour12: true });
+    const newUpdate = `[${timestamp}] ${summary}`;
+
+    if (request) {
+      if (request.summary && request.summary !== "Pending rescue request" && request.summary !== "Completed rescue" && request.summary.trim() !== "") {
+        request.summary = `${newUpdate}\n${request.summary}`;
+      } else {
+        request.summary = newUpdate;
+      }
+      await request.save();
+      return res.json({ success: true, request });
+    }
+
+    if (history) {
+      if (history.summary && history.summary !== "Pending rescue request" && history.summary !== "Completed rescue" && history.summary.trim() !== "") {
+        history.summary = `${newUpdate}\n${history.summary}`;
+      } else {
+        history.summary = newUpdate;
+      }
+      await history.save();
+      return res.json({ success: true, history });
+    }
+
+    return res.status(404).json({ error: "Rescue request or history not found" });
+  } catch (err) {
+    console.error("[RESCUE][updateRescueDetails] Error:", err.message);
+    return res.status(500).json({ error: "Failed to update details" });
   }
 };
