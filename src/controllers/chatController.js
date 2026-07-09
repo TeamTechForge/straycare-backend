@@ -89,7 +89,7 @@ const getConversations = async (req, res, next) => {
       participants: userId,
       deletedFor: { $ne: userId },
     })
-      .populate("participants", "name email role profileCompleted profileImage")
+      .populate("participants", "name email role profileCompleted profileImage avatar")
       .sort({ "lastMessage.createdAt": -1, updatedAt: -1 })
       .lean();
 
@@ -97,9 +97,8 @@ const getConversations = async (req, res, next) => {
     for (let conv of conversations) {
       if (conv.participants) {
         for (let p of conv.participants) {
-          if (p.profileImage === undefined || p.profileImage === null) {
-            p.profileImage = await getProfileImageForUser(p._id, p.role);
-            await User.findByIdAndUpdate(p._id, { profileImage: p.profileImage });
+          if (!p.profileImage) {
+            p.profileImage = p.avatar || "";
           }
         }
       }
@@ -141,7 +140,7 @@ const getOrCreateConversation = async (req, res, next) => {
     let conversation = await Conversation.findOne({
       participants: { $all: [userId, participantId], $size: 2 },
     })
-      .populate("participants", "name email role profileCompleted profileImage")
+      .populate("participants", "name email role profileCompleted profileImage avatar")
       .lean();
 
     if (conversation) {
@@ -152,9 +151,8 @@ const getOrCreateConversation = async (req, res, next) => {
       // Self-healing check
       if (conversation.participants) {
         for (let p of conversation.participants) {
-          if (p.profileImage === undefined || p.profileImage === null) {
-            p.profileImage = await getProfileImageForUser(p._id, p.role);
-            await User.findByIdAndUpdate(p._id, { profileImage: p.profileImage });
+          if (!p.profileImage) {
+            p.profileImage = p.avatar || "";
           }
         }
       }
@@ -172,15 +170,14 @@ const getOrCreateConversation = async (req, res, next) => {
     });
 
     conversation = await Conversation.findById(newConversation._id)
-      .populate("participants", "name email role profileCompleted profileImage")
+      .populate("participants", "name email role profileCompleted profileImage avatar")
       .lean();
 
     // Self-healing check
     if (conversation && conversation.participants) {
       for (let p of conversation.participants) {
-        if (p.profileImage === undefined || p.profileImage === null) {
-          p.profileImage = await getProfileImageForUser(p._id, p.role);
-          await User.findByIdAndUpdate(p._id, { profileImage: p.profileImage });
+        if (!p.profileImage) {
+          p.profileImage = p.avatar || "";
         }
       }
     }
