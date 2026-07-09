@@ -1,4 +1,4 @@
-﻿const express = require("express");
+const express = require("express");
 const crypto = require("crypto");
 const mongoose = require("mongoose");
 const { ObjectId } = require("mongodb");
@@ -178,6 +178,22 @@ router.get("/history", async (req, res) => {
   } catch (err) {
     console.error("HISTORY ERROR:", err);
     res.status(500).json({ error: "Failed to fetch donations" });
+  }
+});
+
+// Get total donations for an organization
+router.get("/total/:orgId", async (req, res) => {
+  try {
+    const { orgId } = req.params;
+    const result = await Donation.aggregate([
+      { $match: { organizationId: orgId, status: "SUCCESS" } },
+      { $group: { _id: null, total: { $sum: "$amount" } } }
+    ]);
+    const totalAmount = result.length > 0 ? result[0].total : 0;
+    res.json({ total: totalAmount });
+  } catch (err) {
+    console.error("TOTAL DONATIONS ERROR:", err);
+    res.status(500).json({ error: "Failed to calculate total donations" });
   }
 });
 

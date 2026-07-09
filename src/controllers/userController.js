@@ -282,15 +282,14 @@ exports.searchUsers = async (req, res) => {
         { email: { $regex: query, $options: "i" } },
       ],
     })
-      .select("name email role profileCompleted profileImage")
+      .select("name email role profileCompleted profileImage avatar")
       .limit(20)
       .lean();
 
     // Self-healing check
     for (let u of users) {
-      if (u.profileImage === undefined || u.profileImage === null) {
-        u.profileImage = await getProfileImageForUser(u._id, u.role);
-        await User.findByIdAndUpdate(u._id, { profileImage: u.profileImage });
+      if (!u.profileImage) {
+        u.profileImage = u.avatar || "";
       }
     }
 
