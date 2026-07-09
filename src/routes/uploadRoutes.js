@@ -10,47 +10,53 @@ const {
   uploadToGridFs,
 } = require("../config/gridfs");
 
-// Cloudinary config will be imported dynamically inside the handler when needed
+const { uploadFileToCloudinary } = require("../utils/cloudinaryUpload");
 
 const router = express.Router();
 
 // =========================
-// GRIDFS UPLOAD
+// CLOUDINARY UPLOAD (ARRAY OF PHOTOS)
 // =========================
 
 router.post(
   "/",
   upload.array("photos", 5),
-  uploadToGridFs,
-  (req, res) => {
+  async (req, res) => {
+    try {
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({
+          message: "No files uploaded",
+        });
+      }
 
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({
-        message: "No files uploaded",
+      const uploadPromises = req.files.map(file => uploadFileToCloudinary(file));
+      const urls = await Promise.all(uploadPromises);
+
+      const fileIds = urls;
+      const files = urls.map((url, index) => ({
+        id: url,
+        filename: req.files[index].originalname,
+        url: url,
+      }));
+
+      return res.status(201).json({
+        fileIds,
+        photos: fileIds,
+        files,
+      });
+    } catch (error) {
+      console.error("[Upload Error] Failed to process uploads:", error);
+      return res.status(500).json({
+        message: "Failed to upload files",
+        error: error.message,
       });
     }
-
-    const fileIds = req.files.map(
-      (file) => String(file.id)
-    );
-
-    const files = req.files.map((file) => ({
-      id: String(file.id),
-      filename: file.filename,
-      url: `/api/upload/files/${file.id}`,
-    }));
-
-    return res.status(201).json({
-      fileIds,
-      photos: fileIds,
-      files,
-    });
   }
 );
 
 
 // =========================
-// CLOUDINARY UPLOAD (WITH GRIDFS FALLBACK)
+// CLOUDINARY UPLOAD (SINGLE FILE)
 // =========================
 
 router.post(
@@ -64,59 +70,8 @@ router.post(
         });
       }
 
-      const isCloudinaryConfigured =
-        process.env.CLOUDINARY_CLOUD_NAME &&
-        process.env.CLOUDINARY_API_KEY &&
-        process.env.CLOUDINARY_API_SECRET;
-
-      if (isCloudinaryConfigured) {
-        const { cloudinary } = require("../config/cloudinary");
-
-        const uploadStream = () => {
-          return new Promise((resolve, reject) => {
-            const stream = cloudinary.uploader.upload_stream(
-              {
-                folder: "StrayCare_Profiles",
-              },
-              (error, result) => {
-                if (error) return reject(error);
-                resolve(result);
-              }
-            );
-            const { Readable } = require("stream");
-            Readable.from(req.file.buffer).pipe(stream);
-          });
-        };
-
-        const result = await uploadStream();
-        return res.json({
-          url: result.secure_url || result.url,
-        });
-      } else {
-        console.warn(
-          "[Upload Warning] Cloudinary credentials not configured. Falling back to GridFS storage for /api/upload/cloudinary"
-        );
-
-        const { uploadSingleFileToGridFs } = require("../config/gridfs");
-        const mongoose = require("mongoose");
-
-        if (!mongoose.connection?.db) {
-          return res.status(500).json({
-            message: "Database connection not ready for fallback upload.",
-          });
-        }
-
-        const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, {
-          bucketName: "uploads",
-        });
-
-        const fileData = await uploadSingleFileToGridFs(bucket, req.file);
-        const fileUrl = `${req.protocol}://${req.get("host")}/api/upload/files/${fileData.id}`;
-
-        return res.json({
-          url: fileUrl,
-        });
-      }
+      const url = await uploadFileToCloudinary(req.file);
+      return res.json({ url });
     } catch (error) {
       console.error("[Upload Error] Failed to process upload:", error);
       return res.status(500).json({
