@@ -1,3 +1,5 @@
+import { catchAsync } from "../utils/catchAsync";
+import type { NextFunction } from "express";
 const User = require("../models/User");
 const GeneralUserProfile = require("../models/GeneralUserProfile");
 const VolunteerProfile = require("../models/VolunteerProfile");
@@ -8,16 +10,17 @@ const StrayReport = require("../models/strayreport");
 const RescueHistory = require("../models/RescueHistory");
 const RescueRequest = require("../models/RescueRequest");
 const UserReport = require("../models/UserReport");
-const Notification = require("../models/Notification");
 
 import type { Request, Response } from "express";
+import mongoose from "mongoose";
+import { ProfileStatsService } from "../services/ProfileStatsService";
+import { NotificationService } from "../services/NotificationService";
 
 // Fetch another user's public profile data (safe, sanitised)
-exports.getPublicProfile = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.getPublicProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { userId } = req.params;
-    const mongoose = require("mongoose");
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
+
+    if (!mongoose.Types.ObjectId.isValid(userId as string)) {
       res.status(400).json({ message: "Invalid user ID format" });
       return;
     }
@@ -28,109 +31,7 @@ exports.getPublicProfile = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    let profileData: any = {};
-    let stats: any = {};
-
-    // Base stats common to all users
-    const postCount = await ForumPost.countDocuments({ userId });
-    stats.postsCount = postCount;
-
-    if (user.role === "general_user") {
-      const generalProfile: any = await GeneralUserProfile.findOne({ userId }).lean() || {};
-      const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
-      
-      profileData = {
-        location: generalProfile.location || "",
-        bio: generalProfile.bio || "",
-        profileImage: generalProfile.profileImage || "",
-      };
-      
-      stats.reportsCount = reportCount;
-
-    } else if (user.role === "volunteer") {
-      const volunteerProfile: any = await VolunteerProfile.findOne({ userId }).lean() || {};
-      const Rescuer = require("../models/Rescuer");
-      const rescuer = await Rescuer.findOne({ userId });
-      const rescuerIdQuery = rescuer ? rescuer._id : userId;
-
-      const totalRescues = await RescueHistory.countDocuments({ 
-        $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
-      });
-      const activeRescues = await RescueRequest.countDocuments({ 
-        rescuerId: rescuerIdQuery, 
-        status: { $in: ["accepted", "under_rescue"] } 
-      });
-      
-      // Calculate completion rate based on history vs total attempts (completed + rejected)
-      const totalAttempts = await RescueRequest.countDocuments({ rescuerId: rescuerIdQuery });
-      const completionRate = totalAttempts > 0 ? Math.round((totalRescues / totalAttempts) * 100) : 100;
-
-      profileData = {
-        location: volunteerProfile.location || "",
-        bio: volunteerProfile.bio || "",
-        profileImage: volunteerProfile.profileImage || "",
-        serviceArea: volunteerProfile.serviceArea || "",
-        rescueCompletionRate: completionRate,
-      };
-
-      stats.rescuesCompleted = totalRescues + activeRescues;
-      stats.activeRescues = activeRescues;
-
-    } else if (user.role === "vet") {
-      const vetProfile: any = await VetProfile.findOne({ userId }).lean() || {};
-      const Rescuer = require("../models/Rescuer");
-      const rescuer = await Rescuer.findOne({ userId });
-      const rescuerIdQuery = rescuer ? rescuer._id : userId;
-
-      const totalRescues = await RescueHistory.countDocuments({ 
-        $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
-      });
-      const activeRescues = await RescueRequest.countDocuments({ 
-        rescuerId: rescuerIdQuery, 
-        status: { $in: ["accepted", "under_rescue"] } 
-      });
-
-      profileData = {
-        location: vetProfile.primaryLocation || "",
-        bio: vetProfile.bio || "",
-        profileImage: vetProfile.profileImage || "",
-        clinicName: vetProfile.clinicName || "",
-        clinicAddress: vetProfile.clinicAddress || "",
-        specialization: vetProfile.specialization || "",
-        animalsTreated: vetProfile.animalsTreated || 0,
-        emergencyAvailability: vetProfile.emergencyAvailability || false,
-      };
-
-      stats.rescuesCompleted = totalRescues + activeRescues;
-      stats.animalsTreated = vetProfile.animalsTreated || 0;
-
-    } else if (user.role === "ngo") {
-      const ngoProfile: any = await NGOProfile.findOne({ userId }).lean() || {};
-      const Rescuer = require("../models/Rescuer");
-      const rescuer = await Rescuer.findOne({ userId });
-      const rescuerIdQuery = rescuer ? rescuer._id : userId;
-
-      const totalRescues = await RescueHistory.countDocuments({ 
-        $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
-      });
-      const activeRescues = await RescueRequest.countDocuments({ 
-        rescuerId: rescuerIdQuery, 
-        status: { $in: ["accepted", "under_rescue"] } 
-      });
-
-      profileData = {
-        location: ngoProfile.location || "",
-        bio: ngoProfile.bio || "",
-        profileImage: ngoProfile.profileImage || "",
-        orgName: ngoProfile.orgName || "",
-        totalAdoptions: ngoProfile.totalAdoptions || 0,
-        donationCampaignCount: ngoProfile.donationCampaignCount || 0,
-      };
-
-      stats.rescuesCompleted = totalRescues + activeRescues;
-      stats.totalAdoptions = ngoProfile.totalAdoptions || 0;
-      stats.donationCampaignCount = ngoProfile.donationCampaignCount || 0;
-    }
+    const { profileData, stats } = await ProfileStatsService.getProfileAndStats(userId as string, user.role);
 
     res.status(200).json({
       user: {
@@ -143,37 +44,23 @@ exports.getPublicProfile = async (req: Request, res: Response): Promise<void> =>
       profile: profileData,
       stats,
     });
-  } catch (error: any) {
-    console.error("Error in getPublicProfile for userId:", req.params.userId, error);
-    res.status(500).json({
-      message: "Failed to fetch public profile",
-      error: error.message,
-    });
-  }
-};
+  });;
 
 // Fetch user's posts
-exports.getUserPosts = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.getUserPosts = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { userId } = req.params;
     const posts = await ForumPost.find({ userId }).sort({ createdAt: -1 });
     res.status(200).json(posts);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to fetch user posts",
-      error: error.message,
-    });
-  }
-};
+  });;
 
 // Fetch user's reports (public reports only, or all if requesting user is self)
-exports.getUserReports = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.getUserReports = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { userId } = req.params;
     
     // Check if the requesting user is self to include anonymous reports
     const authHeader = req.headers["authorization"];
     let isSelf = false;
+    
     if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.split(" ")[1];
       try {
@@ -194,17 +81,10 @@ exports.getUserReports = async (req: Request, res: Response): Promise<void> => {
 
     const reports = await StrayReport.find(query).sort({ createdAt: -1 });
     res.status(200).json(reports);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to fetch user reports",
-      error: error.message,
-    });
-  }
-};
+  });;
 
 // Create a report against a user
-exports.createUserReport = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.createUserReport = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { reportedUserId, reason, description } = req.body;
     const reporterUserId = req.user!.id; // From verifyToken
 
@@ -230,17 +110,10 @@ exports.createUserReport = async (req: Request, res: Response): Promise<void> =>
       message: "Report submitted successfully",
       report: newReport,
     });
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to submit user report",
-      error: error.message,
-    });
-  }
-};
+  });;
 
 // Admin endpoint to view user reports
-exports.getUserReportsAdmin = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.getUserReportsAdmin = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     // Note: In a real system, you would check if req.user.role === 'admin'
     const reports = await UserReport.find()
       .populate("reportedUserId", "name email role")
@@ -248,13 +121,7 @@ exports.getUserReportsAdmin = async (req: Request, res: Response): Promise<void>
       .sort({ createdAt: -1 });
       
     res.status(200).json(reports);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to fetch reports",
-      error: error.message,
-    });
-  }
-};
+  });;
 
 // Helper to get and cache profile image
 const getProfileImageForUser = async (uId: string, role: string): Promise<string> => {
@@ -277,8 +144,7 @@ const getProfileImageForUser = async (uId: string, role: string): Promise<string
 };
 
 // Search registered users by name or email (username), excluding current logged-in user
-exports.searchUsers = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.searchUsers = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const currentUserId = req.user!.id;
     const { query = "" } = req.query;
 
@@ -306,17 +172,10 @@ exports.searchUsers = async (req: Request, res: Response): Promise<void> => {
     }
 
     res.status(200).json(users);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to search users",
-      error: error.message,
-    });
-  }
-};
+  });;
 
 // Admin endpoint to approve a user account (NGO / Vet)
-exports.approveUser = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.approveUser = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (req.user!.role !== "admin") {
       res.status(403).json({ message: "Access denied. Admins only." });
       return;
@@ -345,19 +204,17 @@ exports.approveUser = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Create in-app success notification
-    const notification = await Notification.create({
-      userId: user._id,
-      title: "Account Verified!",
-      message: "Congratulations! Your account verification is complete. You now have full access to StrayCare features. 🐾",
-      type: "success",
-    });
+    await NotificationService.sendNotification(user._id, "Profile Updated", "Your profile has been updated successfully", "success");
 
     // Emit real-time update via Socket.IO
     const io = req.app.get("io");
     if (io) {
       io.of("/chat").to(`user:${user._id}`).emit("user:approved", {
-        message: "Your account has been verified",
-        notification,
+        notification: {
+          title: "Profile Updated",
+          message: "Your profile has been updated successfully",
+          type: "success"
+        },
       });
     }
 
@@ -370,10 +227,4 @@ exports.approveUser = async (req: Request, res: Response): Promise<void> => {
         isApproved: user.isApproved,
       },
     });
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to approve user",
-      error: error.message,
-    });
-  }
-};
+  });;

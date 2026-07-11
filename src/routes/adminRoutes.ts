@@ -1,9 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
 const authMiddleware = require("../middleware/authMiddleware");
 const Admin = require("../models/Admin");
+const bcrypt = require("bcryptjs");
+import { JwtService } from "../services/JwtService";
 const { sendAdminInviteEmail } = require("../utils/emailService");
 
 import type { Request, Response } from "express";
@@ -61,7 +61,7 @@ router.post("/invite", authMiddleware, async (req: Request, res: Response) => {
 
       // If pending, resend the invite with a fresh token
       if (existing.status === "pending") {
-        const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: "1h" });
+        const token = JwtService.generateToken({ email }, "1h");
         existing.invitationToken = token;
         await existing.save();
         const inviteLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}&type=invite`;
@@ -71,7 +71,7 @@ router.post("/invite", authMiddleware, async (req: Request, res: Response) => {
     }
 
     // New admin
-    const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const token = JwtService.generateToken({ email }, "1h");
     const admin = new Admin({
       username, email, role: "admin",
       invitationToken: token, status: "pending"
@@ -94,7 +94,7 @@ router.post("/accept-invite", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Token and new password are required" });
     }
     try {
-      jwt.verify(token, process.env.JWT_SECRET);
+      JwtService.verifyToken(token);
     } catch (err) {
       return res.status(400).json({ error: "Invalid or expired token" });
     }

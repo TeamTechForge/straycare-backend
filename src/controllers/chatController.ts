@@ -1,3 +1,4 @@
+import { catchAsync } from "../utils/catchAsync";
 // src/controllers/chatController.ts
 const Conversation = require("../models/Conversation");
 const Message = require("../models/Message");
@@ -52,23 +53,23 @@ const canMessage = async (senderId: string, recipientId: string): Promise<{ allo
   }
 };
 
+import { Role } from "../enums/Role.enum";
+
+const profileModels: Record<string, any> = {
+  [Role.GENERAL_USER]: require("../models/GeneralUserProfile"),
+  [Role.VOLUNTEER]: require("../models/VolunteerProfile"),
+  [Role.NGO]: require("../models/NGOProfile"),
+  [Role.VET]: require("../models/VetProfile"),
+};
+
 const getProfileImageForUser = async (uId: string, role: string): Promise<string> => {
   try {
-    let profile: any = null;
-    if (role === "general_user") {
-      const GeneralUserProfile = require("../models/GeneralUserProfile");
-      profile = await GeneralUserProfile.findOne({ userId: uId }).lean();
-    } else if (role === "volunteer") {
-      const VolunteerProfile = require("../models/VolunteerProfile");
-      profile = await VolunteerProfile.findOne({ userId: uId }).lean();
-    } else if (role === "ngo") {
-      const NGOProfile = require("../models/NGOProfile");
-      profile = await NGOProfile.findOne({ userId: uId }).lean();
-    } else if (role === "vet") {
-      const VetProfile = require("../models/VetProfile");
-      profile = await VetProfile.findOne({ userId: uId }).lean();
+    const Model = profileModels[role];
+    if (Model) {
+      const profile = await Model.findOne({ userId: uId }).lean();
+      return profile?.profileImage || "";
     }
-    return profile?.profileImage || "";
+    return "";
   } catch (err) {
     console.error(`Error in getProfileImageForUser helper:`, err);
     return "";
@@ -82,8 +83,7 @@ const getChatNamespace = (req: Request): any => {
 
 // ── GET /api/chat/conversations ─────────────────────────────────
 // Lists all conversations for the authenticated user, sorted by latest activity.
-const getConversations = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const getConversations = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     console.log(`[chatController] 🔍 getConversations. User: ${userId}`);
 
@@ -108,17 +108,12 @@ const getConversations = async (req: Request, res: Response, next: NextFunction)
 
     console.log(`[chatController] ✅ Found ${conversations.length} conversations for User: ${userId}`);
     res.status(200).json(conversations);
-  } catch (error: any) {
-    console.error(`[chatController] ❌ Error in getConversations: ${error.message}`);
-    next(error);
-  }
-};
+});
 
 // ── POST /api/chat/conversations ────────────────────────────────
 // Finds an existing conversation between two users or creates a new one.
 // Body: { participantId, conversationType?, relatedEntity? }
-const getOrCreateConversation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const getOrCreateConversation = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     const { participantId, conversationType, relatedEntity } = req.body;
     console.log(`[chatController] 🔍 getOrCreateConversation. User: ${userId}, Participant: ${participantId}`);
@@ -190,17 +185,12 @@ const getOrCreateConversation = async (req: Request, res: Response, next: NextFu
 
     console.log(`[chatController] ✅ Conversation created: ${conversation._id}`);
     res.status(201).json(conversation);
-  } catch (error: any) {
-    console.error(`[chatController] ❌ Error in getOrCreateConversation: ${error.message}`);
-    next(error);
-  }
-};
+});
 
 // ── GET /api/chat/messages/:conversationId ──────────────────────
 // Paginated messages for a conversation (cursor-based, newest first).
 // Query: ?before=<messageId>&limit=<number>
-const getMessages = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const getMessages = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     const { conversationId } = req.params;
     const { before, limit = 30 } = req.query;
@@ -251,16 +241,11 @@ const getMessages = async (req: Request, res: Response, next: NextFunction): Pro
 
     console.log(`[chatController] ✅ Found ${processedMessages.length} messages for Conversation: ${conversationId}`);
     res.status(200).json(processedMessages);
-  } catch (error: any) {
-    console.error(`[chatController] ❌ Error in getMessages: ${error.message}`);
-    next(error);
-  }
-};
+});
 
 // ── POST /api/chat/messages ─────────────────────────────────────
 // Sends a new message. Body: { conversationId, text?, type?, imageUrl?, imagePublicId?, location? }
-const sendMessage = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     const {
       conversationId,
@@ -356,16 +341,11 @@ const sendMessage = async (req: Request, res: Response, next: NextFunction): Pro
     }
 
     res.status(201).json(populatedMessage);
-  } catch (error: any) {
-    console.error(`[chatController] ❌ Error in sendMessage: ${error.message}`);
-    next(error);
-  }
-};
+});
 
 // ── PUT /api/chat/messages/:conversationId/read ─────────────────
 // Marks all messages in a conversation as read by the authenticated user.
-const markAsRead = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const markAsRead = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     const { conversationId } = req.params;
     console.log(`[chatController] 📖 markAsRead. User: ${userId}, Conversation: ${conversationId}`);
@@ -407,16 +387,11 @@ const markAsRead = async (req: Request, res: Response, next: NextFunction): Prom
     }
 
     res.status(200).json({ message: "Messages marked as read" });
-  } catch (error: any) {
-    console.error(`[chatController] ❌ Error in markAsRead: ${error.message}`);
-    next(error);
-  }
-};
+});
 
 // ── DELETE /api/chat/conversations/:conversationId ──────────────
 // Soft deletes a conversation for the current user.
-const deleteConversation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const deleteConversation = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     const { conversationId } = req.params;
 
@@ -433,16 +408,11 @@ const deleteConversation = async (req: Request, res: Response, next: NextFunctio
 
     console.log(`[chatController] 🗑️ Conversation ${conversationId} soft deleted for User: ${userId}`);
     res.status(200).json({ message: "Conversation deleted successfully", conversationId });
-  } catch (error: any) {
-    console.error(`[chatController] ❌ Error in deleteConversation: ${error.message}`);
-    next(error);
-  }
-};
+});
 
 // ── DELETE /api/chat/messages/:messageId ────────────────────────
 // Deletes a message (Delete for Me or Delete for Everyone).
-const deleteMessage = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const deleteMessage = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     const { messageId } = req.params;
     const { type } = req.body; // "me" or "everyone"
@@ -510,11 +480,7 @@ const deleteMessage = async (req: Request, res: Response, next: NextFunction): P
     }
 
     res.status(200).json({ message: "Message deleted successfully", messageId });
-  } catch (error: any) {
-    console.error(`[chatController] ❌ Error in deleteMessage: ${error.message}`);
-    next(error);
-  }
-};
+});
 
 module.exports = {
   getConversations,

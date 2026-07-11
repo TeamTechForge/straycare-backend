@@ -1,12 +1,13 @@
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
+import { catchAsync } from "../utils/catchAsync";
+import type { NextFunction } from "express";
 const Admin = require("../models/Admin");
 const { sendPasswordResetEmail } = require("../utils/emailService");
 
+import { JwtService } from "../services/JwtService";
+import { PasswordService } from "../services/PasswordService";
 import type { Request, Response } from "express";
 
-exports.login = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.login = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { email, password } = req.body;
 
     const admin = await Admin.findOne({ email });
@@ -15,27 +16,21 @@ exports.login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const match = await bcrypt.compare(password, admin.password);
+    const match = await PasswordService.comparePassword(password, admin.password);
     if (!match) {
       res.status(401).json({ error: "Invalid credentials" });
       return;
     }
 
-    const token = jwt.sign(
+    const token = JwtService.generateToken(
       { id: admin._id, role: "admin", username: admin.username },
-      process.env.JWT_SECRET,
-      { expiresIn: "8h" }
+      "8h"
     );
 
     res.json({ token, admin: { id: admin._id, username: admin.username, email: admin.email } });
-  } catch (err: any) {
-    console.error("LOGIN ERROR:", err);
-    res.status(500).json({ error: "Login failed" });
-  }
-};
+  });;
 
-exports.forgotPassword = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.forgotPassword = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { email } = req.body;
 
     const admin = await Admin.findOne({ email });
@@ -45,7 +40,7 @@ exports.forgotPassword = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const token = JwtService.generateToken({ email }, "1h");
     admin.resetToken = token;
     admin.resetTokenExpiry = new Date(Date.now() + 3600000);
     await admin.save();
@@ -54,14 +49,9 @@ exports.forgotPassword = async (req: Request, res: Response): Promise<void> => {
     await sendPasswordResetEmail(email, resetLink);
 
     res.json({ message: "If this email exists, a reset link has been sent." });
-  } catch (err: any) {
-    console.error("FORGOT PASSWORD ERROR:", err);
-    res.status(500).json({ error: "Something went wrong" });
-  }
-};
+  });;
 
-exports.resetPassword = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.resetPassword = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { token, newPassword } = req.body;
 
     if (!token || !newPassword) {
@@ -71,7 +61,7 @@ exports.resetPassword = async (req: Request, res: Response): Promise<void> => {
 
     let decoded: any;
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
+      decoded = JwtService.verifyToken(token);
     } catch (err) {
       res.status(400).json({ error: "Invalid or expired token" });
       return;
@@ -103,8 +93,4 @@ exports.resetPassword = async (req: Request, res: Response): Promise<void> => {
 
     await admin.save();
     res.json({ message: "Password reset successful" });
-  } catch (err: any) {
-    console.error("RESET PASSWORD ERROR:", err);
-    res.status(500).json({ error: "Something went wrong" });
-  }
-};
+  });;

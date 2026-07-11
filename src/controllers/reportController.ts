@@ -1,3 +1,5 @@
+import { catchAsync } from "../utils/catchAsync";
+import type { NextFunction } from "express";
 const StrayReport = require("../models/strayreport");
 
 import type { Request, Response } from "express";
@@ -60,7 +62,18 @@ const normalizeStatus = (value: any): string => {
   return allowed.includes(value) ? value : "Needs Help";
 };
 
-const buildReportPayload = (req: Request): any => {
+interface IStrayReportDTO {
+  caseId: string;
+  animalType?: string;
+  location: { lat: number; lng: number; address?: string } | null;
+  photos: string[];
+  anonymous: boolean;
+  status: string;
+  reporterUserId?: string;
+  [key: string]: any;
+}
+
+const buildReportPayload = (req: Request): IStrayReportDTO => {
   const payload: any = { ...req.body };
 
   payload.location = normalizeLocation(payload.location);
@@ -76,12 +89,11 @@ const buildReportPayload = (req: Request): any => {
     payload.reporterUserId = req.user.id;
   }
 
-  return payload;
+  return payload as IStrayReportDTO;
 };
 
 //  1. CREATE REPORT
-exports.createReport = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.createReport = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const reportPayload = buildReportPayload(req);
     console.log("[STRAY][POST] Creating report with payload:", { caseId: reportPayload.caseId, animalType: reportPayload.animalType, location: reportPayload.location });
 
@@ -116,25 +128,10 @@ exports.createReport = async (req: Request, res: Response): Promise<void> => {
       message: "Report submitted successfully",
       request: newReport,
     });
-  } catch (error: any) {
-    const errorMessage = error?.message || String(error);
-    const isDuplicateKey = error?.code === 11000;
-    const isValidationError = error?.name === "ValidationError";
-    const statusCode = isDuplicateKey ? 409 : isValidationError ? 400 : 500;
-    const message = isDuplicateKey
-      ? "Case ID already exists"
-      : isValidationError
-        ? "Invalid report payload"
-        : "Error creating report";
-
-    console.error("[STRAY][ERROR] Failed to create report:", errorMessage);
-    res.status(statusCode).json({ message, error: errorMessage });
-  }
-};
+  });;
 
 // 2. GET REPORT BY CASE ID
-exports.getReportByCaseId = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.getReportByCaseId = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const report = await StrayReport.findOne({ caseId: req.params.caseId });
 
     if (!report) {
@@ -143,32 +140,20 @@ exports.getReportByCaseId = async (req: Request, res: Response): Promise<void> =
     }
 
     res.json(report);
-  } catch (error: any) {
-    const errorMessage = error?.message || String(error);
-    console.error("[STRAY][ERROR] Failed to fetch report:", errorMessage);
-    res.status(500).json({ message: "Error fetching report", error: errorMessage });
-  }
-};
+  });;
 
 // 3. GET ALL REPORTS
-exports.getAllReports = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.getAllReports = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const reports = await StrayReport.find(
       {},
       { status: 1, location: 1, caseId: 1, animalType: 1 }
     );
     console.log("[STRAY][GET] Fetched all reports:", reports.length);
     res.json(reports);
-  } catch (error: any) {
-    const errorMessage = error?.message || String(error);
-    console.error("[STRAY][ERROR] Failed to fetch all reports:", errorMessage);
-    res.status(500).json({ message: "Error fetching reports", error: errorMessage });
-  }
-};
+  });;
 
 // 4. UPDATE CASE STATUS
-exports.updateCaseStatus = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { caseId } = req.params;
     const { status } = req.body;
 
@@ -197,9 +182,4 @@ exports.updateCaseStatus = async (req: Request, res: Response): Promise<void> =>
     await report.save();
 
     res.json(report);
-  } catch (error: any) {
-    const errorMessage = error?.message || String(error);
-    console.error("[STRAY][ERROR] Failed to update status:", errorMessage);
-    res.status(500).json({ message: "Error updating status", error: errorMessage });
-  }
-};
+  });;

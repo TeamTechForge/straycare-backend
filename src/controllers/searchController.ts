@@ -1,10 +1,11 @@
+import { catchAsync } from "../utils/catchAsync";
+import type { NextFunction } from "express";
 const NGOProfile = require("../models/NGOProfile");
 const VetProfile = require("../models/VetProfile");
 
 import type { Request, Response } from "express";
 
-const search = async (req: Request, res: Response): Promise<void> => {
-  try {
+const search = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { q } = req.query;
     if (!q || !(q as string).trim()) {
       res.json([]);
@@ -131,13 +132,6 @@ const search = async (req: Request, res: Response): Promise<void> => {
     });
 
     res.json(combinedResults);
-  } catch (error: any) {
-    console.error("Search error in controller:", error);
-    res.status(500).json({
-      message: "Internal server error during search",
-      error: error.message
-    });
-  }
-};
+});
 
 module.exports = { search };

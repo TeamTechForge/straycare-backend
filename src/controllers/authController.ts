@@ -1,36 +1,31 @@
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
+import { catchAsync } from "../utils/catchAsync";
 const crypto = require("crypto");
 const admin = require("../config/firebase");
 const User = require("../models/User");
-const Notification = require("../models/Notification");
 const NGOProfile = require("../models/NGOProfile");
 const VolunteerProfile = require("../models/VolunteerProfile");
 const VetProfile = require("../models/VetProfile");
 const GeneralUserProfile = require("../models/GeneralUserProfile");
 
+import { Role } from "../enums/Role.enum";
+import { AuthValidator } from "../validators/AuthValidator";
+import { JwtService } from "../services/JwtService";
+import { PasswordService } from "../services/PasswordService";
+import { NotificationService } from "../services/NotificationService";
 import type { Request, Response, NextFunction } from "express";
+const bcrypt = require("bcryptjs");
+const Notification = require("../models/Notification");
 
-const generateToken = (userId: string, role: string): string => {
-  if (!process.env.JWT_SECRET) {
-    throw new Error("JWT_SECRET is not configured on the server");
-  }
-  return jwt.sign(
-    { id: userId, role },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
-};
-
-const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   let user: any;
   try {
     const { name, email, phone, password } = req.body;
 
     console.log("Register request received for:", req.body.email);
 
-    if (!name || !email || !phone || !password) {
-      res.status(400).json({ message: "All fields are required" });
+    const validation = AuthValidator.validateRegistrationPayload(req.body);
+    if (!validation.isValid) {
+      res.status(400).json({ message: validation.message });
       return;
     }
 
@@ -41,28 +36,24 @@ const register = async (req: Request, res: Response, next: NextFunction): Promis
       return;
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await PasswordService.hashPassword(password, 10);
 
     user = await User.create({
       name,
       email,
       phone,
       password: hashedPassword,
-      role: "general_user",
+      role: Role.GENERAL_USER,
     });
 
-    const token = generateToken(user._id, user.role);
+    const token = JwtService.generateToken({ id: user._id, role: user.role });
 
-    try {
-      await Notification.create({
-        userId: user._id,
-        title: "Welcome to StrayCare!",
-        message: `Hi ${name}, welcome to our community! Together we can save more stray animals. 🐾`,
-        type: "welcome",
-      });
-    } catch (notificationError) {
-      console.error("Notification creation failed gracefully:", notificationError);
-    }
+    await NotificationService.sendNotification(
+      String(user._id),
+      "Welcome to StrayCare!",
+      `Hi ${name}, welcome to our community! Together we can save more stray animals. 🐾`,
+      "welcome"
+    );
 
     res.status(201).json({
       message: "Account created successfully",
@@ -94,8 +85,7 @@ const register = async (req: Request, res: Response, next: NextFunction): Promis
   }
 };
 
-const login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const login = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -110,14 +100,14 @@ const login = async (req: Request, res: Response, next: NextFunction): Promise<v
       return;
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await PasswordService.comparePassword(password, user.password);
 
     if (!isMatch) {
       res.status(401).json({ message: "Invalid email or password" });
       return;
     }
 
-    const token = generateToken(user._id, user.role);
+    const token = JwtService.generateToken({ id: user._id, role: user.role });
 
     res.status(200).json({
       message: "Login successful",
@@ -133,13 +123,9 @@ const login = async (req: Request, res: Response, next: NextFunction): Promise<v
         isApproved: user.isApproved,
       },
     });
-  } catch (error) {
-    next(error);
-  }
-};
+});
 
-const selectRole = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const selectRole = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     const { role } = req.body;
 
@@ -166,20 +152,16 @@ const selectRole = async (req: Request, res: Response, next: NextFunction): Prom
       return;
     }
 
-    const token = generateToken(user._id, user.role);
+    const token = JwtService.generateToken({ id: user._id, role: user.role });
 
     res.status(200).json({
       message: "Role updated successfully",
       token,
       user,
     });
-  } catch (error) {
-    next(error);
-  }
-};
+});
 
-const getMe = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const getMe = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const user: any = await User.findById(req.user!.id).select("-password").lean();
     if (!user) {
       res.status(404).json({ message: "User not found" });
@@ -194,13 +176,9 @@ const getMe = async (req: Request, res: Response, next: NextFunction): Promise<v
     }
 
     res.status(200).json(user);
-  } catch (error) {
-    next(error);
-  }
-};
+});
 
-const forgotPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const forgotPassword = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { email } = req.body;
     const user = await User.findOne({ email });
 
@@ -219,13 +197,9 @@ const forgotPassword = async (req: Request, res: Response, next: NextFunction): 
       message: "Reset token generated successfully",
       resetToken: process.env.NODE_ENV === "production" ? undefined : resetToken,
     });
-  } catch (error) {
-    next(error);
-  }
-};
+});
 
-const resetPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const resetPassword = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { token, newPassword } = req.body;
 
     const user = await User.findOne({
@@ -246,13 +220,9 @@ const resetPassword = async (req: Request, res: Response, next: NextFunction): P
     await user.save();
 
     res.status(200).json({ message: "Password reset successful" });
-  } catch (error) {
-    next(error);
-  }
-};
+});
 
-const changePassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const changePassword = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { currentPassword, newPassword } = req.body;
     const userId = req.user!.id;
 
@@ -263,7 +233,7 @@ const changePassword = async (req: Request, res: Response, next: NextFunction): 
       return;
     }
 
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    const isMatch = await PasswordService.comparePassword(currentPassword, user.password);
 
     if (!isMatch) {
       res.status(401).json({ message: "Incorrect current password" });
@@ -275,13 +245,9 @@ const changePassword = async (req: Request, res: Response, next: NextFunction): 
     await user.save();
 
     res.status(200).json({ message: "Password updated successfully" });
-  } catch (error) {
-    next(error);
-  }
-};
+});
 
-const deleteAccount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const deleteAccount = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     const user = await User.findById(userId);
 
@@ -305,13 +271,9 @@ const deleteAccount = async (req: Request, res: Response, next: NextFunction): P
     await Notification.deleteMany({ userId });
 
     res.status(200).json({ message: "Account and associated data deleted successfully" });
-  } catch (error) {
-    next(error);
-  }
-};
+});
 
-const googleAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
+const googleAuth = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { idToken } = req.body;
 
     if (!idToken) {
@@ -359,20 +321,15 @@ const googleAuth = async (req: Request, res: Response, next: NextFunction): Prom
         role: "general_user",
       });
 
-      // Welcome notification
-      try {
-        await Notification.create({
-          userId: user._id,
-          title: "Welcome to StrayCare!",
-          message: `Hi ${user.name}, welcome to our community! Together we can save more stray animals. 🐾`,
-          type: "welcome",
-        });
-      } catch (notificationError) {
-        console.error("Notification creation failed gracefully:", notificationError);
-      }
+      await NotificationService.sendNotification(
+        String(user._id),
+        "Welcome to StrayCare!",
+        `Hi ${user.name}, welcome to our community! Together we can save more stray animals. 🐾`,
+        "welcome"
+      );
     }
 
-    const token = generateToken(user._id, user.role);
+    const token = JwtService.generateToken({ id: user._id, role: user.role });
 
     res.status(200).json({
       success: true,
@@ -390,11 +347,7 @@ const googleAuth = async (req: Request, res: Response, next: NextFunction): Prom
       },
       isNewUser,
     });
-  } catch (error) {
-    console.error("GOOGLE AUTH ERROR:", error);
-    next(error);
-  }
-};
+});
 
 module.exports = {
   register,

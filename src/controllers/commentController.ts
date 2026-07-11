@@ -1,3 +1,5 @@
+import { catchAsync } from "../utils/catchAsync";
+import type { NextFunction } from "express";
 // commentController.ts
 // Handles all comment-related API logic for rescue cases.
 // Supports: listing threaded comments, adding comments, and replying.
@@ -12,8 +14,7 @@ import type { Request, Response } from "express";
  *   - Top-level comments (parentCommentId === null)
  *   - Each top-level comment has a `replies` array of child comments
  */
-exports.getComments = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.getComments = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
     console.log(`[COMMENTS] Fetching comments for rescue: ${id}`);
 
@@ -49,19 +50,14 @@ exports.getComments = async (req: Request, res: Response): Promise<void> => {
       `[COMMENTS] Found ${topLevel.length} top-level comments, ${allComments.length} total`
     );
     res.json(topLevel);
-  } catch (err: any) {
-    console.error("[COMMENTS][getComments] Error:", err.message);
-    res.status(500).json({ error: "Failed to load comments" });
-  }
-};
+  });;
 
 /**
  * POST /api/rescues/:id/comments
  * Creates a new top-level comment for a rescue case.
  * Body: { text, userId?, userName?, userAvatar? }
  */
-exports.addComment = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.addComment = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
     const { text, userId, userName, userAvatar } = req.body;
 
@@ -86,19 +82,14 @@ exports.addComment = async (req: Request, res: Response): Promise<void> => {
 
     console.log(`[COMMENTS] Created comment ${result._id}`);
     res.status(201).json(result);
-  } catch (err: any) {
-    console.error("[COMMENTS][addComment] Error:", err.message);
-    res.status(500).json({ error: "Failed to add comment" });
-  }
-};
+  });;
 
 /**
  * POST /api/rescues/:id/comments/:commentId/reply
  * Creates a reply to an existing comment.
  * Body: { text, userId?, userName?, userAvatar? }
  */
-exports.addReply = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.addReply = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { id, commentId } = req.params;
     const { text, userId, userName, userAvatar } = req.body;
 
@@ -129,8 +120,4 @@ exports.addReply = async (req: Request, res: Response): Promise<void> => {
 
     console.log(`[COMMENTS] Created reply ${reply._id}`);
     res.status(201).json(reply.toObject());
-  } catch (err: any) {
-    console.error("[COMMENTS][addReply] Error:", err.message);
-    res.status(500).json({ error: "Failed to add reply" });
-  }
-};
+  });;

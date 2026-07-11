@@ -1,19 +1,15 @@
+import { catchAsync } from "../utils/catchAsync";
+import type { NextFunction } from "express";
 const Forum = require("../models/Forum");
 const ForumPost = require("../models/ForumPost");
 const User = require("../models/User");
 
 import type { Request, Response } from "express";
 
-// common error handler
-const fail = (res: Response, error: any, fallbackStatus: number = 500) => {
-  const errorMsg = error?.message || String(error);
-  console.error("[FORUM][ERROR]:", errorMsg);
-  return res.status(fallbackStatus).json({ error: "Something went wrong", details: errorMsg });
-};
+import { AppError } from "../utils/AppError";
 
 // GET all posts
-exports.listPosts = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.listPosts = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     // get user id if sent 
     const userId = req.query.userId ? String(req.query.userId) : null;
 
@@ -34,14 +30,10 @@ exports.listPosts = async (req: Request, res: Response): Promise<void> => {
     }));
 
     res.json(response);
-  } catch (error) {
-    fail(res, error);
-  }
-};
+});
 
 // CREATE new post
-exports.createPost = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.createPost = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { title, tag = "GENERAL", author } = req.body;
     console.log("[FORUM][POST] /api/forum/posts from", req.ip, "title:", title);
 
@@ -89,14 +81,10 @@ exports.createPost = async (req: Request, res: Response): Promise<void> => {
         createdAt: post.createdAt,
       },
     });
-  } catch (error) {
-    fail(res, error);
-  }
-};
+});
 
 // LIKE / UNLIKE post
-exports.togglePostLike = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.togglePostLike = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { postId } = req.params;
     const userId = req.body?.userId || "demo-user";
 
@@ -126,14 +114,10 @@ exports.togglePostLike = async (req: Request, res: Response): Promise<void> => {
       post,
       likedByMe: !alreadyLiked,
     });
-  } catch (error) {
-    fail(res, error);
-  }
-};
+});
 
 // GET comments for a post
-exports.getThread = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.getThread = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { rescueId } = req.params;
 
     // find thread
@@ -153,14 +137,10 @@ exports.getThread = async (req: Request, res: Response): Promise<void> => {
         timestamp: comment.timestamp,
       })),
     });
-  } catch (error) {
-    fail(res, error);
-  }
-};
+});
 
 // ADD comment
-exports.addComment = async (req: Request, res: Response): Promise<void> => {
-  try {
+exports.addComment = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { rescueId } = req.params;
     const { text, userId = "guest" } = req.body;
 
@@ -203,7 +183,4 @@ exports.addComment = async (req: Request, res: Response): Promise<void> => {
         })),
       },
     });
-  } catch (error) {
-    fail(res, error);
-  }
-};
+});

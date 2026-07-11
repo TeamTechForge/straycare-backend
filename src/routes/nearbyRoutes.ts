@@ -3,27 +3,13 @@ const express = require("express");
 const router = express.Router();
 const Rescuer = require("../models/Rescuer");
 
+import { NearbyController } from "../controllers/nearbyController";
 import type { Request, Response } from "express";
 
+// Instantiate the controller with the required model dependency
+const nearbyController = new NearbyController(Rescuer);
+
 // GET /api/nearby?lat=..&lng=..
-router.get("/", async (req: Request, res: Response) => {
-  try {
-    const { lat, lng } = req.query;
-
-    const rescuers = await Rescuer.find({
-      isAvailable: true,
-      location: {
-        $near: {
-          $geometry: { type: "Point", coordinates: [parseFloat(lng as string), parseFloat(lat as string)] },
-          $maxDistance: 5000
-        }
-      }
-    });
-
-    return res.json(rescuers);
-  } catch (err: any) {
-    return res.status(500).json({ message: "Error finding nearby rescuers", error: err.message });
-  }
-});
+router.get("/", nearbyController.findNearbyRescuers);
 
 module.exports = router;
