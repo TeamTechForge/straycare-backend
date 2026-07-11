@@ -2,13 +2,14 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "StrayCare Backend API",
-  "main": "server.js",
+  "main": "dist/server.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "node dist/server.js",
+    "dev": "tsx watch server.ts",
+    "build": "tsc",
     "kill-port": "node kill-port.js",
-    "fresh-start": "node kill-port.js && node server.js"
+    "fresh-start": "node kill-port.js && node dist/server.js"
   },
   "engines": {
     "node": ">=20 <23"
@@ -44,7 +45,18 @@
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/morgan": "^1.9.10",
+    "@types/multer": "^2.2.0",
+    "@types/node": "^26.1.1",
+    "@types/nodemailer": "^8.0.1",
     "mongodb-memory-server": "^11.2.0",
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "tsx": "^4.23.0",
+    "typescript": "^7.0.2"
   }
 }
