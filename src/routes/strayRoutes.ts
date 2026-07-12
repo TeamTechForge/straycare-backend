@@ -12,6 +12,7 @@ const {
   getAllReports,
   updateCaseStatus,
 } = require("../controllers/strayController");
+const { verifyToken } = require("../middleware/authMiddleware");
 
 // ------------------ MULTER STORAGE ------------------
 const storage = multer.diskStorage({
@@ -49,6 +50,8 @@ router.post("/reports", createReport);
 // Get a single report by caseId
 router.get("/report/:caseId", getReportByCaseId);
 router.get("/reports", getAllReports);
-router.patch("/report/:caseId/status", updateCaseStatus);
+
+// 🔒 Update case status - Requires authentication (rescuers only)
+router.patch("/report/:caseId/status", verifyToken, updateCaseStatus);
 
 module.exports = router;

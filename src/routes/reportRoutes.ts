@@ -67,6 +67,7 @@ router.get("/report/:caseId", getReportByCaseId);
 router.get("/reports", getAllReports);
 
 // Update the status of a report.Controller also appends a new timeline entry.
-router.patch("/report/:caseId/status", updateCaseStatus);
+// 🔒 Requires authentication - only rescuers can update
+router.patch("/report/:caseId/status", verifyToken, updateCaseStatus);
 
 module.exports = router;
