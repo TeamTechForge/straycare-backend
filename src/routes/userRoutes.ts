@@ -7,6 +7,7 @@ const {
   getUserReportsAdmin,
   searchUsers,
   approveUser,
+  savePushToken,
 } = require("../controllers/userController");
 const { verifyToken } = require("../middleware/authMiddleware");
 
@@ -16,6 +17,9 @@ userRouter.get("/search", verifyToken, searchUsers);
 userRouter.get("/:userId/public-profile", getPublicProfile);
 userRouter.get("/:userId/posts", getUserPosts);
 userRouter.get("/:userId/reports", getUserReports);
+
+// Store push notification token for mobile notifications
+userRouter.post("/push-token", verifyToken, savePushToken);
 
 // Router for user reports
 const reportRouter = express.Router();

@@ -1,8 +1,42 @@
 import { catchAsync } from "../utils/catchAsync";
 import type { NextFunction } from "express";
+import { NotificationService } from "../services/NotificationService";
 const StrayReport = require("../models/strayreport");
 
 import type { Request, Response } from "express";
+
+// Helper function to send push notifications via Expo
+const sendPushNotification = async (
+  pushToken: string,
+  title: string,
+  message: string,
+  data?: Record<string, any>
+): Promise<void> => {
+  try {
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Accept-Encoding": "gzip, deflate",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: pushToken,
+        sound: "default",
+        title,
+        body: message,
+        data: data || {},
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("[PUSH] Expo push service error:", response.status);
+    }
+  } catch (error) {
+    console.error("[PUSH] Failed to send push notification:", error);
+    throw error;
+  }
+};
 
 const parseMaybeJson = (value: any): any => {
   if (typeof value !== "string") return value;
@@ -258,5 +292,87 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
 
     await report.save();
 
+    // 🔔 Notify reporter of status update (if not anonymous)
+    if (!report.anonymous && report.reporterUserId) {
+      const statusMessages: { [key: string]: string } = {
+        "Needs Help": "Your case has been reported",
+        "Under Rescue": "A rescuer has accepted your case and is on the way",
+        "Treated": "Your animal has been treated and is recovering",
+        "Ready for Adoption": "Your animal is ready for adoption"
+      };
+
+      const notificationMessage = statusMessages[status] || `Status updated to ${status}`;
+
+      try {
+        // Save in-app notification
+        await NotificationService.sendNotification(
+          report.reporterUserId,
+          "Case Status Update",
+          notificationMessage,
+          "success"
+        );
+        console.log(`[STRAY] Notification sent to reporter for case ${report.caseId}`);
+
+        // Send push notification if user has token
+        try {
+          const reporterUser = await User.findById(report.reporterUserId).select("pushToken");
+          if (reporterUser?.pushToken) {
+            await sendPushNotification(
+              reporterUser.pushToken,
+              "Case Status Update",
+              notificationMessage,
+              { caseId: report.caseId, status, type: "success" }
+            );
+            console.log(`[STRAY] Push notification sent to reporter for case ${report.caseId}`);
+          }
+        } catch (pushErr: any) {
+          console.warn(`[STRAY] Failed to send push notification:`, pushErr.message);
+        }
+      } catch (err: any) {
+        console.warn(`[STRAY] Failed to send reporter notification:`, err.message);
+      }
+    }
+
     res.json(report);
   });;
+
+// 5. GET USER NOTIFICATIONS
+exports.getUserNotifications = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const userId = req.user?.id;
+
+  if (!userId) {
+    res.status(401).json({ message: "Unauthorized. Please login first." });
+    return;
+  }
+
+  const Notification = require("../models/Notification");
+  const notifications = await Notification.find({ userId })
+    .sort({ createdAt: -1 })
+    .limit(50);
+
+  res.json(notifications);
+});;
+
+// 6. MARK NOTIFICATION AS READ
+exports.markNotificationRead = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const { notificationId } = req.params;
+
+  if (!notificationId) {
+    res.status(400).json({ message: "notificationId is required" });
+    return;
+  }
+
+  const Notification = require("../models/Notification");
+  const notification = await Notification.findByIdAndUpdate(
+    notificationId,
+    { read: true },
+    { new: true }
+  );
+
+  if (!notification) {
+    res.status(404).json({ message: "Notification not found" });
+    return;
+  }
+
+  res.json(notification);
+});

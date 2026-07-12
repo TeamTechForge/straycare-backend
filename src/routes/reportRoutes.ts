@@ -13,6 +13,8 @@ const {
   getReportByCaseId,
   getAllReports,
   updateCaseStatus,
+  getUserNotifications,
+  markNotificationRead,
 } = require("../controllers/reportController");
 const { verifyToken } = require("../middleware/authMiddleware");
 
@@ -69,5 +71,11 @@ router.get("/reports", getAllReports);
 // Update the status of a report.Controller also appends a new timeline entry.
 // 🔒 Requires authentication - only rescuers can update
 router.patch("/report/:caseId/status", verifyToken, updateCaseStatus);
+
+// Get user's notifications (reporter updates)
+router.get("/notifications", verifyToken, getUserNotifications);
+
+// Mark a notification as read
+router.patch("/notifications/:notificationId/read", verifyToken, markNotificationRead);
 
 module.exports = router;
