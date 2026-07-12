@@ -5,7 +5,7 @@ interface INotification extends mongoose.Document {
   title: string;
   message: string;
   type: "info" | "success" | "warning" | "error" | "welcome";
-  isRead: boolean;
+  read: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,7 +25,7 @@ const notificationSchema = new mongoose.Schema(
       enum: ["info", "success", "warning", "error", "welcome"],
       default: "info",
     },
-    isRead: { type: Boolean, default: false },
+    read: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
