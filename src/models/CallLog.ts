@@ -1,48 +1,41 @@
-// src/models/CallLog.js
 import mongoose from "mongoose";
+import { CallStatus } from "../enums/CallStatus.enum";
 
-interface ICallLog extends mongoose.Document {
-  conversationId?: mongoose.Types.ObjectId;
+export interface ICallLog extends mongoose.Document {
   caller: mongoose.Types.ObjectId;
   receiver: mongoose.Types.ObjectId;
-  status: "ringing" | "answered" | "missed" | "rejected" | "ended";
+  status: CallStatus;
   startedAt?: Date;
+  answeredAt?: Date;
   endedAt?: Date;
-  duration: number;
+  duration: number; // in seconds
   createdAt: Date;
   updatedAt: Date;
 }
 
 const callLogSchema = new mongoose.Schema(
   {
-    conversationId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Conversation",
-    },
-
     caller: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-
     receiver: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-
     status: {
       type: String,
-      enum: ["ringing", "answered", "missed", "rejected", "ended"],
-      default: "ringing",
+      enum: Object.values(CallStatus),
+      default: CallStatus.RINGING,
     },
-
     startedAt: { type: Date },
+    answeredAt: { type: Date },
     endedAt: { type: Date },
-    duration: { type: Number, default: 0 }, // seconds
+    duration: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model<ICallLog>("CallLog", callLogSchema);
+export default mongoose.model<ICallLog>("CallLog", callLogSchema);

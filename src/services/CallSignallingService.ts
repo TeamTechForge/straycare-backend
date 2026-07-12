@@ -4,10 +4,26 @@ import { Server } from "socket.io";
 import { CallEvents } from "../enums/CallEvents";
 import { ICallStartDTO, ICallOfferDTO, ICallAnswerDTO, IIceCandidateDTO, ICallEndDTO, ICallDeclineDTO, ICallAcceptDTO } from "../types/call";
 import { Logger as logger } from "../utils/Logger";
+import callLogService from "./CallLogService";
 
 class CallSignallingService {
   // Mapping of userId -> Set of socketIds in the /call namespace
   private activeConnections: Map<string, Set<string>> = new Map();
+
+  // Mapping of callerId-calleeId -> NodeJS.Timeout
+  private ringTimeouts: Map<string, NodeJS.Timeout> = new Map();
+
+  private getRingKey(callerId: string, calleeId: string): string {
+    return `${callerId}-${calleeId}`;
+  }
+
+  private clearRingTimeout(callerId: string, calleeId: string) {
+    const key = this.getRingKey(callerId, calleeId);
+    if (this.ringTimeouts.has(key)) {
+      clearTimeout(this.ringTimeouts.get(key));
+      this.ringTimeouts.delete(key);
+    }
+  }
 
   public registerUser(userId: string, socketId: string) {
     if (!this.activeConnections.has(userId)) {
@@ -33,11 +49,40 @@ class CallSignallingService {
     
     // We emit to the callee's room (using 'user:${calleeId}' room created on connection)
     io.of("/call").to(`user:${calleeId}`).emit(CallEvents.INCOMING, payload);
+
+    // Issue 2: Call Ring Timeout (30 seconds)
+    const key = this.getRingKey(caller.userId, calleeId);
+    this.clearRingTimeout(caller.userId, calleeId); // Clear any existing just in case
+    
+    this.ringTimeouts.set(key, setTimeout(() => {
+      logger.info(`[CallSignalling] Call from ${caller.userId} to ${calleeId} timed out`);
+      this.ringTimeouts.delete(key);
+      
+      // Complete log -> Because it's still RINGING, it becomes MISSED.
+      callLogService.completeCall(caller.userId, calleeId).catch(logger.error);
+
+      // Notify both participants to transition to IDLE and cleanup
+      const endPayload: ICallEndDTO = { callerId: caller.userId, calleeId };
+      io.of("/call").to(`user:${caller.userId}`).emit(CallEvents.ENDED, endPayload);
+      io.of("/call").to(`user:${calleeId}`).emit(CallEvents.ENDED, endPayload);
+    }, 30000));
+
+    // Asynchronously create Call Log
+    callLogService.createLog(caller.userId, calleeId).catch(err => 
+      logger.error(`[CallSignalling] Failed to create call log`, err)
+    );
   }
 
   public handleCallAccept(io: Server, payload: ICallAcceptDTO) {
     logger.info(`[CallSignalling] Call accepted by ${payload.calleeId}`);
     io.of("/call").to(`user:${payload.callerId}`).emit(CallEvents.ACCEPTED, payload);
+
+    this.clearRingTimeout(payload.callerId, payload.calleeId);
+
+    // Asynchronously update Call Log to ANSWERED
+    callLogService.markAnswered(payload.callerId, payload.calleeId).catch(err => 
+      logger.error(`[CallSignalling] Failed to mark call answered`, err)
+    );
   }
 
   public handleCallOffer(io: Server, payload: ICallOfferDTO) {
@@ -59,12 +104,54 @@ class CallSignallingService {
   public handleCallDecline(io: Server, payload: ICallDeclineDTO) {
     logger.info(`[CallSignalling] Call declined by ${payload.calleeId}`);
     io.of("/call").to(`user:${payload.callerId}`).emit(CallEvents.DECLINED, payload);
+
+    this.clearRingTimeout(payload.callerId, payload.calleeId);
+
+    // Asynchronously update Call Log to REJECTED
+    callLogService.markRejected(payload.callerId, payload.calleeId).catch(err => 
+      logger.error(`[CallSignalling] Failed to mark call rejected`, err)
+    );
   }
 
-  public handleCallEnd(io: Server, payload: ICallEndDTO) {
-    logger.info(`[CallSignalling] Call ended by ${payload.callerId} for ${payload.calleeId}`);
-    // Notify the other user
-    io.of("/call").to(`user:${payload.calleeId}`).emit(CallEvents.ENDED, payload);
+  public handleCallEnd(io: Server, payload: ICallEndDTO, endedByUserId?: string) {
+    logger.info(`[CallSignalling] Call ended by ${endedByUserId || payload.callerId} for caller: ${payload.callerId}, callee: ${payload.calleeId}`);
+    
+    this.clearRingTimeout(payload.callerId, payload.calleeId);
+
+    // Issue 1: Bidirectional Call Termination
+    // We notify the OTHER user. If endedByUserId is caller, notify callee. If callee, notify caller.
+    // Fallback to calleeId if endedByUserId is not provided (legacy support).
+    const targetUserId = endedByUserId === payload.callerId ? payload.calleeId : (endedByUserId === payload.calleeId ? payload.callerId : payload.calleeId);
+    
+    io.of("/call").to(`user:${targetUserId}`).emit(CallEvents.ENDED, payload);
+
+    // Asynchronously complete Call Log (MISSED or ENDED)
+    // Note: The one who ends the call sends their ID as callerId, which might be the actual receiver. 
+    // Wait! The payload might have callerId/calleeId swapped depending on who hangs up!
+    // To fix this without swapping, completeCall finds any active call between them.
+    callLogService.completeCall(payload.callerId, payload.calleeId).catch(err => 
+      logger.error(`[CallSignalling] Failed to complete call log`, err)
+    );
+  }
+
+  public async handleDisconnect(io: Server, userId: string) {
+    logger.info(`[CallSignalling] Handling disconnect for user ${userId}`);
+    try {
+      const activeCall = await callLogService.findActiveCall(userId);
+      if (activeCall) {
+        const callerId = activeCall.caller.toString();
+        const calleeId = activeCall.receiver.toString();
+        
+        logger.info(`[CallSignalling] Found active call for disconnected user ${userId}. Automatically ending call.`);
+        
+        const payload: ICallEndDTO = { callerId, calleeId };
+        
+        // Use handleCallEnd directly, which clears timeout, notifies the remaining participant, and completes the log
+        this.handleCallEnd(io, payload, userId);
+      }
+    } catch (err) {
+      logger.error(`[CallSignalling] Error handling disconnect for ${userId}`, err);
+    }
   }
 }
 

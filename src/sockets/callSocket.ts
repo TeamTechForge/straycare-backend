@@ -45,7 +45,7 @@ module.exports = (io: Server) => {
     });
 
     socket.on(CallEvents.ENDED, (payload) => {
-      CallSignallingService.handleCallEnd(io, payload);
+      CallSignallingService.handleCallEnd(io, payload, socket.userId);
     });
 
     // WebRTC Signalling: Offer, Answer, ICE
@@ -63,6 +63,7 @@ module.exports = (io: Server) => {
 
     socket.on("disconnect", () => {
       if (socket.userId) {
+        CallSignallingService.handleDisconnect(io, socket.userId);
         CallSignallingService.unregisterUser(socket.userId, socket.id);
       }
       Logger.info(`[Call Socket] Disconnected: ${socket.id}`);
