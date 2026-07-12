@@ -8,6 +8,7 @@ const router = Router();
 router.use(verifyToken);
 
 router.get("/", CallLogController.getHistory);
+router.put("/seen", CallLogController.markSeen);
 router.delete("/", CallLogController.clearHistory);
 router.delete("/:id", CallLogController.deleteLog);
 

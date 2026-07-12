@@ -5,4 +5,5 @@ export enum CallStatus {
   REJECTED = "REJECTED",
   FAILED = "FAILED",
   ENDED = "ENDED",
+  BUSY = "BUSY",
 }

@@ -3,6 +3,7 @@
 import { Server } from "socket.io";
 import { CallEvents } from "../enums/CallEvents";
 import { ICallStartDTO, ICallOfferDTO, ICallAnswerDTO, IIceCandidateDTO, ICallEndDTO, ICallDeclineDTO, ICallAcceptDTO } from "../types/call";
+import { CallStatus } from "../enums/CallStatus.enum";
 import { Logger as logger } from "../utils/Logger";
 import callLogService from "./CallLogService";
 
@@ -43,8 +44,21 @@ class CallSignallingService {
     }
   }
 
-  public handleCallStart(io: Server, payload: ICallStartDTO) {
+  public async handleCallStart(io: Server, payload: ICallStartDTO) {
     const { caller, calleeId } = payload;
+    
+    try {
+      const activeCall = await callLogService.findActiveCall(calleeId);
+      if (activeCall) {
+        logger.info(`[CallSignalling] User ${calleeId} is BUSY`);
+        callLogService.createLog(caller.userId, calleeId, CallStatus.BUSY).catch(logger.error);
+        io.of("/call").to(`user:${caller.userId}`).emit(CallEvents.BUSY, payload);
+        return;
+      }
+    } catch (error) {
+      logger.error(`[CallSignalling] Error checking busy state`, error);
+    }
+
     logger.info(`[CallSignalling] ${caller.userId} is calling ${calleeId}`);
     
     // We emit to the callee's room (using 'user:${calleeId}' room created on connection)

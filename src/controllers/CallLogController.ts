@@ -65,6 +65,25 @@ class CallLogController {
       res.status(500).json({ message: "Internal server error" });
     }
   };
+
+  /**
+   * Mark all unseen missed calls as seen
+   */
+  public markSeen = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        res.status(401).json({ message: "Unauthorized" });
+        return;
+      }
+
+      await CallLogService.markSeen(userId);
+      res.status(200).json({ message: "Marked as seen" });
+    } catch (error: any) {
+      logger.error("[CallLogController] Error marking as seen", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  };
 }
 
 export default new CallLogController();

@@ -9,6 +9,7 @@ export interface ICallLog extends mongoose.Document {
   answeredAt?: Date;
   endedAt?: Date;
   duration: number; // in seconds
+  isSeen: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,6 +35,7 @@ const callLogSchema = new mongoose.Schema(
     answeredAt: { type: Date },
     endedAt: { type: Date },
     duration: { type: Number, default: 0 },
+    isSeen: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

@@ -9,15 +9,16 @@ class CallLogService {
   /**
    * Create a new call log with RINGING status
    */
-  public async createLog(callerId: string, receiverId: string): Promise<void> {
+  public async createLog(callerId: string, receiverId: string, status: CallStatus = CallStatus.RINGING): Promise<void> {
     try {
       await CallLog.create({
         caller: callerId,
         receiver: receiverId,
-        status: CallStatus.RINGING,
+        status: status,
         startedAt: new Date(),
+        isSeen: false,
       });
-      logger.info(`[CallLogService] Created RINGING call log for caller: ${callerId}, receiver: ${receiverId}`);
+      logger.info(`[CallLogService] Created ${status} call log for caller: ${callerId}, receiver: ${receiverId}`);
     } catch (error) {
       logger.error(`[CallLogService] Failed to create call log`, error);
     }
@@ -139,6 +140,7 @@ class CallLogService {
         answeredAt: log.answeredAt?.toISOString(),
         endedAt: log.endedAt?.toISOString(),
         duration: log.duration,
+        isSeen: log.isSeen,
         createdAt: log.createdAt.toISOString(),
       };
     });
@@ -156,6 +158,21 @@ class CallLogService {
     await CallLog.deleteMany({
       $or: [{ caller: userId }, { receiver: userId }]
     });
+  }
+
+  /**
+   * Mark all missed calls as seen for a user
+   */
+  public async markSeen(userId: string): Promise<void> {
+    try {
+      await CallLog.updateMany(
+        { receiver: new mongoose.Types.ObjectId(userId), status: CallStatus.MISSED, isSeen: { $ne: true } },
+        { $set: { isSeen: true } }
+      );
+    } catch (error) {
+      logger.error(`[CallLogService] Failed to mark calls as seen`, error);
+      throw error;
+    }
   }
 }
 
