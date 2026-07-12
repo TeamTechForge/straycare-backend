@@ -1,23 +1,25 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const Rescuer = require("../models/Rescuer");
-// Controller function to find rescuers near a given location
-exports.findNearbyRescuers = async (req, res) => {
-    // Read latitude and longitude from the query parameters
-    const { lat, lng } = req.query;
-    // Search the database for rescuers whose location is within 5 km 
-    // Uses MongoDBs geospatial $near query
-    const rescuers = await Rescuer.find({
-        location: {
-            $near: {
-                // The point we are searching from (user's location)
-                $geometry: { type: "Point", coordinates: [lng, lat] },
-                // Maximum distance allowed from the user
-                $maxDistance: 5000
-            }
-        }
-    });
-    // Send the list of nearby rescuers back to the client
-    res.json(rescuers);
-};
+exports.NearbyController = void 0;
+const catchAsync_1 = require("../utils/catchAsync");
+class NearbyController {
+    constructor(rescuerModel) {
+        // Controller function to find rescuers near a given location
+        this.findNearbyRescuers = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
+            const { lat, lng } = req.query;
+            const rescuers = await this.rescuerModel.find({
+                isAvailable: true,
+                location: {
+                    $near: {
+                        $geometry: { type: "Point", coordinates: [parseFloat(lng), parseFloat(lat)] },
+                        $maxDistance: 5000
+                    }
+                }
+            });
+            res.json(rescuers);
+        });
+        this.rescuerModel = rescuerModel;
+    }
+}
+exports.NearbyController = NearbyController;
 //# sourceMappingURL=nearbyController.js.map

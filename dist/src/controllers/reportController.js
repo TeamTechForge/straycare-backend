@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+const catchAsync_1 = require("../utils/catchAsync");
 const StrayReport = require("../models/strayreport");
 const parseMaybeJson = (value) => {
     if (typeof value !== "string")
@@ -68,109 +69,77 @@ const buildReportPayload = (req) => {
     return payload;
 };
 //  1. CREATE REPORT
-exports.createReport = async (req, res) => {
-    try {
-        const reportPayload = buildReportPayload(req);
-        console.log("[STRAY][POST] Creating report with payload:", { caseId: reportPayload.caseId, animalType: reportPayload.animalType, location: reportPayload.location });
-        if (!reportPayload.animalType) {
-            console.warn("[STRAY][VALIDATION] animalType is missing");
-            res.status(400).json({ message: "animalType is required" });
-            return;
-        }
-        if (!reportPayload.location ||
-            !Number.isFinite(reportPayload.location.lat) ||
-            !Number.isFinite(reportPayload.location.lng)) {
-            console.warn("[STRAY][VALIDATION] location is invalid:", reportPayload.location);
-            res.status(400).json({ message: "location with lat/lng is required" });
-            return;
-        }
-        // Initial timeline entry
-        reportPayload.timeline = [
-            {
-                status: reportPayload.status,
-                message: "Case created",
-                timestamp: new Date(),
-            },
-        ];
-        const newReport = await StrayReport.create(reportPayload);
-        console.log("[STRAY][SUCCESS] Report created:", newReport._id);
-        res.status(201).json({
-            message: "Report submitted successfully",
-            request: newReport,
-        });
+exports.createReport = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
+    const reportPayload = buildReportPayload(req);
+    console.log("[STRAY][POST] Creating report with payload:", { caseId: reportPayload.caseId, animalType: reportPayload.animalType, location: reportPayload.location });
+    if (!reportPayload.animalType) {
+        console.warn("[STRAY][VALIDATION] animalType is missing");
+        res.status(400).json({ message: "animalType is required" });
+        return;
     }
-    catch (error) {
-        const errorMessage = error?.message || String(error);
-        const isDuplicateKey = error?.code === 11000;
-        const isValidationError = error?.name === "ValidationError";
-        const statusCode = isDuplicateKey ? 409 : isValidationError ? 400 : 500;
-        const message = isDuplicateKey
-            ? "Case ID already exists"
-            : isValidationError
-                ? "Invalid report payload"
-                : "Error creating report";
-        console.error("[STRAY][ERROR] Failed to create report:", errorMessage);
-        res.status(statusCode).json({ message, error: errorMessage });
+    if (!reportPayload.location ||
+        !Number.isFinite(reportPayload.location.lat) ||
+        !Number.isFinite(reportPayload.location.lng)) {
+        console.warn("[STRAY][VALIDATION] location is invalid:", reportPayload.location);
+        res.status(400).json({ message: "location with lat/lng is required" });
+        return;
     }
-};
-// 2. GET REPORT BY CASE ID
-exports.getReportByCaseId = async (req, res) => {
-    try {
-        const report = await StrayReport.findOne({ caseId: req.params.caseId });
-        if (!report) {
-            res.status(404).json({ message: "Report not found" });
-            return;
-        }
-        res.json(report);
-    }
-    catch (error) {
-        const errorMessage = error?.message || String(error);
-        console.error("[STRAY][ERROR] Failed to fetch report:", errorMessage);
-        res.status(500).json({ message: "Error fetching report", error: errorMessage });
-    }
-};
-// 3. GET ALL REPORTS
-exports.getAllReports = async (req, res) => {
-    try {
-        const reports = await StrayReport.find({}, { status: 1, location: 1, caseId: 1, animalType: 1 });
-        console.log("[STRAY][GET] Fetched all reports:", reports.length);
-        res.json(reports);
-    }
-    catch (error) {
-        const errorMessage = error?.message || String(error);
-        console.error("[STRAY][ERROR] Failed to fetch all reports:", errorMessage);
-        res.status(500).json({ message: "Error fetching reports", error: errorMessage });
-    }
-};
-// 4. UPDATE CASE STATUS
-exports.updateCaseStatus = async (req, res) => {
-    try {
-        const { caseId } = req.params;
-        const { status } = req.body;
-        const report = await StrayReport.findOne({ caseId });
-        if (!report) {
-            res.status(404).json({ message: "Case not found" });
-            return;
-        }
-        // Update main status
-        report.status = status;
-        // Ensure timeline exists
-        if (!report.timeline) {
-            report.timeline = [];
-        }
-        // Add new timeline entry
-        report.timeline.push({
-            status,
-            message: `Status changed to ${status}`,
+    // Initial timeline entry
+    reportPayload.timeline = [
+        {
+            status: reportPayload.status,
+            message: "Case created",
             timestamp: new Date(),
-        });
-        await report.save();
-        res.json(report);
+        },
+    ];
+    const newReport = await StrayReport.create(reportPayload);
+    console.log("[STRAY][SUCCESS] Report created:", newReport._id);
+    res.status(201).json({
+        message: "Report submitted successfully",
+        request: newReport,
+    });
+});
+;
+// 2. GET REPORT BY CASE ID
+exports.getReportByCaseId = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
+    const report = await StrayReport.findOne({ caseId: req.params.caseId });
+    if (!report) {
+        res.status(404).json({ message: "Report not found" });
+        return;
     }
-    catch (error) {
-        const errorMessage = error?.message || String(error);
-        console.error("[STRAY][ERROR] Failed to update status:", errorMessage);
-        res.status(500).json({ message: "Error updating status", error: errorMessage });
+    res.json(report);
+});
+;
+// 3. GET ALL REPORTS
+exports.getAllReports = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
+    const reports = await StrayReport.find({}, { status: 1, location: 1, caseId: 1, animalType: 1 });
+    console.log("[STRAY][GET] Fetched all reports:", reports.length);
+    res.json(reports);
+});
+;
+// 4. UPDATE CASE STATUS
+exports.updateCaseStatus = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
+    const { caseId } = req.params;
+    const { status } = req.body;
+    const report = await StrayReport.findOne({ caseId });
+    if (!report) {
+        res.status(404).json({ message: "Case not found" });
+        return;
     }
-};
+    // Update main status
+    report.status = status;
+    // Ensure timeline exists
+    if (!report.timeline) {
+        report.timeline = [];
+    }
+    // Add new timeline entry
+    report.timeline.push({
+        status,
+        message: `Status changed to ${status}`,
+        timestamp: new Date(),
+    });
+    await report.save();
+    res.json(report);
+});
+;
 //# sourceMappingURL=reportController.js.map
