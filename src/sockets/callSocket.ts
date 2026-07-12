@@ -36,6 +36,10 @@ module.exports = (io: Server) => {
     });
 
     // Handle call accepted/declined/ended
+    socket.on(CallEvents.ACCEPTED, (payload) => {
+      CallSignallingService.handleCallAccept(io, payload);
+    });
+
     socket.on(CallEvents.DECLINED, (payload) => {
       CallSignallingService.handleCallDecline(io, payload);
     });

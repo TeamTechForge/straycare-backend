@@ -38,3 +38,8 @@ export interface ICallDeclineDTO {
   callerId: string;
   calleeId: string;
 }
+
+export interface ICallAcceptDTO {
+  callerId: string;
+  calleeId: string;
+}

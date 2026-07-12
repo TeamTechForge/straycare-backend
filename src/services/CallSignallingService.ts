@@ -2,7 +2,7 @@
 
 import { Server } from "socket.io";
 import { CallEvents } from "../enums/CallEvents";
-import { ICallStartDTO, ICallOfferDTO, ICallAnswerDTO, IIceCandidateDTO, ICallEndDTO, ICallDeclineDTO } from "../types/call";
+import { ICallStartDTO, ICallOfferDTO, ICallAnswerDTO, IIceCandidateDTO, ICallEndDTO, ICallDeclineDTO, ICallAcceptDTO } from "../types/call";
 import { Logger as logger } from "../utils/Logger";
 
 class CallSignallingService {
@@ -33,6 +33,11 @@ class CallSignallingService {
     
     // We emit to the callee's room (using 'user:${calleeId}' room created on connection)
     io.of("/call").to(`user:${calleeId}`).emit(CallEvents.INCOMING, payload);
+  }
+
+  public handleCallAccept(io: Server, payload: ICallAcceptDTO) {
+    logger.info(`[CallSignalling] Call accepted by ${payload.calleeId}`);
+    io.of("/call").to(`user:${payload.callerId}`).emit(CallEvents.ACCEPTED, payload);
   }
 
   public handleCallOffer(io: Server, payload: ICallOfferDTO) {
