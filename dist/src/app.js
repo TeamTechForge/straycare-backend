@@ -85,6 +85,7 @@ app.use("/api/profiles", profileRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/chat", chatRoutes);
+app.use("/api/upload", uploadRoutes);
 app.use("/api/users", userRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/admin", adminRouter);

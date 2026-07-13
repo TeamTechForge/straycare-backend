@@ -7,6 +7,7 @@ const {
   getUserReportsAdmin,
   searchUsers,
   approveUser,
+  updatePrivacySettings,
   savePushToken,
 } = require("../controllers/userController");
 const { verifyToken } = require("../middleware/authMiddleware");
@@ -14,7 +15,8 @@ const { verifyToken } = require("../middleware/authMiddleware");
 // Router for user profile endpoints
 const userRouter = express.Router();
 userRouter.get("/search", verifyToken, searchUsers);
-userRouter.get("/:userId/public-profile", getPublicProfile);
+userRouter.put("/privacy", verifyToken, updatePrivacySettings);
+userRouter.get("/:userId/public-profile", verifyToken, getPublicProfile);
 userRouter.get("/:userId/posts", getUserPosts);
 userRouter.get("/:userId/reports", getUserReports);
 

@@ -98,6 +98,7 @@ app.use("/api/admin", adminAuthRoutes);
 app.use("/api/profiles", profileRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/call-logs", require("./routes/callLogRoutes"));
 app.use("/api/chat", chatRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/users", userRouter);

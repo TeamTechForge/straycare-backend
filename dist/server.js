@@ -119,6 +119,7 @@ async function startup() {
     // Load real-time event handlers
     require("./src/sockets/rescueSocket")(io);
     require("./src/sockets/chatSocket")(io);
+    require("./src/sockets/callSocket")(io);
     // Serve uploaded files as static assets
     // e.g. GET http://localhost:5000/uploads/photo.jpg
     app.use("/uploads", express.static("uploads"));

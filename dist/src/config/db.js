@@ -5,33 +5,34 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose = require("mongoose");
 const { MongoMemoryServer } = require("mongodb-memory-server");
+const Logger_1 = require("../utils/Logger");
 let mongod = null;
 // connectDB is called once when the server starts
 const connectDB = async () => {
     // Read the MongoDB connection string from environment variables
     let mongoURI = process.env.MONGO_URI;
     if (!mongoURI) {
-        console.warn("[DB] ⚠️ MONGO_URI is undefined. Falling back to in-memory MongoDB...");
+        Logger_1.Logger.warn("⚠️ MONGO_URI is undefined. Falling back to in-memory MongoDB...", { service: "Database" });
         await startMemoryServer();
         return;
     }
     try {
-        console.log(`[DB] Connecting to MongoDB at ${mongoURI}...`);
+        Logger_1.Logger.info(`Connecting to MongoDB at ${mongoURI}...`, { service: "Database" });
         await mongoose.connect(mongoURI, {
             serverSelectionTimeoutMS: 5000, // 5s timeout to trigger fallback quickly if offline
             socketTimeoutMS: 45000,
         });
-        console.log("MongoDB connected");
+        Logger_1.Logger.info("MongoDB connected", { service: "Database" });
     }
     catch (error) {
-        console.warn(`[DB] ⚠️ MongoDB connection to local/configured DB failed: ${error.message}`);
+        Logger_1.Logger.warn(`⚠️ MongoDB connection to local/configured DB failed: ${error.message}`, { service: "Database" });
         // Fallback to memory server if the configured URI was localhost or 127.0.0.1
         if (mongoURI.includes("localhost") || mongoURI.includes("127.0.0.1")) {
-            console.log("[DB] Falling back to in-memory MongoDB...");
+            Logger_1.Logger.info("Falling back to in-memory MongoDB...", { service: "Database" });
             await startMemoryServer();
         }
         else {
-            console.error("[DB] ❌ External database connection failed. Exiting...");
+            Logger_1.Logger.error("❌ External database connection failed. Exiting...");
             process.exit(1);
         }
     }
@@ -45,17 +46,17 @@ const startMemoryServer = async () => {
             launchTimeout: 60000
         });
         const memoryURI = mongod.getUri();
-        console.log(`[DB] In-memory MongoDB Server started at: ${memoryURI}`);
+        Logger_1.Logger.info(`In-memory MongoDB Server started at: ${memoryURI}`, { service: "Database" });
         // Override the environment variable so other components (like GridFS) use the correct URI
         process.env.MONGO_URI = memoryURI;
         await mongoose.connect(memoryURI, {
             serverSelectionTimeoutMS: 10000,
             socketTimeoutMS: 45000,
         });
-        console.log("[DB] Connected to in-memory MongoDB successfully!");
+        Logger_1.Logger.info("Connected to in-memory MongoDB successfully!", { service: "Database" });
     }
     catch (err) {
-        console.error("[DB] ❌ Failed to start in-memory MongoDB server:", err.message);
+        Logger_1.Logger.error("❌ Failed to start in-memory MongoDB server:", err);
         process.exit(1);
     }
 };
@@ -63,7 +64,7 @@ const startMemoryServer = async () => {
 process.on("SIGINT", async () => {
     if (mongod) {
         await mongod.stop();
-        console.log("[DB] In-memory MongoDB Server stopped.");
+        Logger_1.Logger.info("In-memory MongoDB Server stopped.", { service: "Database" });
     }
 });
 // Export so server.js can call this when starting up
