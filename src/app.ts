@@ -112,6 +112,7 @@ app.use("/api/admin", reportedUsersRoutes);
 app.use("/api/moderation", moderationRoutes);
 app.use("/api/admin-notifications", adminNotificationsRoutes);
 app.use("/api/admins", adminManagementRoutes);
+app.use("/api/support", require("./routes/supportRoutes"));
 
 app.get("/ping", (req: Request, res: Response) => {
   return res.status(200).json({

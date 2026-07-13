@@ -9,6 +9,7 @@ const {
   approveUser,
   updatePrivacySettings,
   savePushToken,
+  deletePushToken,
 } = require("../controllers/userController");
 const { verifyToken } = require("../middleware/authMiddleware");
 
@@ -22,6 +23,7 @@ userRouter.get("/:userId/reports", getUserReports);
 
 // Store push notification token for mobile notifications
 userRouter.post("/push-token", verifyToken, savePushToken);
+userRouter.delete("/push-token", verifyToken, deletePushToken);
 
 // Router for user reports
 const reportRouter = express.Router();
