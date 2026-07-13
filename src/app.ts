@@ -67,10 +67,10 @@ app.use(
 
       const isAllowed =
         allowedOrigins.includes(origin) ||
+        // Allow any device on the 10.x.x.x range (Expo development, Android emulator)
+        /^https?:\/\/10\.[0-9]+\.[0-9]+\.[0-9]+(:[0-9]+)?$/.test(origin) ||
         // Allow any device on the 192.168.x.x home/office network (LAN)
         /^https?:\/\/192\.168\.[0-9]+\.[0-9]+(:[0-9]+)?$/.test(origin) ||
-        // Allow Android emulator (its special IP that maps to your PC)
-        /^https?:\/\/10\.0\.[0-9]+\.[0-9]+(:[0-9]+)?$/.test(origin) ||
         // Allow Docker or mobile hotspot IPs
         /^https?:\/\/172\.[0-9]+\.[0-9]+\.[0-9]+(:[0-9]+)?$/.test(origin) ||
         // Allow localhost in any form

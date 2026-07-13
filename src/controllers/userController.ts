@@ -282,3 +282,40 @@ exports.approveUser = catchAsync(async (req: Request, res: Response, next: NextF
       },
     });
   });;
+
+// Store push notification token for user
+exports.savePushToken = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const userId = req.user?.id;
+  const { pushToken } = req.body;
+
+  if (!userId) {
+    res.status(401).json({ message: "Unauthorized. Please login first." });
+    return;
+  }
+
+  if (!pushToken) {
+    res.status(400).json({ message: "pushToken is required" });
+    return;
+  }
+
+  try {
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { pushToken },
+      { new: true }
+    ).select("name email pushToken");
+
+    console.log(`[PUSH] Push token saved for user ${userId}`);
+    res.status(200).json({
+      message: "Push token saved successfully",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+      },
+    });
+  } catch (error) {
+    console.error("[PUSH] Failed to save push token:", error);
+    res.status(500).json({ message: "Failed to save push token" });
+  }
+});

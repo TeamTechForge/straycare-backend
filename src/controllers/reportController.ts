@@ -1,8 +1,42 @@
 import { catchAsync } from "../utils/catchAsync";
 import type { NextFunction } from "express";
+import { NotificationService } from "../services/NotificationService";
 const StrayReport = require("../models/strayreport");
 
 import type { Request, Response } from "express";
+
+// Helper function to send push notifications via Expo
+const sendPushNotification = async (
+  pushToken: string,
+  title: string,
+  message: string,
+  data?: Record<string, any>
+): Promise<void> => {
+  try {
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Accept-Encoding": "gzip, deflate",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: pushToken,
+        sound: "default",
+        title,
+        body: message,
+        data: data || {},
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("[PUSH] Expo push service error:", response.status);
+    }
+  } catch (error) {
+    console.error("[PUSH] Failed to send push notification:", error);
+    throw error;
+  }
+};
 
 const parseMaybeJson = (value: any): any => {
   if (typeof value !== "string") return value;
@@ -81,8 +115,11 @@ const buildReportPayload = (req: Request): IStrayReportDTO => {
   payload.anonymous = normalizeAnonymous(payload.anonymous);
   payload.status = normalizeStatus(payload.status);
 
+  // Generate unique caseId using timestamp + random suffix to prevent collisions
   if (!payload.caseId) {
-    payload.caseId = `CASE-${Date.now()}`;
+    const timestamp = Date.now();
+    const randomSuffix = Math.random().toString(36).substring(2, 9);
+    payload.caseId = `CASE-${timestamp}-${randomSuffix}`;
   }
 
   if (req.user && req.user.id) {
@@ -122,21 +159,57 @@ exports.createReport = catchAsync(async (req: Request, res: Response, next: Next
       },
     ];
 
-    const newReport = await StrayReport.create(reportPayload);
-    console.log("[STRAY][SUCCESS] Report created:", newReport._id);
-    res.status(201).json({
-      message: "Report submitted successfully",
-      request: newReport,
-    });
+    try {
+      const newReport = await StrayReport.create(reportPayload);
+      console.log("[STRAY][SUCCESS] Report created:", newReport._id);
+      res.status(201).json({
+        message: "Report submitted successfully",
+        request: newReport,
+      });
+    } catch (error: any) {
+      // Handle duplicate key error (E11000)
+      if (error.code === 11000) {
+        const field = Object.keys(error.keyPattern)[0];
+        console.warn(`[STRAY][DUPLICATE] Duplicate ${field}:`, error.keyValue);
+        res.status(409).json({
+          message: `A report with this ${field} already exists. Please refresh and try again.`,
+          code: "DUPLICATE_KEY",
+          field: field,
+        });
+        return;
+      }
+      // Re-throw other errors to be handled by global error handler
+      throw error;
+    }
   });;
 
-// 2. GET REPORT BY CASE ID
+// 2. GET REPORT BY CASE ID (with reporter details if not anonymous)
 exports.getReportByCaseId = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const report = await StrayReport.findOne({ caseId: req.params.caseId });
+    const report: any = await StrayReport.findOne({ caseId: req.params.caseId });
 
     if (!report) {
       res.status(404).json({ message: "Report not found" });
       return;
+    }
+
+    // If report is not anonymous, populate reporter details
+    if (!report.anonymous && report.reporterUserId) {
+      const User = require("../models/User");
+      try {
+        const reporter = await User.findById(report.reporterUserId).select("name phone email role profileImage");
+        if (reporter) {
+          report._doc.reporter = {
+            id: reporter._id,
+            name: reporter.name,
+            phone: reporter.phone,
+            email: reporter.email,
+            role: reporter.role,
+            profileImage: reporter.profileImage,
+          };
+        }
+      } catch (err) {
+        console.warn(`[STRAY] Could not populate reporter for case ${report.caseId}:`, err);
+      }
     }
 
     res.json(report);
@@ -144,18 +217,53 @@ exports.getReportByCaseId = catchAsync(async (req: Request, res: Response, next:
 
 // 3. GET ALL REPORTS
 exports.getAllReports = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const reports = await StrayReport.find(
-      {},
-      { status: 1, location: 1, caseId: 1, animalType: 1 }
-    );
+    const reports = await StrayReport.find({}, {
+      status: 1,
+      location: 1,
+      caseId: 1,
+      animalType: 1,
+      anonymous: 1,
+      reporterUserId: 1,
+      description: 1,
+      category: 1,
+      photos: 1,
+      createdAt: 1
+    });
     console.log("[STRAY][GET] Fetched all reports:", reports.length);
     res.json(reports);
   });;
 
-// 4. UPDATE CASE STATUS
+// 4. UPDATE CASE STATUS (RESCUERS ONLY)
 exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { caseId } = req.params;
     const { status } = req.body;
+    const userId = req.user?.id;
+
+    // 🔒 Check if user is authenticated
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized. Please login first." });
+      return;
+    }
+
+    // 🔒 Check if user is a rescuer/volunteer/ngo/vet
+    const User = require("../models/User");
+    const user = await User.findById(userId).select("name role");
+
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    const rescuerRoles = ["volunteer", "ngo", "vet"];
+    if (!rescuerRoles.includes(user.role)) {
+      console.warn(`[STRAY][UNAUTHORIZED] User ${userId} (role: ${user.role}) attempted to update case status`);
+      res.status(403).json({
+        message: "Only rescuers, volunteers, NGOs, and veterinarians can update case status.",
+        requiredRole: "rescuer/volunteer/ngo/vet",
+        userRole: user.role,
+      });
+      return;
+    }
 
     const report = await StrayReport.findOne({ caseId });
 
@@ -172,14 +280,99 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
       report.timeline = [];
     }
 
-    // Add new timeline entry
+    // Add new timeline entry with rescuer info
     report.timeline.push({
       status,
-      message: `Status changed to ${status}`,
+      message: `Status changed to ${status} by ${user.name} (${user.role})`,
+      rescuerId: userId,
+      rescuerName: user.name,
+      rescuerRole: user.role,
       timestamp: new Date(),
     });
 
     await report.save();
 
+    // 🔔 Notify reporter of status update (if not anonymous)
+    if (!report.anonymous && report.reporterUserId) {
+      const statusMessages: { [key: string]: string } = {
+        "Needs Help": "Your case has been reported",
+        "Under Rescue": "A rescuer has accepted your case and is on the way",
+        "Treated": "Your animal has been treated and is recovering",
+        "Ready for Adoption": "Your animal is ready for adoption"
+      };
+
+      const notificationMessage = statusMessages[status] || `Status updated to ${status}`;
+
+      try {
+        // Save in-app notification
+        await NotificationService.sendNotification(
+          report.reporterUserId,
+          "Case Status Update",
+          notificationMessage,
+          "success"
+        );
+        console.log(`[STRAY] Notification sent to reporter for case ${report.caseId}`);
+
+        // Send push notification if user has token
+        try {
+          const reporterUser = await User.findById(report.reporterUserId).select("pushToken");
+          if (reporterUser?.pushToken) {
+            await sendPushNotification(
+              reporterUser.pushToken,
+              "Case Status Update",
+              notificationMessage,
+              { caseId: report.caseId, status, type: "success" }
+            );
+            console.log(`[STRAY] Push notification sent to reporter for case ${report.caseId}`);
+          }
+        } catch (pushErr: any) {
+          console.warn(`[STRAY] Failed to send push notification:`, pushErr.message);
+        }
+      } catch (err: any) {
+        console.warn(`[STRAY] Failed to send reporter notification:`, err.message);
+      }
+    }
+
     res.json(report);
   });;
+
+// 5. GET USER NOTIFICATIONS
+exports.getUserNotifications = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const userId = req.user?.id;
+
+  if (!userId) {
+    res.status(401).json({ message: "Unauthorized. Please login first." });
+    return;
+  }
+
+  const Notification = require("../models/Notification");
+  const notifications = await Notification.find({ userId })
+    .sort({ createdAt: -1 })
+    .limit(50);
+
+  res.json(notifications);
+});;
+
+// 6. MARK NOTIFICATION AS READ
+exports.markNotificationRead = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const { notificationId } = req.params;
+
+  if (!notificationId) {
+    res.status(400).json({ message: "notificationId is required" });
+    return;
+  }
+
+  const Notification = require("../models/Notification");
+  const notification = await Notification.findByIdAndUpdate(
+    notificationId,
+    { read: true },
+    { new: true }
+  );
+
+  if (!notification) {
+    res.status(404).json({ message: "Notification not found" });
+    return;
+  }
+
+  res.json(notification);
+});
