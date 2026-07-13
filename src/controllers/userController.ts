@@ -198,10 +198,20 @@ exports.searchUsers = catchAsync(async (req: Request, res: Response, next: NextF
 
     const users: any[] = await User.find({
       _id: { $ne: currentUserId },
-      $or: [
-        { name: { $regex: query, $options: "i" } },
-        { email: { $regex: query, $options: "i" } },
-      ],
+      $and: [
+        {
+          $or: [
+            { name: { $regex: query, $options: "i" } },
+            { email: { $regex: query, $options: "i" } },
+          ],
+        },
+        {
+          $or: [
+            { role: { $nin: ["ngo", "vet"] } },
+            { isApproved: true }
+          ]
+        }
+      ]
     })
       .select("name email role profileCompleted profileImage avatar")
       .limit(20)
