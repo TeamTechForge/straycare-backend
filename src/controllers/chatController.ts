@@ -6,52 +6,9 @@ const User = require("../models/User");
 
 import type { Request, Response, NextFunction } from "express";
 
+import PrivacyService from "../services/PrivacyService";
+
 // ── Helpers ─────────────────────────────────────────────────────
-
-/**
- * Checks whether `senderId` is allowed to message `recipientId`
- * based on the recipient's messagingPrivacy setting.
- */
-const canMessage = async (senderId: string, recipientId: string): Promise<{ allowed: boolean; reason?: string }> => {
-  console.log(`[chatController Helpers] Checking privacy settings. Sender: ${senderId}, Recipient: ${recipientId}`);
-  const recipient = await User.findById(recipientId).select("messagingPrivacy").lean();
-  if (!recipient) {
-    console.warn(`[chatController Helpers] Recipient user ${recipientId} not found`);
-    return { allowed: false, reason: "User not found" };
-  }
-
-  switch (recipient.messagingPrivacy) {
-    case "everyone":
-      return { allowed: true };
-
-    case "contacts": {
-      // "contacts" = users who share at least one conversation already
-      const existing = await Conversation.findOne({
-        participants: { $all: [senderId, recipientId] },
-      }).lean();
-      return existing
-        ? { allowed: true }
-        : { allowed: false, reason: "This user only accepts messages from existing contacts" };
-    }
-
-    case "relatedOnly": {
-      // Allow if there's a conversation with a non-direct type (rescue, adoption, etc.)
-      const related = await Conversation.findOne({
-        participants: { $all: [senderId, recipientId] },
-        conversationType: { $ne: "direct" },
-      }).lean();
-      return related
-        ? { allowed: true }
-        : { allowed: false, reason: "This user only accepts messages from related interactions" };
-    }
-
-    case "none":
-      return { allowed: false, reason: "This user has disabled messages" };
-
-    default:
-      return { allowed: true };
-  }
-};
 
 import { Role } from "../enums/Role.enum";
 
@@ -128,14 +85,9 @@ const getOrCreateConversation = catchAsync(async (req: Request, res: Response, n
       return;
     }
 
-    // Privacy check
-    const privacyResult = await canMessage(userId, participantId);
-    if (!privacyResult.allowed) {
-      console.warn(`[chatController] ❌ Privacy Blocked: ${privacyResult.reason}`);
-      res.status(403).json({ message: privacyResult.reason });
-      return;
-    }
-
+    // Evaluate permissions without failing the request (so the UI can render gracefully)
+    const privacyResult = await PrivacyService.canMessage(userId, participantId);
+    
     // Check for existing conversation between these two users
     let conversation: any = await Conversation.findOne({
       participants: { $all: [userId, participantId], $size: 2 },
@@ -157,10 +109,16 @@ const getOrCreateConversation = catchAsync(async (req: Request, res: Response, n
         }
       }
       console.log(`[chatController] ✅ Found existing conversation: ${conversation._id}`);
-      res.status(200).json(conversation);
+      res.status(200).json({
+        ...conversation,
+        permissions: { canMessage: privacyResult.allowed }
+      });
       return;
     }
 
+    // If no existing conversation AND privacy prevents messaging, we don't block creating it,
+    // but the UI will disable sending messages. This allows users to open chat and see "not accepting messages".
+    
     // Create new conversation
     console.log(`[chatController] 🆕 Creating new conversation session. User: ${userId}, Participant: ${participantId}`);
     const newConversation = await Conversation.create({
@@ -184,7 +142,10 @@ const getOrCreateConversation = catchAsync(async (req: Request, res: Response, n
     }
 
     console.log(`[chatController] ✅ Conversation created: ${conversation._id}`);
-    res.status(201).json(conversation);
+    res.status(201).json({
+      ...conversation,
+      permissions: { canMessage: privacyResult.allowed }
+    });
 });
 
 // ── GET /api/chat/messages/:conversationId ──────────────────────
@@ -272,6 +233,17 @@ const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFun
       console.warn(`[chatController] ❌ Conversation ${conversationId} not found or user is not a participant`);
       res.status(404).json({ message: "Conversation not found" });
       return;
+    }
+
+    // Enforce privacy strictness on actual sending
+    const otherParticipantId = conversation.participants.find((p: any) => p.toString() !== userId);
+    if (otherParticipantId) {
+      const privacyResult = await PrivacyService.canMessage(userId, otherParticipantId.toString());
+      if (!privacyResult.allowed) {
+        console.warn(`[chatController] ❌ Message Blocked by Privacy: ${privacyResult.reason}`);
+        res.status(403).json({ message: privacyResult.reason });
+        return;
+      }
     }
 
     // Create the message

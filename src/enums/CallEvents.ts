@@ -10,4 +10,5 @@ export enum CallEvents {
   WEBRTC_ANSWER = "webrtc:answer",
   WEBRTC_ICE_CANDIDATE = "webrtc:iceCandidate",
   BUSY = "call:busy",
+  UNAUTHORIZED = "call:unauthorized",
 }

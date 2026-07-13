@@ -16,9 +16,12 @@ import mongoose from "mongoose";
 import { ProfileStatsService } from "../services/ProfileStatsService";
 import { NotificationService } from "../services/NotificationService";
 
+import PrivacyService from "../services/PrivacyService";
+
 // Fetch another user's public profile data (safe, sanitised)
 exports.getPublicProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { userId } = req.params;
+    const currentUserId = req.user!.id;
 
     if (!mongoose.Types.ObjectId.isValid(userId as string)) {
       res.status(400).json({ message: "Invalid user ID format" });
@@ -32,6 +35,9 @@ exports.getPublicProfile = catchAsync(async (req: Request, res: Response, next: 
     }
 
     const { profileData, stats } = await ProfileStatsService.getProfileAndStats(userId as string, user.role);
+    
+    const messagePermission = await PrivacyService.canMessage(currentUserId, userId as string);
+    const callPermission = await PrivacyService.canCall(currentUserId, userId as string);
 
     res.status(200).json({
       user: {
@@ -43,8 +49,45 @@ exports.getPublicProfile = catchAsync(async (req: Request, res: Response, next: 
       },
       profile: profileData,
       stats,
+      permissions: {
+        canMessage: messagePermission.allowed,
+        canCall: callPermission.allowed,
+      }
     });
   });;
+
+// Update Privacy Settings
+exports.updatePrivacySettings = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const { messagingPrivacy, callingPrivacy } = req.body;
+  const currentUserId = req.user!.id;
+
+  const validOptions = ["everyone", "contacts", "relatedOnly", "none"];
+  
+  if (messagingPrivacy && !validOptions.includes(messagingPrivacy)) {
+    res.status(400).json({ message: "Invalid messaging privacy option" });
+    return;
+  }
+  
+  if (callingPrivacy && !validOptions.includes(callingPrivacy)) {
+    res.status(400).json({ message: "Invalid calling privacy option" });
+    return;
+  }
+
+  const updates: any = {};
+  if (messagingPrivacy) updates.messagingPrivacy = messagingPrivacy;
+  if (callingPrivacy) updates.callingPrivacy = callingPrivacy;
+
+  const updatedUser = await User.findByIdAndUpdate(
+    currentUserId,
+    { $set: updates },
+    { new: true, runValidators: true }
+  ).select("-password").lean();
+
+  res.status(200).json({
+    message: "Privacy settings updated successfully",
+    user: updatedUser
+  });
+});;
 
 // Fetch user's posts
 exports.getUserPosts = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -164,14 +207,25 @@ exports.searchUsers = catchAsync(async (req: Request, res: Response, next: NextF
       .limit(20)
       .lean();
 
-    // Self-healing check
-    for (let u of users) {
+    // Attach permissions & Self-healing check
+    const processedUsers = await Promise.all(users.map(async (u) => {
       if (!u.profileImage) {
         u.profileImage = u.avatar || "";
       }
-    }
+      
+      const messagePermission = await PrivacyService.canMessage(currentUserId, u._id.toString());
+      const callPermission = await PrivacyService.canCall(currentUserId, u._id.toString());
+      
+      return {
+        ...u,
+        permissions: {
+          canMessage: messagePermission.allowed,
+          canCall: callPermission.allowed
+        }
+      };
+    }));
 
-    res.status(200).json(users);
+    res.status(200).json(processedUsers);
   });;
 
 // Admin endpoint to approve a user account (NGO / Vet)

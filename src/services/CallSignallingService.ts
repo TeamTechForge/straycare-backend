@@ -59,6 +59,18 @@ class CallSignallingService {
       logger.error(`[CallSignalling] Error checking busy state`, error);
     }
 
+    try {
+      const PrivacyService = require("./PrivacyService").default;
+      const privacyResult = await PrivacyService.canCall(caller.userId, calleeId);
+      if (!privacyResult.allowed) {
+        logger.info(`[CallSignalling] Call blocked by privacy: ${privacyResult.reason}`);
+        io.of("/call").to(`user:${caller.userId}`).emit(CallEvents.UNAUTHORIZED, payload);
+        return;
+      }
+    } catch (error) {
+      logger.error(`[CallSignalling] Error checking privacy for call`, error);
+    }
+
     logger.info(`[CallSignalling] ${caller.userId} is calling ${calleeId}`);
     
     // We emit to the callee's room (using 'user:${calleeId}' room created on connection)
@@ -99,17 +111,42 @@ class CallSignallingService {
     );
   }
 
-  public handleCallOffer(io: Server, payload: ICallOfferDTO) {
+  private async verifyActiveSession(userA: string, userB: string): Promise<boolean> {
+    try {
+      const activeCall = await callLogService.findActiveCall(userA);
+      if (!activeCall) return false;
+      const callerStr = activeCall.caller.toString();
+      const receiverStr = activeCall.receiver.toString();
+      return (callerStr === userA && receiverStr === userB) ||
+             (callerStr === userB && receiverStr === userA);
+    } catch (err) {
+      return false;
+    }
+  }
+
+  public async handleCallOffer(io: Server, payload: ICallOfferDTO) {
+    if (!(await this.verifyActiveSession(payload.callerId, payload.calleeId))) {
+      logger.warn(`[CallSignalling] Security block: Unauthorized WEBRTC_OFFER from ${payload.callerId} to ${payload.calleeId}`);
+      return;
+    }
     logger.info(`[CallSignalling] Offer from ${payload.callerId} to ${payload.calleeId}`);
     io.of("/call").to(`user:${payload.calleeId}`).emit(CallEvents.WEBRTC_OFFER, payload);
   }
 
-  public handleCallAnswer(io: Server, payload: ICallAnswerDTO) {
+  public async handleCallAnswer(io: Server, payload: ICallAnswerDTO) {
+    if (!(await this.verifyActiveSession(payload.callerId, payload.calleeId))) {
+      logger.warn(`[CallSignalling] Security block: Unauthorized WEBRTC_ANSWER from ${payload.calleeId} to ${payload.callerId}`);
+      return;
+    }
     logger.info(`[CallSignalling] Answer from ${payload.calleeId} to ${payload.callerId}`);
     io.of("/call").to(`user:${payload.callerId}`).emit(CallEvents.WEBRTC_ANSWER, payload);
   }
 
-  public handleIceCandidate(io: Server, payload: IIceCandidateDTO) {
+  public async handleIceCandidate(io: Server, payload: IIceCandidateDTO) {
+    if (!(await this.verifyActiveSession(payload.callerId, payload.calleeId))) {
+      logger.warn(`[CallSignalling] Security block: Unauthorized WEBRTC_ICE_CANDIDATE from ${payload.callerId} to ${payload.calleeId}`);
+      return;
+    }
     // Relay candidate to the other peer
     logger.info(`[CallSignalling] ICE Candidate from ${payload.callerId} to ${payload.calleeId}`);
     io.of("/call").to(`user:${payload.calleeId}`).emit(CallEvents.WEBRTC_ICE_CANDIDATE, payload);
