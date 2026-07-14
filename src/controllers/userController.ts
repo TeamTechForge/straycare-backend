@@ -198,10 +198,20 @@ exports.searchUsers = catchAsync(async (req: Request, res: Response, next: NextF
 
     const users: any[] = await User.find({
       _id: { $ne: currentUserId },
-      $or: [
-        { name: { $regex: query, $options: "i" } },
-        { email: { $regex: query, $options: "i" } },
-      ],
+      $and: [
+        {
+          $or: [
+            { name: { $regex: query, $options: "i" } },
+            { email: { $regex: query, $options: "i" } },
+          ],
+        },
+        {
+          $or: [
+            { role: { $nin: ["ngo", "vet"] } },
+            { isApproved: true }
+          ]
+        }
+      ]
     })
       .select("name email role profileCompleted profileImage avatar")
       .limit(20)
@@ -315,7 +325,31 @@ exports.savePushToken = catchAsync(async (req: Request, res: Response, next: Nex
       },
     });
   } catch (error) {
-    console.error("[PUSH] Failed to save push token:", error);
-    res.status(500).json({ message: "Failed to save push token" });
+    console.error("[PUSH] Error saving push token:", error);
+    next(error);
+  }
+});
+
+// Remove push notification token for user (opt-out)
+exports.deletePushToken = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const userId = req.user?.id;
+
+  if (!userId) {
+    res.status(401).json({ message: "Unauthorized. Please login first." });
+    return;
+  }
+
+  try {
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $unset: { pushToken: 1 } },
+      { new: true }
+    );
+
+    console.log(`[PUSH] Push token removed for user ${userId}`);
+    res.status(200).json({ message: "Push token removed successfully" });
+  } catch (error) {
+    console.error("[PUSH] Error removing push token:", error);
+    next(error);
   }
 });
