@@ -92,7 +92,7 @@ exports.updatePrivacySettings = catchAsync(async (req: Request, res: Response, n
 // Block or unblock a user
 exports.toggleBlockUser = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const currentUserId = req.user!.id;
-  const { id: targetUserId } = req.params;
+  const targetUserId = req.params.id as string;
 
   if (!mongoose.Types.ObjectId.isValid(targetUserId)) {
     res.status(400).json({ message: "Invalid user ID format" });

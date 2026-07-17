@@ -166,7 +166,7 @@ const getMyProfile = catchAsync(async (req: Request, res: Response, next: NextFu
 
 const updateGeneralProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const userId = req.user!.id;
-  const { location, bio, profileImage } = req.body;
+  const { name, location, bio, profileImage } = req.body;
 
   const profile = await GeneralUserProfile.findOneAndUpdate(
     { userId },
@@ -179,14 +179,16 @@ const updateGeneralProfile = catchAsync(async (req: Request, res: Response, next
     return;
   }
 
-  await User.findByIdAndUpdate(userId, { profileImage: profile.profileImage || "" });
+  const userUpdates: any = { profileImage: profile.profileImage || "" };
+  if (name) userUpdates.name = name;
+  await User.findByIdAndUpdate(userId, userUpdates);
 
   res.status(200).json({ message: "Profile updated successfully", profile });
 });
 
 const updateVolunteerProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const userId = req.user!.id;
-  const { location, bio, profileImage } = req.body;
+  const { name, location, bio, profileImage } = req.body;
 
   const profile = await VolunteerProfile.findOneAndUpdate(
     { userId },
@@ -199,7 +201,9 @@ const updateVolunteerProfile = catchAsync(async (req: Request, res: Response, ne
     return;
   }
 
-  await User.findByIdAndUpdate(userId, { profileImage: profile.profileImage || "" });
+  const userUpdates: any = { profileImage: profile.profileImage || "" };
+  if (name) userUpdates.name = name;
+  await User.findByIdAndUpdate(userId, userUpdates);
 
   res.status(200).json({ message: "Profile updated successfully", profile });
 });
@@ -226,7 +230,7 @@ const updateNGOProfile = catchAsync(async (req: Request, res: Response, next: Ne
 
 const updateVetProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const userId = req.user!.id;
-  const { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret } = req.body;
+  const { name, primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret } = req.body;
 
   const profile = await VetProfile.findOneAndUpdate(
     { userId },
@@ -239,7 +243,9 @@ const updateVetProfile = catchAsync(async (req: Request, res: Response, next: Ne
     return;
   }
 
-  await User.findByIdAndUpdate(userId, { profileImage: profile.profileImage || "" });
+  const userUpdates: any = { profileImage: profile.profileImage || "" };
+  if (name) userUpdates.name = name;
+  await User.findByIdAndUpdate(userId, userUpdates);
 
   res.status(200).json({ message: "Profile updated successfully", profile });
 });
