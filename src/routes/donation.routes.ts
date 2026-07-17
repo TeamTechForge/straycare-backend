@@ -23,6 +23,9 @@ router.get("/history", donationController.getHistory);
 // Get total donations for an organization
 router.get("/total/:orgId", donationController.getTotalForOrg);
 
+// Get received donations for an organization
+router.get("/received/:orgId", donationController.getReceivedByOrg);
+
 // Get all donations (admin dashboard)
 router.get("/", authMiddleware, donationController.getAllDonations);
 

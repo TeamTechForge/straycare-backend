@@ -11,10 +11,42 @@ import { AppError } from "../utils/AppError";
 // GET all posts
 exports.listPosts = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     // get user id if sent 
-    const userId = req.query.userId ? String(req.query.userId) : null;
+    let userId = req.query.userId ? String(req.query.userId) : null;
+    
+    if (userId === "forum-guest") {
+      userId = null;
+    }
+
+    if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+      const token = req.headers.authorization.split(" ")[1];
+      try {
+        const jwt = require("jsonwebtoken");
+        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
+        userId = decoded.id;
+      } catch (err) {
+        // ignore invalid token
+      }
+    }
+
+    let blockedIds: string[] = [];
+
+    if (userId) {
+      // 1. Users I have blocked
+      const me = await User.findById(userId).select("blockedUsers").lean();
+      if (me && me.blockedUsers) {
+        blockedIds = [...blockedIds, ...me.blockedUsers.map((id: any) => String(id))];
+      }
+      
+      // 2. Users who have blocked me
+      const usersWhoBlockedMe = await User.find({ blockedUsers: userId }).select("_id").lean();
+      const usersWhoBlockedMeIds = usersWhoBlockedMe.map((u: any) => String(u._id));
+      
+      blockedIds = [...blockedIds, ...usersWhoBlockedMeIds];
+    }
 
     // get posts from DB 
-    const posts = await ForumPost.find().sort({ createdAt: -1 });
+    const query = blockedIds.length > 0 ? { userId: { $nin: blockedIds } } : {};
+    const posts = await ForumPost.find(query).sort({ createdAt: -1 });
 
     // format response
     const response = posts.map((post: any) => ({
