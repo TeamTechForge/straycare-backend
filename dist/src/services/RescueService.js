@@ -90,7 +90,7 @@ class RescueService {
         });
         Logger_1.Logger.info(`Request ${request._id} created for ${rescuer.name}`, { service: "RescueService" });
         if (rescuer.userId) {
-            await NotificationService.sendNotification(rescuer.userId, "New Rescue Request", `A new rescue request for a ${payload.animalType || "stray animal"} is near you.`, "info");
+            await NotificationService.sendNotification(rescuer.userId, "New Rescue Request", `A new rescue request for a ${payload.animalType || "stray animal"} is near you.`, "info", String(request._id), payload.caseId || "");
             Logger_1.Logger.info(`Created notification for registered rescuer ${rescuer.userId}`, { service: "RescueService" });
         }
         if (!rescuer.userId) {

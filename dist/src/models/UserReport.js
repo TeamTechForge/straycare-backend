@@ -23,7 +23,7 @@ const UserReportSchema = new mongoose_1.default.Schema({
     description: {
         type: String,
         required: true,
-        minlength: 20,
+        minlength: 15,
     },
     status: {
         type: String,

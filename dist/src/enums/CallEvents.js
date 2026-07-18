@@ -12,5 +12,7 @@ var CallEvents;
     CallEvents["WEBRTC_OFFER"] = "webrtc:offer";
     CallEvents["WEBRTC_ANSWER"] = "webrtc:answer";
     CallEvents["WEBRTC_ICE_CANDIDATE"] = "webrtc:iceCandidate";
+    CallEvents["BUSY"] = "call:busy";
+    CallEvents["UNAUTHORIZED"] = "call:unauthorized";
 })(CallEvents || (exports.CallEvents = CallEvents = {}));
 //# sourceMappingURL=CallEvents.js.map

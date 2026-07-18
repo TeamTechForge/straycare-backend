@@ -18,7 +18,9 @@ const notificationSchema = new mongoose_1.default.Schema({
         enum: ["info", "success", "warning", "error", "welcome"],
         default: "info",
     },
-    isRead: { type: Boolean, default: false },
+    read: { type: Boolean, default: false },
+    rescueRequestId: { type: String, default: "" },
+    caseId: { type: String, default: "" },
 }, { timestamps: true });
 module.exports = mongoose_1.default.model("Notification", notificationSchema);
 //# sourceMappingURL=Notification.js.map

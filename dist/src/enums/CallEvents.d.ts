@@ -6,6 +6,8 @@ export declare enum CallEvents {
     ENDED = "call:ended",
     WEBRTC_OFFER = "webrtc:offer",
     WEBRTC_ANSWER = "webrtc:answer",
-    WEBRTC_ICE_CANDIDATE = "webrtc:iceCandidate"
+    WEBRTC_ICE_CANDIDATE = "webrtc:iceCandidate",
+    BUSY = "call:busy",
+    UNAUTHORIZED = "call:unauthorized"
 }
 //# sourceMappingURL=CallEvents.d.ts.map

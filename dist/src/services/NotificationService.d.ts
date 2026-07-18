@@ -10,6 +10,6 @@ export declare class NotificationService {
      * @param type - The severity/category of the notification. Defaults to "info".
      * @returns A promise that resolves when the operation is complete (or caught).
      */
-    static sendNotification(userId: string, title: string, message: string, type?: "info" | "success" | "warning" | "error" | "welcome"): Promise<void>;
+    static sendNotification(userId: string, title: string, message: string, type?: "info" | "success" | "warning" | "error" | "welcome", rescueRequestId?: string, caseId?: string): Promise<void>;
 }
 //# sourceMappingURL=NotificationService.d.ts.map

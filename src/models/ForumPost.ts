@@ -12,6 +12,7 @@ interface IForumPost extends mongoose.Document {
   likes: number;
   likedByUsers: string[];
   commentCount: number;
+  imageUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,7 +30,7 @@ const forumPostSchema = new mongoose.Schema(
     likes: { type: Number, default: 0 },
     likedByUsers: { type: [String], default: [] },
     commentCount: { type: Number, default: 0 },
-
+    imageUrl: { type: String, default: "" },
   },
   { timestamps: true } // automatically adds createdAt and updatedAt fields
 );

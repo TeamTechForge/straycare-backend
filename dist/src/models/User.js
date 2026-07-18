@@ -80,6 +80,10 @@ const userSchema = new mongoose_1.default.Schema({
         type: String,
         default: "",
     },
+    pushToken: {
+        type: String,
+        default: null,
+    },
 }, { timestamps: true });
 module.exports = mongoose_1.default.model("User", userSchema);
 //# sourceMappingURL=User.js.map

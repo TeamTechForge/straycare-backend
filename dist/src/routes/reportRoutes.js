@@ -5,7 +5,7 @@ const express = require("express");
 const { upload } = require("../config/gridfs");
 const router = express.Router();
 // Import controller functions
-const { createReport, getReportByCaseId, getAllReports, updateCaseStatus, } = require("../controllers/reportController");
+const { createReport, getReportByCaseId, getAllReports, updateCaseStatus, getUserNotifications, markNotificationRead, } = require("../controllers/reportController");
 const { verifyToken } = require("../middleware/authMiddleware");
 const { uploadFileToCloudinary } = require("../utils/cloudinaryUpload");
 // ------------------ UPLOAD ROUTE ------------------
@@ -44,6 +44,11 @@ router.get("/report/:caseId", getReportByCaseId);
 // Fetch all reports.Used by the map screen to display markers.
 router.get("/reports", getAllReports);
 // Update the status of a report.Controller also appends a new timeline entry.
-router.patch("/report/:caseId/status", updateCaseStatus);
+// 🔒 Requires authentication - only rescuers can update
+router.patch("/report/:caseId/status", verifyToken, updateCaseStatus);
+// Get user's notifications (reporter updates)
+router.get("/notifications", verifyToken, getUserNotifications);
+// Mark a notification as read
+router.patch("/notifications/:notificationId/read", verifyToken, markNotificationRead);
 module.exports = router;
 //# sourceMappingURL=reportRoutes.js.map

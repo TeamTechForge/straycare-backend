@@ -162,9 +162,64 @@ exports.createReport = catchAsync(async (req: Request, res: Response, next: Next
     try {
       const newReport = await StrayReport.create(reportPayload);
       console.log("[STRAY][SUCCESS] Report created:", newReport._id);
+
+      // ────────────────────────────────────────────────────────
+      // AUTOMATIC NEAREST RESCUER LOOKUP & REQUEST
+      // ────────────────────────────────────────────────────────
+      let rescueRequest = null;
+      try {
+        const { RescueService } = require("../services/RescueService");
+        const User = require("../models/User");
+        
+        const reporterUser = req.user ? await User.findById(req.user.id) : null;
+        
+        console.log(`[STRAY] Attempting automatic rescuer matching for report ${newReport.caseId}`);
+        const nearestResult = await RescueService.findNearestRescuer({
+          latitude: newReport.location.lat,
+          longitude: newReport.location.lng,
+          caseId: newReport.caseId,
+        });
+
+        if (nearestResult) {
+          const distanceKm = Number(nearestResult.distance);
+          const etaMinutes = Math.max(3, Math.round(distanceKm * 6));
+          const requestPayload = {
+            userId: newReport.reporterUserId || String(reporterUser?._id) || "anonymous",
+            caseId: newReport.caseId,
+            animalType: newReport.animalType,
+            description: newReport.description || "Stray animal needs help",
+            photos: newReport.photos || [],
+            reporterName: reporterUser?.name || "Reporter",
+            reporterPhone: reporterUser?.phone || "",
+            reporterAvatar: reporterUser?.profileImage || "",
+            reporterLocation: {
+              latitude: newReport.location.lat,
+              longitude: newReport.location.lng,
+              address: newReport.location.address || "",
+            },
+            rescueLocation: {
+              latitude: newReport.location.lat,
+              longitude: newReport.location.lng,
+              address: newReport.location.address || "",
+            },
+            distanceKm,
+            etaMinutes,
+            summary: newReport.description || "Automatic rescue assignment",
+          };
+
+          rescueRequest = await RescueService.createRescueRequest(requestPayload, nearestResult.rescuer);
+          console.log(`[STRAY] Successfully sent request ${rescueRequest._id} to nearest rescuer ${nearestResult.rescuer.name}`);
+        } else {
+          console.log("[STRAY] No available rescuers found for this case");
+        }
+      } catch (err: any) {
+        console.error("[STRAY] Automatic rescue matching failed:", err.message || err);
+      }
+
       res.status(201).json({
         message: "Report submitted successfully",
         request: newReport,
+        rescueRequest,
       });
     } catch (error: any) {
       // Handle duplicate key error (E11000)
@@ -217,7 +272,12 @@ exports.getReportByCaseId = catchAsync(async (req: Request, res: Response, next:
 
 // 3. GET ALL REPORTS
 exports.getAllReports = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const reports = await StrayReport.find({}, {
+    // Hide cases that are currently pending assignment to a specific rescuer
+    const RescueRequest = require("../models/RescueRequest");
+    const pendingRequests = await RescueRequest.find({ status: "pending" });
+    const pendingCaseIds = pendingRequests.map((r: any) => r.caseId).filter(Boolean);
+
+    const reports = await StrayReport.find({ caseId: { $nin: pendingCaseIds } }, {
       status: 1,
       location: 1,
       caseId: 1,
@@ -229,7 +289,7 @@ exports.getAllReports = catchAsync(async (req: Request, res: Response, next: Nex
       photos: 1,
       createdAt: 1
     });
-    console.log("[STRAY][GET] Fetched all reports:", reports.length);
+    console.log("[STRAY][GET] Fetched all reports (excluding pending rescue assignments):", reports.length);
     res.json(reports);
   });;
 

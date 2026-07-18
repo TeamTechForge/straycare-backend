@@ -14,6 +14,7 @@ const AuthValidator_1 = require("../validators/AuthValidator");
 const JwtService_1 = require("../services/JwtService");
 const PasswordService_1 = require("../services/PasswordService");
 const NotificationService_1 = require("../services/NotificationService");
+const { sendPasswordResetCodeEmail } = require("../utils/emailService");
 const bcrypt = require("bcryptjs");
 const Notification = require("../models/Notification");
 const register = async (req, res, next) => {
@@ -144,27 +145,34 @@ const getMe = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
 const forgotPassword = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     const { email } = req.body;
     const user = await User.findOne({ email });
-    if (!user) {
-        res.status(404).json({ message: "User not found" });
-        return;
+    // Generate a 6-digit code
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedCode = crypto.createHash('sha256').update(resetCode).digest('hex');
+    if (user) {
+        user.resetPasswordToken = hashedCode;
+        user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+        await user.save();
+        try {
+            await sendPasswordResetCodeEmail(user.email, resetCode);
+        }
+        catch (err) {
+            console.error("Error sending reset email:", err);
+        }
     }
-    const resetToken = crypto.randomBytes(20).toString("hex");
-    user.resetPasswordToken = resetToken;
-    user.resetPasswordExpires = Date.now() + 3600000;
-    await user.save();
+    // Always return 200 to prevent user enumeration
     res.status(200).json({
-        message: "Reset token generated successfully",
-        resetToken: process.env.NODE_ENV === "production" ? undefined : resetToken,
+        message: "If this email is registered, a 6-digit reset code has been sent.",
     });
 });
 const resetPassword = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     const { token, newPassword } = req.body;
+    const hashedCode = crypto.createHash('sha256').update(token).digest('hex');
     const user = await User.findOne({
-        resetPasswordToken: token,
+        resetPasswordToken: hashedCode,
         resetPasswordExpires: { $gt: Date.now() },
     });
     if (!user) {
-        res.status(400).json({ message: "Invalid or expired reset token" });
+        res.status(400).json({ message: "Invalid or expired reset code" });
         return;
     }
     const hashedPassword = await bcrypt.hash(newPassword, 10);

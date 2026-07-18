@@ -19,7 +19,7 @@ class NotificationService {
      * @param type - The severity/category of the notification. Defaults to "info".
      * @returns A promise that resolves when the operation is complete (or caught).
      */
-    static async sendNotification(userId, title, message, type = "info") {
+    static async sendNotification(userId, title, message, type = "info", rescueRequestId = "", caseId = "") {
         if (!userId || !mongoose_1.default.Types.ObjectId.isValid(userId)) {
             Logger_1.Logger.warn(`Invalid or missing userId: ${userId}`, { service: "NotificationService" });
             return;
@@ -30,6 +30,8 @@ class NotificationService {
                 title,
                 message,
                 type,
+                rescueRequestId,
+                caseId,
             });
             Logger_1.Logger.info(`Created '${type}' notification for user ${userId}: ${title}`, { service: "NotificationService" });
         }
