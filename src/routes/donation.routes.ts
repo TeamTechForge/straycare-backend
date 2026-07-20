@@ -23,6 +23,8 @@ router.get("/history", authMiddleware, donationController.getHistory);
 // Get total donations for an organization
 router.get("/total/:orgId", donationController.getTotalForOrg);
 
+// Get received donations for an organization
+router.get("/received/:orgId", donationController.getReceivedByOrg);
 // Get donations received by the logged-in vet/NGO, with donor names attached
 router.get("/received", authMiddleware, donationController.getReceivedDonations);
 

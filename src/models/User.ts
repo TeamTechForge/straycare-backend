@@ -19,6 +19,7 @@ interface IUser extends mongoose.Document {
   profileImage: string;
   pushToken?: string;
   organizationName?: string; // Added dynamically in getMe
+  blockedUsers?: mongoose.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -114,10 +115,18 @@ const userSchema = new mongoose.Schema(
     },
     pushToken: {
       type: String,
-      default: null,
     },
+
+    blockedUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
 module.exports = mongoose.model<IUser>("User", userSchema);

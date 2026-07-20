@@ -33,8 +33,18 @@ class PrivacyService {
   }
 
   public async canMessage(senderId: string, recipientId: string): Promise<{ allowed: boolean; reason?: string }> {
-    const recipient = await User.findById(recipientId).select("messagingPrivacy").lean();
-    if (!recipient) return { allowed: false, reason: "User not found" };
+    const recipient = await User.findById(recipientId).select("messagingPrivacy blockedUsers").lean();
+    const sender = await User.findById(senderId).select("blockedUsers").lean();
+
+    if (!recipient || !sender) return { allowed: false, reason: "User not found" };
+
+    if (sender.blockedUsers && sender.blockedUsers.map((id: any) => id.toString()).includes(recipientId.toString())) {
+      return { allowed: false, reason: "You have blocked this user" };
+    }
+    
+    if (recipient.blockedUsers && recipient.blockedUsers.map((id: any) => id.toString()).includes(senderId.toString())) {
+      return { allowed: false, reason: "You have been blocked by this user" };
+    }
 
     const privacy = recipient.messagingPrivacy || "everyone";
 
@@ -67,8 +77,18 @@ class PrivacyService {
   }
 
   public async canCall(callerId: string, receiverId: string): Promise<{ allowed: boolean; reason?: string }> {
-    const receiver = await User.findById(receiverId).select("callingPrivacy").lean();
-    if (!receiver) return { allowed: false, reason: "User not found" };
+    const receiver = await User.findById(receiverId).select("callingPrivacy blockedUsers").lean();
+    const caller = await User.findById(callerId).select("blockedUsers").lean();
+
+    if (!receiver || !caller) return { allowed: false, reason: "User not found" };
+
+    if (caller.blockedUsers && caller.blockedUsers.map((id: any) => id.toString()).includes(receiverId.toString())) {
+      return { allowed: false, reason: "You have blocked this user" };
+    }
+    
+    if (receiver.blockedUsers && receiver.blockedUsers.map((id: any) => id.toString()).includes(callerId.toString())) {
+      return { allowed: false, reason: "You have been blocked by this user" };
+    }
 
     const privacy = receiver.callingPrivacy || "everyone";
 

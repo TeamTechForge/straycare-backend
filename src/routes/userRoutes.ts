@@ -10,6 +10,7 @@ const {
   updatePrivacySettings,
   savePushToken,
   deletePushToken,
+  toggleBlockUser,
 } = require("../controllers/userController");
 const { verifyToken } = require("../middleware/authMiddleware");
 
@@ -20,6 +21,7 @@ userRouter.put("/privacy", verifyToken, updatePrivacySettings);
 userRouter.get("/:userId/public-profile", verifyToken, getPublicProfile);
 userRouter.get("/:userId/posts", getUserPosts);
 userRouter.get("/:userId/reports", getUserReports);
+userRouter.post("/:id/block", verifyToken, toggleBlockUser);
 
 // Store push notification token for mobile notifications
 userRouter.post("/push-token", verifyToken, savePushToken);
