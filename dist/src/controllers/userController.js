@@ -17,9 +17,11 @@ const UserReport = require("../models/UserReport");
 const mongoose_1 = __importDefault(require("mongoose"));
 const ProfileStatsService_1 = require("../services/ProfileStatsService");
 const NotificationService_1 = require("../services/NotificationService");
+const PrivacyService_1 = __importDefault(require("../services/PrivacyService"));
 // Fetch another user's public profile data (safe, sanitised)
 exports.getPublicProfile = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     const { userId } = req.params;
+    const currentUserId = req.user.id;
     if (!mongoose_1.default.Types.ObjectId.isValid(userId)) {
         res.status(400).json({ message: "Invalid user ID format" });
         return;
@@ -30,6 +32,8 @@ exports.getPublicProfile = (0, catchAsync_1.catchAsync)(async (req, res, next) =
         return;
     }
     const { profileData, stats } = await ProfileStatsService_1.ProfileStatsService.getProfileAndStats(userId, user.role);
+    const messagePermission = await PrivacyService_1.default.canMessage(currentUserId, userId);
+    const callPermission = await PrivacyService_1.default.canCall(currentUserId, userId);
     res.status(200).json({
         user: {
             id: user._id,
@@ -40,6 +44,35 @@ exports.getPublicProfile = (0, catchAsync_1.catchAsync)(async (req, res, next) =
         },
         profile: profileData,
         stats,
+        permissions: {
+            canMessage: messagePermission.allowed,
+            canCall: callPermission.allowed,
+        }
+    });
+});
+;
+// Update Privacy Settings
+exports.updatePrivacySettings = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
+    const { messagingPrivacy, callingPrivacy } = req.body;
+    const currentUserId = req.user.id;
+    const validOptions = ["everyone", "contacts", "relatedOnly", "none"];
+    if (messagingPrivacy && !validOptions.includes(messagingPrivacy)) {
+        res.status(400).json({ message: "Invalid messaging privacy option" });
+        return;
+    }
+    if (callingPrivacy && !validOptions.includes(callingPrivacy)) {
+        res.status(400).json({ message: "Invalid calling privacy option" });
+        return;
+    }
+    const updates = {};
+    if (messagingPrivacy)
+        updates.messagingPrivacy = messagingPrivacy;
+    if (callingPrivacy)
+        updates.callingPrivacy = callingPrivacy;
+    const updatedUser = await User.findByIdAndUpdate(currentUserId, { $set: updates }, { new: true, runValidators: true }).select("-password").lean();
+    res.status(200).json({
+        message: "Privacy settings updated successfully",
+        user: updatedUser
     });
 });
 ;
@@ -145,21 +178,40 @@ exports.searchUsers = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     }
     const users = await User.find({
         _id: { $ne: currentUserId },
-        $or: [
-            { name: { $regex: query, $options: "i" } },
-            { email: { $regex: query, $options: "i" } },
-        ],
+        $and: [
+            {
+                $or: [
+                    { name: { $regex: query, $options: "i" } },
+                    { email: { $regex: query, $options: "i" } },
+                ],
+            },
+            {
+                $or: [
+                    { role: { $nin: ["ngo", "vet"] } },
+                    { isApproved: true }
+                ]
+            }
+        ]
     })
         .select("name email role profileCompleted profileImage avatar")
         .limit(20)
         .lean();
-    // Self-healing check
-    for (let u of users) {
+    // Attach permissions & Self-healing check
+    const processedUsers = await Promise.all(users.map(async (u) => {
         if (!u.profileImage) {
             u.profileImage = u.avatar || "";
         }
-    }
-    res.status(200).json(users);
+        const messagePermission = await PrivacyService_1.default.canMessage(currentUserId, u._id.toString());
+        const callPermission = await PrivacyService_1.default.canCall(currentUserId, u._id.toString());
+        return {
+            ...u,
+            permissions: {
+                canMessage: messagePermission.allowed,
+                canCall: callPermission.allowed
+            }
+        };
+    }));
+    res.status(200).json(processedUsers);
 });
 ;
 // Admin endpoint to approve a user account (NGO / Vet)
@@ -211,4 +263,50 @@ exports.approveUser = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     });
 });
 ;
+// Store push notification token for user
+exports.savePushToken = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
+    const userId = req.user?.id;
+    const { pushToken } = req.body;
+    if (!userId) {
+        res.status(401).json({ message: "Unauthorized. Please login first." });
+        return;
+    }
+    if (!pushToken) {
+        res.status(400).json({ message: "pushToken is required" });
+        return;
+    }
+    try {
+        const user = await User.findByIdAndUpdate(userId, { pushToken }, { new: true }).select("name email pushToken");
+        console.log(`[PUSH] Push token saved for user ${userId}`);
+        res.status(200).json({
+            message: "Push token saved successfully",
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+            },
+        });
+    }
+    catch (error) {
+        console.error("[PUSH] Error saving push token:", error);
+        next(error);
+    }
+});
+// Remove push notification token for user (opt-out)
+exports.deletePushToken = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
+    const userId = req.user?.id;
+    if (!userId) {
+        res.status(401).json({ message: "Unauthorized. Please login first." });
+        return;
+    }
+    try {
+        const user = await User.findByIdAndUpdate(userId, { $unset: { pushToken: 1 } }, { new: true });
+        console.log(`[PUSH] Push token removed for user ${userId}`);
+        res.status(200).json({ message: "Push token removed successfully" });
+    }
+    catch (error) {
+        console.error("[PUSH] Error removing push token:", error);
+        next(error);
+    }
+});
 //# sourceMappingURL=userController.js.map

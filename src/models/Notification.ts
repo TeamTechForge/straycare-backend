@@ -6,6 +6,8 @@ interface INotification extends mongoose.Document {
   message: string;
   type: "info" | "success" | "warning" | "error" | "welcome";
   read: boolean;
+  rescueRequestId?: string;
+  caseId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,6 +28,8 @@ const notificationSchema = new mongoose.Schema(
       default: "info",
     },
     read: { type: Boolean, default: false },
+    rescueRequestId: { type: String, default: "" },
+    caseId: { type: String, default: "" },
   },
   { timestamps: true }
 );

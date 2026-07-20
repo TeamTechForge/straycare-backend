@@ -58,10 +58,10 @@ app.use(cors({
         if (!origin)
             return callback(null, true);
         const isAllowed = allowedOrigins.includes(origin) ||
+            // Allow any device on the 10.x.x.x range (Expo development, Android emulator)
+            /^https?:\/\/10\.[0-9]+\.[0-9]+\.[0-9]+(:[0-9]+)?$/.test(origin) ||
             // Allow any device on the 192.168.x.x home/office network (LAN)
             /^https?:\/\/192\.168\.[0-9]+\.[0-9]+(:[0-9]+)?$/.test(origin) ||
-            // Allow Android emulator (its special IP that maps to your PC)
-            /^https?:\/\/10\.0\.[0-9]+\.[0-9]+(:[0-9]+)?$/.test(origin) ||
             // Allow Docker or mobile hotspot IPs
             /^https?:\/\/172\.[0-9]+\.[0-9]+\.[0-9]+(:[0-9]+)?$/.test(origin) ||
             // Allow localhost in any form
@@ -84,6 +84,7 @@ app.use("/api/admin", adminAuthRoutes);
 app.use("/api/profiles", profileRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/call-logs", require("./routes/callLogRoutes"));
 app.use("/api/chat", chatRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/users", userRouter);
@@ -97,6 +98,7 @@ app.use("/api/admin", reportedUsersRoutes);
 app.use("/api/moderation", moderationRoutes);
 app.use("/api/admin-notifications", adminNotificationsRoutes);
 app.use("/api/admins", adminManagementRoutes);
+app.use("/api/support", require("./routes/supportRoutes"));
 app.get("/ping", (req, res) => {
     return res.status(200).json({
         ok: true,

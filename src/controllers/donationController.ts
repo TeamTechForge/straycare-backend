@@ -3,8 +3,11 @@ import mongoose from "mongoose";
 import { ObjectId } from "mongodb";
 import type { Request, Response, NextFunction } from "express";
 import { catchAsync } from "../utils/catchAsync";
+import { donorLookupService } from "../services/DonorLookupService";
 
 const Donation = require("../models/Donation");
+const VetProfile = require("../models/VetProfile");
+const NGOProfile = require("../models/NGOProfile");
 
 export interface IDonationInitiateRequest {
   amount: string;
@@ -22,14 +25,13 @@ export interface IDonationSaveRequest {
   category?: string;
   organization?: string;
   organizationId?: string;
-  donorId?: string;
   frequency?: string;
   plan?: string;
   status?: string;
 }
 
 export class DonationController {
-  private static readonly baseUrl: string = process.env.BACKEND_URL || "http://192.168.8.160:5000";
+  private static readonly baseUrl: string = process.env.BACKEND_URL || "http://192.168.8.100:5000";
 
   public initiateDonation = catchAsync(async (req: Request<{}, {}, IDonationInitiateRequest>, res: Response, next: NextFunction): Promise<void> => {
     const db = mongoose.connection.db;
@@ -129,19 +131,22 @@ export class DonationController {
   };
 
   public saveDonation = catchAsync(async (req: Request<{}, {}, IDonationSaveRequest>, res: Response, next: NextFunction): Promise<void> => {
-    const { orderId, amount, category, organization, organizationId, donorId, frequency, plan, status } = req.body;
-      const donation = await Donation.create({
-        orderId,
-        amount: parseFloat(amount as string),
-        category: category || "General",
-        organization: organization || "StrayCare",
-        organizationId: organizationId || null,
-        donorId: donorId || null,
-        frequency: frequency || "One-time",
-        plan: plan || "",
-        status: status || "SUCCESS",
-        timestamp: new Date(),
-      });
+    const { orderId, amount, category, organization, organizationId, frequency, plan, status } = req.body;
+
+    const donorId = req.user?.id || null;
+
+    const donation = await Donation.create({
+      orderId,
+      amount: parseFloat(amount as string),
+      category: category || "General",
+      organization: organization || "StrayCare",
+      organizationId: organizationId || null,
+      donorId,
+      frequency: frequency || "One-time",
+      plan: plan || "",
+      status: status || "SUCCESS",
+      timestamp: new Date(),
+    });
     res.json({ success: true, donation });
   });
 
@@ -151,7 +156,9 @@ export class DonationController {
   };
 
   public getHistory = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const donations = await Donation.find().sort({ timestamp: -1 });
+    const donorId = req.user?.id;
+
+    const donations = await Donation.find({ donorId }).sort({ timestamp: -1 });
     res.json(donations);
   });
 
@@ -169,6 +176,33 @@ export class DonationController {
     const { orgId } = req.params;
     const donations = await Donation.find({ organizationId: orgId, status: "SUCCESS" }).sort({ timestamp: -1 });
     res.json(donations);
+  public getReceivedDonations = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+
+    let orgProfile: any = null;
+
+    if (role === "vet") {
+      orgProfile = await VetProfile.findOne({ userId });
+    } else if (role === "ngo") {
+      orgProfile = await NGOProfile.findOne({ userId });
+    } else {
+      res.status(403).json({ error: "Only vets and NGOs can view received donations" });
+      return;
+    }
+
+    if (!orgProfile) {
+      res.status(404).json({ error: "Organization profile not found" });
+      return;
+    }
+
+    const orgId = orgProfile._id.toString();
+
+    const donations = await Donation.find({ organizationId: orgId, status: "SUCCESS" }).sort({ timestamp: -1 });
+
+    const enriched = await donorLookupService.attachDonorNames(donations);
+
+    res.json(enriched);
   });
 
   public getAllDonations = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {

@@ -10,7 +10,7 @@ const getNotifications = (0, catchAsync_1.catchAsync)(async (req, res, next) => 
 });
 const markAsRead = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     const { id } = req.params;
-    await Notification.findByIdAndUpdate(id, { isRead: true });
+    await Notification.findByIdAndUpdate(id, { read: true });
     res.status(200).json({ message: "Notification marked as read" });
 });
 module.exports = {

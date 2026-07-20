@@ -6,6 +6,7 @@ const multer = require("multer");
 const path = require("path");
 const { upload: gridFsUpload, uploadToGridFs } = require("../config/gridfs");
 const { createReport, getReportByCaseId, getAllReports, updateCaseStatus, } = require("../controllers/strayController");
+const { verifyToken } = require("../middleware/authMiddleware");
 // ------------------ MULTER STORAGE ------------------
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -34,6 +35,7 @@ router.post("/reports", createReport);
 // Get a single report by caseId
 router.get("/report/:caseId", getReportByCaseId);
 router.get("/reports", getAllReports);
-router.patch("/report/:caseId/status", updateCaseStatus);
+// 🔒 Update case status - Requires authentication (rescuers only)
+router.patch("/report/:caseId/status", verifyToken, updateCaseStatus);
 module.exports = router;
 //# sourceMappingURL=strayRoutes.js.map

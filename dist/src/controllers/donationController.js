@@ -8,7 +8,10 @@ const crypto_1 = __importDefault(require("crypto"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const mongodb_1 = require("mongodb");
 const catchAsync_1 = require("../utils/catchAsync");
+const DonorLookupService_1 = require("../services/DonorLookupService");
 const Donation = require("../models/Donation");
+const VetProfile = require("../models/VetProfile");
+const NGOProfile = require("../models/NGOProfile");
 class DonationController {
     constructor() {
         this.initiateDonation = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
@@ -95,14 +98,15 @@ class DonationController {
             res.send(formHtml);
         };
         this.saveDonation = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
-            const { orderId, amount, category, organization, organizationId, donorId, frequency, plan, status } = req.body;
+            const { orderId, amount, category, organization, organizationId, frequency, plan, status } = req.body;
+            const donorId = req.user?.id || null;
             const donation = await Donation.create({
                 orderId,
                 amount: parseFloat(amount),
                 category: category || "General",
                 organization: organization || "StrayCare",
                 organizationId: organizationId || null,
-                donorId: donorId || null,
+                donorId,
                 frequency: frequency || "One-time",
                 plan: plan || "",
                 status: status || "SUCCESS",
@@ -115,7 +119,8 @@ class DonationController {
             res.sendStatus(200);
         };
         this.getHistory = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
-            const donations = await Donation.find().sort({ timestamp: -1 });
+            const donorId = req.user?.id;
+            const donations = await Donation.find({ donorId }).sort({ timestamp: -1 });
             res.json(donations);
         });
         this.getTotalForOrg = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
@@ -127,6 +132,29 @@ class DonationController {
             const totalAmount = result.length > 0 ? result[0].total : 0;
             res.json({ total: totalAmount });
         });
+        this.getReceivedDonations = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
+            const userId = req.user?.id;
+            const role = req.user?.role;
+            let orgProfile = null;
+            if (role === "vet") {
+                orgProfile = await VetProfile.findOne({ userId });
+            }
+            else if (role === "ngo") {
+                orgProfile = await NGOProfile.findOne({ userId });
+            }
+            else {
+                res.status(403).json({ error: "Only vets and NGOs can view received donations" });
+                return;
+            }
+            if (!orgProfile) {
+                res.status(404).json({ error: "Organization profile not found" });
+                return;
+            }
+            const orgId = orgProfile._id.toString();
+            const donations = await Donation.find({ organizationId: orgId, status: "SUCCESS" }).sort({ timestamp: -1 });
+            const enriched = await DonorLookupService_1.donorLookupService.attachDonorNames(donations);
+            res.json(enriched);
+        });
         this.getAllDonations = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
             const donations = await Donation.find().sort({ timestamp: -1 });
             res.json(donations);
@@ -134,6 +162,6 @@ class DonationController {
     }
 }
 exports.DonationController = DonationController;
-DonationController.baseUrl = process.env.BACKEND_URL || "http://192.168.8.160:5000";
+DonationController.baseUrl = process.env.BACKEND_URL || "http://192.168.8.100:5000";
 exports.donationController = new DonationController();
 //# sourceMappingURL=donationController.js.map

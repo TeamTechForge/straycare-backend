@@ -59,6 +59,7 @@ exports.listPosts = catchAsync(async (req: Request, res: Response, next: NextFun
       likedByMe: userId ? post.likedByUsers.includes(userId) : false,
       commentCount: post.commentCount || 0,
       createdAt: post.createdAt,
+      imageUrl: post.imageUrl || "",
     }));
 
     res.json(response);
@@ -66,7 +67,7 @@ exports.listPosts = catchAsync(async (req: Request, res: Response, next: NextFun
 
 // CREATE new post
 exports.createPost = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const { title, tag = "GENERAL", author } = req.body;
+    const { title, tag = "GENERAL", author, imageUrl } = req.body;
     console.log("[FORUM][POST] /api/forum/posts from", req.ip, "title:", title);
 
 
@@ -91,6 +92,7 @@ exports.createPost = catchAsync(async (req: Request, res: Response, next: NextFu
       tag,
       author: authorName,
       userId,
+      imageUrl: imageUrl || "",
     });
 
     // create empty thread for comments (if not exist)
@@ -99,6 +101,27 @@ exports.createPost = catchAsync(async (req: Request, res: Response, next: NextFu
       { $setOnInsert: { rescueId: String(post._id), comments: [] } },
       { new: true, upsert: true }
     );
+
+    // Dispatch in-app notifications to all registered users (except the author)
+    try {
+      const { NotificationService } = require("../services/NotificationService");
+      const allUsers = await User.find({
+        role: { $in: ["general_user", "volunteer", "ngo", "vet"] },
+        _id: { $ne: userId }
+      });
+
+      console.log(`[FORUM] Dispatching new post notifications to ${allUsers.length} users`);
+      for (const u of allUsers) {
+        await NotificationService.sendNotification(
+          String(u._id),
+          "New Discussion Thread",
+          `${authorName} started a new discussion: "${post.title}"`,
+          "info"
+        );
+      }
+    } catch (err: any) {
+      console.error("[FORUM] Failed to dispatch new discussion notifications:", err.message || err);
+    }
 
     res.status(201).json({
       message: "Post created",
@@ -110,6 +133,7 @@ exports.createPost = catchAsync(async (req: Request, res: Response, next: NextFu
         likes: post.likes,
         likedByMe: false,
         commentCount: post.commentCount || 0,
+        imageUrl: post.imageUrl || "",
         createdAt: post.createdAt,
       },
     });
@@ -199,9 +223,31 @@ exports.addComment = catchAsync(async (req: Request, res: Response, next: NextFu
     await thread.save();
 
     // update comment count in post (ignore error if post missing)
-    await ForumPost.findByIdAndUpdate(rescueId, {
+    const post = await ForumPost.findByIdAndUpdate(rescueId, {
       commentCount: thread.comments.length,
-    }).catch(() => { });
+    });
+
+    // Notify the post author if someone else replies to their thread
+    if (post && post.userId && String(post.userId) !== String(userId)) {
+      try {
+        const mongoose = require("mongoose");
+        const { NotificationService } = require("../services/NotificationService");
+        const User = require("../models/User");
+        let replierName = "Someone";
+        if (mongoose.Types.ObjectId.isValid(userId)) {
+          const replier = await User.findById(userId);
+          if (replier) replierName = replier.name;
+        }
+        await NotificationService.sendNotification(
+          String(post.userId),
+          "Reply to your Discussion",
+          `${replierName} replied to your thread "${post.title}": "${text.substring(0, 40)}${text.length > 40 ? "..." : ""}"`,
+          "info"
+        );
+      } catch (err: any) {
+        console.error("[FORUM] Failed to send reply notification to post author:", err.message || err);
+      }
+    }
 
     res.json({
       message: "Comment added",

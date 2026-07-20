@@ -136,7 +136,9 @@ export class RescueService {
         rescuer.userId,
         "New Rescue Request",
         `A new rescue request for a ${payload.animalType || "stray animal"} is near you.`,
-        "info"
+        "info",
+        String(request._id),
+        payload.caseId || ""
       );
       Logger.info(`Created notification for registered rescuer ${rescuer.userId}`, { service: "RescueService" });
     }

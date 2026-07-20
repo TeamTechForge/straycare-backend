@@ -19,6 +19,7 @@ const forumPostSchema = new mongoose_1.default.Schema({
     likes: { type: Number, default: 0 },
     likedByUsers: { type: [String], default: [] },
     commentCount: { type: Number, default: 0 },
+    imageUrl: { type: String, default: "" },
 }, { timestamps: true } // automatically adds createdAt and updatedAt fields
 );
 // Export so forumController.js can create and query posts

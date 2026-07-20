@@ -26,7 +26,7 @@ const findRequestByIdOrCustomId = async (id: string): Promise<any> => {
     request = await RescueRequest.findOne({ rescueRequestId: id }).populate("rescuerId");
   }
   if (!request) {
-    request = await RescueRequest.findOne({ caseId: id }).populate("rescuerId");
+    request = await RescueRequest.findOne({ caseId: id }).sort({ createdAt: -1 }).populate("rescuerId");
   }
   return request;
 };
@@ -65,6 +65,7 @@ const formatCaseRecord = ({ request, rescuer = null, history = null }: { request
   const rescuerFromModel = rescuer
     ? {
       id: String(rescuer._id),
+      userId: rescuer.userId ? String(rescuer.userId) : "",
       name: rescuer.name,
       avatar: rescuer.avatar || "",
       phone: rescuer.phone || "",
@@ -75,12 +76,17 @@ const formatCaseRecord = ({ request, rescuer = null, history = null }: { request
   const rescuerFromData = history || request.rescuerName
     ? {
       id: history?.rescuerId || request.rescuerId || "",
+      userId: "",
       name: history?.rescuerName || request.rescuerName || "",
       avatar: history?.rescuerAvatar || request.rescuerAvatar || "",
       phone: history?.rescuerPhone || request.rescuerPhone || "",
       location: RescueMathHelper.normalizeLocation(history?.rescuerLocation || request.rescueLocation, rescueLocation, 0),
     }
     : null;
+
+  const finalRescuer = rescuerFromModel
+    ? { ...rescuerFromData, ...rescuerFromModel }
+    : rescuerFromData;
 
   const photosList = normalizePhotoList(request.photos || history?.photos);
 
@@ -96,7 +102,7 @@ const formatCaseRecord = ({ request, rescuer = null, history = null }: { request
     updatedAt: getIsoString(request.updatedAt || request.createdAt),
     completedAt: history?.completedAt ? getIsoString(history.completedAt) : null,
     reporter: {
-      id: request.reporterId || requestId,
+      id: request.userId || history?.userId || request.reporterId || requestId,
       name: request.reporterName || history?.reporterName || "Reporter",
       phone: request.reporterPhone || history?.reporterPhone || "",
       avatar: request.reporterAvatar || history?.reporterAvatar || "",
@@ -106,7 +112,7 @@ const formatCaseRecord = ({ request, rescuer = null, history = null }: { request
       name: request.reporterName || history?.reporterName || "Reporter",
       phone: request.reporterPhone || history?.reporterPhone || "",
     },
-    rescuer: rescuerFromModel || rescuerFromData,
+    rescuer: finalRescuer,
     location: rescueLocation,
     distanceKm,
     etaMinutes,
@@ -298,7 +304,17 @@ exports.getRescueById = catchAsync(async (req: Request, res: Response, next: Nex
     }
 
     if (history) {
-      const formatted = formatCaseRecord({ request: history, history });
+      let rescuerDoc = null;
+      try {
+        const Rescuer = require("../models/Rescuer");
+        if (history.rescuerId && mongoose.Types.ObjectId.isValid(history.rescuerId)) {
+          rescuerDoc = await Rescuer.findById(history.rescuerId);
+        }
+      } catch (err: any) {
+        console.error("[RESCUE] Failed to look up rescuer for history:", err.message);
+      }
+
+      const formatted = formatCaseRecord({ request: history, history, rescuer: rescuerDoc });
       res.json({
         ...formatted,
         reporterLocation: formatted.reporter.location,
@@ -414,17 +430,99 @@ exports.respondToRescueRequest = catchAsync(async (req: Request, res: Response, 
 
     console.log(`[RESCUE] Rescuer responded to request ${id} with: ${request.status}`);
 
-    if (action === "accept" && request.userId && mongoose.Types.ObjectId.isValid(request.userId)) {
+    if (action === "accept") {
+      // 1. Update StrayReport status to "Under Rescue"
       try {
-        const rescuer = await Rescuer.findById(request.rescuerId);
-        await NotificationService.sendNotification(
-          String(request.userId),
-          "Rescue Request Accepted",
-          `${rescuer.name} has accepted your rescue request and is on their way!`,
-          "success"
-        );
+        const StrayReport = require("../models/strayreport");
+        const report = await StrayReport.findOne({ caseId: request.caseId });
+        if (report) {
+          report.status = "Under Rescue";
+          if (!report.timeline) report.timeline = [];
+          report.timeline.push({
+            status: "Under Rescue",
+            message: `Case accepted by rescuer: ${request.rescuerName || "Rescuer"}`,
+            timestamp: new Date(),
+          });
+          await report.save();
+          console.log(`[RESCUE] StrayReport ${request.caseId} updated status to 'Under Rescue'`);
+        }
       } catch (err: any) {
-        console.error("[RESCUE] Failed to create notification for reporter:", err.message);
+        console.error("[RESCUE] Failed to update StrayReport status on accept:", err.message || err);
+      }
+
+      if (request.userId && mongoose.Types.ObjectId.isValid(request.userId)) {
+        try {
+          const rescuer = await Rescuer.findById(request.rescuerId);
+          await NotificationService.sendNotification(
+            String(request.userId),
+            "Rescue Request Accepted",
+            `${rescuer.name} has accepted your rescue request and is on their way!`,
+            "success"
+          );
+        } catch (err: any) {
+          console.error("[RESCUE] Failed to create notification for reporter:", err.message);
+        }
+      }
+    }
+
+    if (action === "reject") {
+      // 2. Trigger circular matching to find the next nearest rescuer
+      try {
+        console.log(`[RESCUE] Rejection triggered circular matching lookup for caseId: ${request.caseId}`);
+        const rejections = await RescueRequest.find({ caseId: request.caseId, status: "rejected" });
+        const excludeIds = rejections.map((r: any) => String(r.rescuerId));
+
+        if (request.rescuerId && !excludeIds.includes(String(request.rescuerId))) {
+          excludeIds.push(String(request.rescuerId));
+        }
+
+        const nextRescuerResult = await RescueService.findNearestRescuer({
+          latitude: request.rescueLocation?.latitude || FALLBACK_RESCUE_LOCATION.latitude,
+          longitude: request.rescueLocation?.longitude || FALLBACK_RESCUE_LOCATION.longitude,
+          excludeIds,
+          caseId: request.caseId,
+        });
+
+        if (nextRescuerResult) {
+          const distanceKm = Number(nextRescuerResult.distance);
+          const etaMinutes = Math.max(3, Math.round(distanceKm * 6));
+
+          const nextRequestPayload = {
+            userId: request.userId,
+            caseId: request.caseId,
+            animalType: request.animalType,
+            description: request.description,
+            photos: request.photos,
+            reporterName: request.reporterName,
+            reporterPhone: request.reporterPhone,
+            reporterAvatar: request.reporterAvatar,
+            reporterLocation: request.reporterLocation,
+            rescueLocation: request.rescueLocation,
+            distanceKm,
+            etaMinutes,
+            summary: request.summary,
+          };
+
+          const nextRescueRequest = await RescueService.createRescueRequest(nextRequestPayload, nextRescuerResult.rescuer);
+          console.log(`[RESCUE] Successfully forwarded case ${request.caseId} to next rescuer ${nextRescuerResult.rescuer.name}`);
+        } else {
+          console.log(`[RESCUE] No more available rescuers found for case ${request.caseId}. Fallback to public map.`);
+          const StrayReport = require("../models/strayreport");
+          const report = await StrayReport.findOne({ caseId: request.caseId });
+          if (report) {
+            report.status = "Needs Help";
+            if (!report.timeline) report.timeline = [];
+            report.timeline.push({
+              status: "Needs Help",
+              message: "All nearby rescuers declined. Case is now open for public rescue.",
+              timestamp: new Date(),
+            });
+            await report.save();
+            console.log(`[RESCUE] StrayReport ${request.caseId} fallback to public map (status: Needs Help)`);
+          }
+        }
+      } catch (err: any) {
+        console.error("[RESCUE] Failed to execute circular matching:", err.message || err);
       }
     }
 
@@ -449,7 +547,7 @@ exports.updateRescueDetails = catchAsync(async (req: Request, res: Response, nex
       request = await RescueRequest.findOne({ rescueRequestId: id });
     }
     if (!request) {
-      request = await RescueRequest.findOne({ caseId: id });
+      request = await RescueRequest.findOne({ caseId: id }).sort({ createdAt: -1 });
     }
 
     let history: any = null;
