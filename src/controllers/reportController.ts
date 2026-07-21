@@ -167,18 +167,19 @@ exports.createReport = catchAsync(async (req: Request, res: Response, next: Next
       // AUTOMATIC NEAREST RESCUER LOOKUP & REQUEST
       // ────────────────────────────────────────────────────────
       let rescueRequest = null;
-      try {
-        const { RescueService } = require("../services/RescueService");
-        const User = require("../models/User");
-        
-        const reporterUser = req.user ? await User.findById(req.user.id) : null;
-        
-        console.log(`[STRAY] Attempting automatic rescuer matching for report ${newReport.caseId}`);
-        const nearestResult = await RescueService.findNearestRescuer({
-          latitude: newReport.location.lat,
-          longitude: newReport.location.lng,
-          caseId: newReport.caseId,
-        });
+      if (req.body.preventAutoMatch !== true) {
+        try {
+          const { RescueService } = require("../services/RescueService");
+          const User = require("../models/User");
+          
+          const reporterUser = req.user ? await User.findById(req.user.id) : null;
+          
+          console.log(`[STRAY] Attempting automatic rescuer matching for report ${newReport.caseId}`);
+          const nearestResult = await RescueService.findNearestRescuer({
+            latitude: newReport.location.lat,
+            longitude: newReport.location.lng,
+            caseId: newReport.caseId,
+          });
 
         if (nearestResult) {
           const distanceKm = Number(nearestResult.distance);
@@ -215,6 +216,7 @@ exports.createReport = catchAsync(async (req: Request, res: Response, next: Next
       } catch (err: any) {
         console.error("[STRAY] Automatic rescue matching failed:", err.message || err);
       }
+    }
 
       res.status(201).json({
         message: "Report submitted successfully",
@@ -314,7 +316,7 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
       return;
     }
 
-    const rescuerRoles = ["volunteer", "ngo", "vet"];
+    const rescuerRoles = ["volunteer", "ngo", "vet", "rescuer"];
     if (!rescuerRoles.includes(user.role)) {
       console.warn(`[STRAY][UNAUTHORIZED] User ${userId} (role: ${user.role}) attempted to update case status`);
       res.status(403).json({
@@ -330,6 +332,25 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
     if (!report) {
       res.status(404).json({ message: "Case not found" });
       return;
+    }
+
+    // 🔒 Check if case is assigned to a rescuer — only assigned rescuer can manage/update status
+    const RescueRequest = require("../models/RescueRequest");
+    const Rescuer = require("../models/Rescuer");
+
+    const activeRequest = await RescueRequest.findOne({
+      caseId,
+      status: { $in: ["pending", "accepted", "Under Rescue"] },
+    });
+
+    if (activeRequest && activeRequest.rescuerId) {
+      const rescuerDoc = await Rescuer.findOne({ userId });
+      if (!rescuerDoc || String(activeRequest.rescuerId) !== String(rescuerDoc._id)) {
+        res.status(403).json({
+          message: "Forbidden. Only the assigned rescuer can manage or update status for this case.",
+        });
+        return;
+      }
     }
 
     // Update main status

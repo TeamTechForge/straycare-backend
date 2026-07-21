@@ -225,6 +225,26 @@ exports.sendRescueRequest = catchAsync(async (req: Request, res: Response, next:
     });
   });;
 
+// PATCH /api/rescue/request/:id/cancel
+exports.cancelRescueRequest = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const id = req.params.id as string;
+    console.log(`[RESCUE] Cancel request called with id: ${id}`);
+
+    const request = await findRequestByIdOrCustomId(id);
+    if (!request) {
+      console.log(`[RESCUE] Cancel: No request found for id: ${id}`);
+      res.status(404).json({ error: "Request not found" });
+      return;
+    }
+
+    request.status = RescueStatus.CANCELLED;
+    await request.save();
+
+    console.log(`[RESCUE] Request ${id} cancelled by reporter (DB _id: ${request._id})`);
+
+    res.json({ success: true, request });
+  });;
+
 exports.listPendingRescues = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const pending = await RescueRequest.find({ status: { $in: [RescueStatus.PENDING, RescueStatus.ACCEPTED] } })
       .sort({ createdAt: -1 })
@@ -270,7 +290,7 @@ exports.listUserRescues = catchAsync(async (req: Request, res: Response, next: N
     let pendingQuery: any = { userId, status: { $in: [RescueStatus.PENDING, RescueStatus.ACCEPTED] } };
     let completedQuery: any = { userId, status: RescueStatus.COMPLETED };
 
-    if (user && (user.role === "volunteer" || user.role === "ngo" || user.role === "vet")) {
+    if (user && (user.role === "volunteer" || user.role === "ngo" || user.role === "vet" || user.role === "rescuer")) {
       const rescuer = await Rescuer.findOne({ userId: user._id });
       if (rescuer) {
         pendingQuery = { rescuerId: rescuer._id, status: { $in: [RescueStatus.PENDING, RescueStatus.ACCEPTED] } };
@@ -565,6 +585,14 @@ exports.updateRescueDetails = catchAsync(async (req: Request, res: Response, nex
     const newUpdate = `[${timestamp}] ${summary}`;
 
     if (request) {
+      if (request.rescuerId && req.user) {
+        const rescuerDoc = await Rescuer.findOne({ userId: req.user.id });
+        if (!rescuerDoc || String(request.rescuerId) !== String(rescuerDoc._id)) {
+          res.status(403).json({ error: "Forbidden. Only the assigned rescuer can update or manage this case." });
+          return;
+        }
+      }
+
       if (request.summary && request.summary !== "Pending rescue request" && request.summary !== "Completed rescue" && request.summary.trim() !== "") {
         request.summary = `${newUpdate}\n${request.summary}`;
       } else {
@@ -587,4 +615,114 @@ exports.updateRescueDetails = catchAsync(async (req: Request, res: Response, nex
     }
 
     res.status(404).json({ error: "Rescue request or history not found" });
+  });;
+
+// POST /api/rescue/accept-from-map
+// Allows a rescuer to directly accept a case from the public rescue map
+exports.acceptFromMap = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const { caseId } = req.body;
+    const userId = req.user!.id;
+
+    if (!caseId) {
+      res.status(400).json({ error: "caseId is required" });
+      return;
+    }
+
+    // Find rescuer document for this user
+    const rescuer = await Rescuer.findOne({ userId });
+    if (!rescuer) {
+      res.status(403).json({ error: "You are not registered as a rescuer" });
+      return;
+    }
+
+    // Find the stray report
+    const StrayReport = require("../models/strayreport");
+    const report = await StrayReport.findOne({ caseId });
+    if (!report) {
+      res.status(404).json({ error: "Case not found" });
+      return;
+    }
+
+    if (report.status !== "Needs Help") {
+      res.status(400).json({ error: `Case is already in status: ${report.status}` });
+      return;
+    }
+
+    // Create rescue request as already-accepted
+    const request = await RescueRequest.create({
+      rescuerId: rescuer._id,
+      userId: report.reporterUserId || "",
+      status: RescueStatus.ACCEPTED,
+      caseId,
+      animalType: report.animalType || "Unknown animal",
+      description: report.notes || "Rescue case accepted from map",
+      photos: report.photos || [],
+      reporterName: report.reporter?.name || "Reporter",
+      reporterPhone: report.reporter?.phone || "",
+      reporterAvatar: report.reporter?.profileImage || "",
+      rescueLocation: {
+        latitude: report.location?.lat || null,
+        longitude: report.location?.lng || null,
+        address: report.location?.address || "",
+      },
+      rescuerName: rescuer.name,
+      rescuerPhone: rescuer.phone || "",
+      rescuerAvatar: rescuer.avatar || "",
+      summary: `Accepted by ${rescuer.name} from rescue map`,
+    });
+
+    // Update stray report status to "Under Rescue"
+    report.status = "Under Rescue";
+    if (!report.timeline) report.timeline = [];
+    report.timeline.push({
+      status: "Under Rescue",
+      message: `Case accepted by rescuer: ${rescuer.name}`,
+      timestamp: new Date(),
+    });
+    await report.save();
+
+    console.log(`[RESCUE] Case ${caseId} accepted from map by rescuer ${rescuer.name} (${rescuer._id})`);
+
+    // Notify the reporter
+    if (report.reporterUserId && mongoose.Types.ObjectId.isValid(report.reporterUserId)) {
+      try {
+        await NotificationService.sendNotification(
+          String(report.reporterUserId),
+          "Rescue Request Accepted",
+          `${rescuer.name} has accepted your rescue case and is on their way!`,
+          "success",
+          String(request._id),
+          caseId
+        );
+      } catch (err: any) {
+        console.error("[RESCUE] Failed to notify reporter:", err.message);
+      }
+    }
+
+    // Emit socket event for real-time updates
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        const rescueNamespace = io.of("/rescue");
+        rescueNamespace.to(String(request._id)).emit("status_update", {
+          status: "Under Rescue",
+          rescuerId: String(rescuer._id),
+          rescuerName: rescuer.name,
+        });
+      }
+    } catch (err: any) {
+      console.error("[RESCUE] Socket emit failed:", err.message);
+    }
+
+    res.json({
+      success: true,
+      requestId: String(request._id),
+      request,
+      rescuer: {
+        _id: String(rescuer._id),
+        name: rescuer.name,
+        phone: rescuer.phone || "",
+        avatar: rescuer.avatar || "",
+      },
+    });
   });;

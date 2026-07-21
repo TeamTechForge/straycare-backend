@@ -130,51 +130,53 @@ exports.createReport = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         // AUTOMATIC NEAREST RESCUER LOOKUP & REQUEST
         // ────────────────────────────────────────────────────────
         let rescueRequest = null;
-        try {
-            const { RescueService } = require("../services/RescueService");
-            const User = require("../models/User");
-            const reporterUser = req.user ? await User.findById(req.user.id) : null;
-            console.log(`[STRAY] Attempting automatic rescuer matching for report ${newReport.caseId}`);
-            const nearestResult = await RescueService.findNearestRescuer({
-                latitude: newReport.location.lat,
-                longitude: newReport.location.lng,
-                caseId: newReport.caseId,
-            });
-            if (nearestResult) {
-                const distanceKm = Number(nearestResult.distance);
-                const etaMinutes = Math.max(3, Math.round(distanceKm * 6));
-                const requestPayload = {
-                    userId: newReport.reporterUserId || String(reporterUser?._id) || "anonymous",
+        if (req.body.preventAutoMatch !== true) {
+            try {
+                const { RescueService } = require("../services/RescueService");
+                const User = require("../models/User");
+                const reporterUser = req.user ? await User.findById(req.user.id) : null;
+                console.log(`[STRAY] Attempting automatic rescuer matching for report ${newReport.caseId}`);
+                const nearestResult = await RescueService.findNearestRescuer({
+                    latitude: newReport.location.lat,
+                    longitude: newReport.location.lng,
                     caseId: newReport.caseId,
-                    animalType: newReport.animalType,
-                    description: newReport.description || "Stray animal needs help",
-                    photos: newReport.photos || [],
-                    reporterName: reporterUser?.name || "Reporter",
-                    reporterPhone: reporterUser?.phone || "",
-                    reporterAvatar: reporterUser?.profileImage || "",
-                    reporterLocation: {
-                        latitude: newReport.location.lat,
-                        longitude: newReport.location.lng,
-                        address: newReport.location.address || "",
-                    },
-                    rescueLocation: {
-                        latitude: newReport.location.lat,
-                        longitude: newReport.location.lng,
-                        address: newReport.location.address || "",
-                    },
-                    distanceKm,
-                    etaMinutes,
-                    summary: newReport.description || "Automatic rescue assignment",
-                };
-                rescueRequest = await RescueService.createRescueRequest(requestPayload, nearestResult.rescuer);
-                console.log(`[STRAY] Successfully sent request ${rescueRequest._id} to nearest rescuer ${nearestResult.rescuer.name}`);
+                });
+                if (nearestResult) {
+                    const distanceKm = Number(nearestResult.distance);
+                    const etaMinutes = Math.max(3, Math.round(distanceKm * 6));
+                    const requestPayload = {
+                        userId: newReport.reporterUserId || String(reporterUser?._id) || "anonymous",
+                        caseId: newReport.caseId,
+                        animalType: newReport.animalType,
+                        description: newReport.description || "Stray animal needs help",
+                        photos: newReport.photos || [],
+                        reporterName: reporterUser?.name || "Reporter",
+                        reporterPhone: reporterUser?.phone || "",
+                        reporterAvatar: reporterUser?.profileImage || "",
+                        reporterLocation: {
+                            latitude: newReport.location.lat,
+                            longitude: newReport.location.lng,
+                            address: newReport.location.address || "",
+                        },
+                        rescueLocation: {
+                            latitude: newReport.location.lat,
+                            longitude: newReport.location.lng,
+                            address: newReport.location.address || "",
+                        },
+                        distanceKm,
+                        etaMinutes,
+                        summary: newReport.description || "Automatic rescue assignment",
+                    };
+                    rescueRequest = await RescueService.createRescueRequest(requestPayload, nearestResult.rescuer);
+                    console.log(`[STRAY] Successfully sent request ${rescueRequest._id} to nearest rescuer ${nearestResult.rescuer.name}`);
+                }
+                else {
+                    console.log("[STRAY] No available rescuers found for this case");
+                }
             }
-            else {
-                console.log("[STRAY] No available rescuers found for this case");
+            catch (err) {
+                console.error("[STRAY] Automatic rescue matching failed:", err.message || err);
             }
-        }
-        catch (err) {
-            console.error("[STRAY] Automatic rescue matching failed:", err.message || err);
         }
         res.status(201).json({
             message: "Report submitted successfully",
@@ -268,7 +270,7 @@ exports.updateCaseStatus = (0, catchAsync_1.catchAsync)(async (req, res, next) =
         res.status(404).json({ message: "User not found" });
         return;
     }
-    const rescuerRoles = ["volunteer", "ngo", "vet"];
+    const rescuerRoles = ["volunteer", "ngo", "vet", "rescuer"];
     if (!rescuerRoles.includes(user.role)) {
         console.warn(`[STRAY][UNAUTHORIZED] User ${userId} (role: ${user.role}) attempted to update case status`);
         res.status(403).json({
@@ -282,6 +284,22 @@ exports.updateCaseStatus = (0, catchAsync_1.catchAsync)(async (req, res, next) =
     if (!report) {
         res.status(404).json({ message: "Case not found" });
         return;
+    }
+    // 🔒 Check if case is assigned to a rescuer — only assigned rescuer can manage/update status
+    const RescueRequest = require("../models/RescueRequest");
+    const Rescuer = require("../models/Rescuer");
+    const activeRequest = await RescueRequest.findOne({
+        caseId,
+        status: { $in: ["pending", "accepted", "Under Rescue"] },
+    });
+    if (activeRequest && activeRequest.rescuerId) {
+        const rescuerDoc = await Rescuer.findOne({ userId });
+        if (!rescuerDoc || String(activeRequest.rescuerId) !== String(rescuerDoc._id)) {
+            res.status(403).json({
+                message: "Forbidden. Only the assigned rescuer can manage or update status for this case.",
+            });
+            return;
+        }
     }
     // Update main status
     report.status = status;

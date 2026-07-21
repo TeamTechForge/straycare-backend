@@ -83,7 +83,7 @@ const rescueRequestSchema = new mongoose.Schema({
   // Current state of the request
   status: {
     type: String,
-    enum: ["pending", "accepted", "rejected", "completed"], // completed supports finished cases in the new history tabs
+    enum: ["pending", "accepted", "rejected", "completed", "cancelled"], // completed supports finished cases in the new history tabs
     default: "pending",
   },
 
