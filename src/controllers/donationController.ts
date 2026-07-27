@@ -176,6 +176,8 @@ export class DonationController {
     const { orgId } = req.params;
     const donations = await Donation.find({ organizationId: orgId, status: "SUCCESS" }).sort({ timestamp: -1 });
     res.json(donations);
+  });
+
   public getReceivedDonations = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user?.id;
     const role = req.user?.role;
