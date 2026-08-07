@@ -8,7 +8,7 @@ const catchAsync_1 = require("../utils/catchAsync");
 const Conversation = require("../models/Conversation");
 const Message = require("../models/Message");
 const User = require("../models/User");
-const PrivacyService_1 = __importDefault(require("../services/PrivacyService"));
+const privacyService_1 = __importDefault(require("../services/privacyService"));
 // ── Helpers ─────────────────────────────────────────────────────
 const Role_enum_1 = require("../enums/Role.enum");
 const profileModels = {
@@ -47,12 +47,19 @@ const getConversations = (0, catchAsync_1.catchAsync)(async (req, res, next) => 
         .populate("participants", "name email role profileCompleted profileImage avatar")
         .sort({ "lastMessage.createdAt": -1, updatedAt: -1 })
         .lean();
-    // Self-healing check
+    // Self-healing check and inject shelter name for NGOs
+    const NGOProfile = require("../models/NGOProfile");
     for (let conv of conversations) {
         if (conv.participants) {
             for (let p of conv.participants) {
                 if (!p.profileImage) {
                     p.profileImage = p.avatar || "";
+                }
+                if (p.role === "ngo") {
+                    const profile = await NGOProfile.findOne({ userId: p._id }).select("orgName").lean();
+                    if (profile && profile.orgName) {
+                        p.name = profile.orgName;
+                    }
                 }
             }
         }
@@ -76,7 +83,7 @@ const getOrCreateConversation = (0, catchAsync_1.catchAsync)(async (req, res, ne
         return;
     }
     // Evaluate permissions without failing the request (so the UI can render gracefully)
-    const privacyResult = await PrivacyService_1.default.canMessage(userId, participantId);
+    const privacyResult = await privacyService_1.default.canMessage(userId, participantId);
     // Check for existing conversation between these two users
     let conversation = await Conversation.findOne({
         participants: { $all: [userId, participantId], $size: 2 },
@@ -88,11 +95,18 @@ const getOrCreateConversation = (0, catchAsync_1.catchAsync)(async (req, res, ne
         if (conversation.deletedFor && conversation.deletedFor.includes(userId)) {
             await Conversation.findByIdAndUpdate(conversation._id, { $pull: { deletedFor: userId } });
         }
-        // Self-healing check
+        // Self-healing check and inject shelter name for NGOs
+        const NGOProfile = require("../models/NGOProfile");
         if (conversation.participants) {
             for (let p of conversation.participants) {
                 if (!p.profileImage) {
                     p.profileImage = p.avatar || "";
+                }
+                if (p.role === "ngo") {
+                    const profile = await NGOProfile.findOne({ userId: p._id }).select("orgName").lean();
+                    if (profile && profile.orgName) {
+                        p.name = profile.orgName;
+                    }
                 }
             }
         }
@@ -116,11 +130,18 @@ const getOrCreateConversation = (0, catchAsync_1.catchAsync)(async (req, res, ne
     conversation = await Conversation.findById(newConversation._id)
         .populate("participants", "name email role profileCompleted profileImage avatar")
         .lean();
-    // Self-healing check
+    // Self-healing check and inject shelter name for NGOs
+    const NGOProfile = require("../models/NGOProfile");
     if (conversation && conversation.participants) {
         for (let p of conversation.participants) {
             if (!p.profileImage) {
                 p.profileImage = p.avatar || "";
+            }
+            if (p.role === "ngo") {
+                const profile = await NGOProfile.findOne({ userId: p._id }).select("orgName").lean();
+                if (profile && profile.orgName) {
+                    p.name = profile.orgName;
+                }
             }
         }
     }
@@ -202,7 +223,7 @@ const sendMessage = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     // Enforce privacy strictness on actual sending
     const otherParticipantId = conversation.participants.find((p) => p.toString() !== userId);
     if (otherParticipantId) {
-        const privacyResult = await PrivacyService_1.default.canMessage(userId, otherParticipantId.toString());
+        const privacyResult = await privacyService_1.default.canMessage(userId, otherParticipantId.toString());
         if (!privacyResult.allowed) {
             console.warn(`[chatController] ❌ Message Blocked by Privacy: ${privacyResult.reason}`);
             res.status(403).json({ message: privacyResult.reason });

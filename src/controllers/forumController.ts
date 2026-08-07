@@ -6,7 +6,7 @@ const User = require("../models/User");
 
 import type { Request, Response } from "express";
 
-import { AppError } from "../utils/AppError";
+import { AppError } from "../utils/appError";
 
 // GET all posts
 exports.listPosts = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -104,7 +104,7 @@ exports.createPost = catchAsync(async (req: Request, res: Response, next: NextFu
 
     // Dispatch in-app notifications to all registered users (except the author)
     try {
-      const { NotificationService } = require("../services/NotificationService");
+      const { NotificationService } = require("../services/notificationService");
       const allUsers = await User.find({
         role: { $in: ["general_user", "volunteer", "ngo", "vet"] },
         _id: { $ne: userId }
@@ -231,7 +231,7 @@ exports.addComment = catchAsync(async (req: Request, res: Response, next: NextFu
     if (post && post.userId && String(post.userId) !== String(userId)) {
       try {
         const mongoose = require("mongoose");
-        const { NotificationService } = require("../services/NotificationService");
+        const { NotificationService } = require("../services/notificationService");
         const User = require("../models/User");
         let replierName = "Someone";
         if (mongoose.Types.ObjectId.isValid(userId)) {

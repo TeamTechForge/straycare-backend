@@ -1,11 +1,11 @@
-// src/services/CallSignallingService.ts
+// src/services/callSignallingService.ts
 
 import { Server } from "socket.io";
 import { CallEvents } from "../enums/CallEvents";
 import { ICallStartDTO, ICallOfferDTO, ICallAnswerDTO, IIceCandidateDTO, ICallEndDTO, ICallDeclineDTO, ICallAcceptDTO } from "../types/call";
 import { CallStatus } from "../enums/CallStatus.enum";
-import { Logger as logger } from "../utils/Logger";
-import callLogService from "./CallLogService";
+import { Logger as logger } from "../utils/logger";
+import callLogService from "./callLogService";
 
 class CallSignallingService {
   // Mapping of userId -> Set of socketIds in the /call namespace
@@ -60,7 +60,7 @@ class CallSignallingService {
     }
 
     try {
-      const PrivacyService = require("./PrivacyService").default;
+      const PrivacyService = require("./privacyService").default;
       const privacyResult = await PrivacyService.canCall(caller.userId, calleeId);
       if (!privacyResult.allowed) {
         logger.info(`[CallSignalling] Call blocked by privacy: ${privacyResult.reason}`);

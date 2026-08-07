@@ -5,8 +5,8 @@
 
 import type { Server, Socket } from "socket.io";
 import { CallEvents } from "../enums/CallEvents";
-import CallSignallingService from "../services/CallSignallingService";
-import { Logger } from "../utils/Logger";
+import CallSignallingService from "../services/callSignallingService";
+import { Logger } from "../utils/logger";
 
 
 interface CallSocket extends Socket {
