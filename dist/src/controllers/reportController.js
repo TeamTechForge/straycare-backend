@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const catchAsync_1 = require("../utils/catchAsync");
-const NotificationService_1 = require("../services/NotificationService");
-const StrayReport = require("../models/strayreport");
+const notificationService_1 = require("../services/notificationService");
+const StrayReport = require("../models/StrayReport");
 // Helper function to send push notifications via Expo
 const sendPushNotification = async (pushToken, title, message, data) => {
     try {
@@ -132,7 +132,7 @@ exports.createReport = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         let rescueRequest = null;
         if (req.body.preventAutoMatch !== true) {
             try {
-                const { RescueService } = require("../services/RescueService");
+                const { RescueService } = require("../services/rescueService");
                 const User = require("../models/User");
                 const reporterUser = req.user ? await User.findById(req.user.id) : null;
                 console.log(`[STRAY] Attempting automatic rescuer matching for report ${newReport.caseId}`);
@@ -328,7 +328,7 @@ exports.updateCaseStatus = (0, catchAsync_1.catchAsync)(async (req, res, next) =
         const notificationMessage = statusMessages[status] || `Status updated to ${status}`;
         try {
             // Save in-app notification
-            await NotificationService_1.NotificationService.sendNotification(report.reporterUserId, "Case Status Update", notificationMessage, "success");
+            await notificationService_1.NotificationService.sendNotification(report.reporterUserId, "Case Status Update", notificationMessage, "success");
             console.log(`[STRAY] Notification sent to reporter for case ${report.caseId}`);
             // Send push notification if user has token
             try {

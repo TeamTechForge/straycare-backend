@@ -38,4 +38,4 @@ export declare class RescueService {
      */
     static createRescueRequest(payload: RescueRequestPayload, rescuer: any): Promise<any>;
 }
-//# sourceMappingURL=RescueService.d.ts.map
+//# sourceMappingURL=rescueService.d.ts.map

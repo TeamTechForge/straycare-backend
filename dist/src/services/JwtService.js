@@ -35,4 +35,4 @@ class JwtService {
     }
 }
 exports.JwtService = JwtService;
-//# sourceMappingURL=JwtService.js.map
+//# sourceMappingURL=jwtService.js.map

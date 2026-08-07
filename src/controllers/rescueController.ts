@@ -9,11 +9,11 @@ const RescueRequest = require("../models/RescueRequest");
 const RescueHistory = require("../models/RescueHistory");
 const { getDistance } = require("../utils/distance");
 
-import { NotificationService } from "../services/NotificationService";
-import { RescueService } from "../services/RescueService";
-import { Logger } from "../utils/Logger";
-import { AppError } from "../utils/AppError";
-import { RescueMathHelper } from "../utils/RescueMathHelper";
+import { NotificationService } from "../services/notificationService";
+import { RescueService } from "../services/rescueService";
+import { Logger } from "../utils/logger";
+import { AppError } from "../utils/appError";
+import { RescueMathHelper } from "../utils/rescueMathHelper";
 import { RescueStatus } from "../enums/RescueStatus";
 import type { Request, Response } from "express";
 
@@ -453,7 +453,7 @@ exports.respondToRescueRequest = catchAsync(async (req: Request, res: Response, 
     if (action === "accept") {
       // 1. Update StrayReport status to "Under Rescue"
       try {
-        const StrayReport = require("../models/strayreport");
+        const StrayReport = require("../models/StrayReport");
         const report = await StrayReport.findOne({ caseId: request.caseId });
         if (report) {
           report.status = "Under Rescue";
@@ -527,7 +527,7 @@ exports.respondToRescueRequest = catchAsync(async (req: Request, res: Response, 
           console.log(`[RESCUE] Successfully forwarded case ${request.caseId} to next rescuer ${nextRescuerResult.rescuer.name}`);
         } else {
           console.log(`[RESCUE] No more available rescuers found for case ${request.caseId}. Fallback to public map.`);
-          const StrayReport = require("../models/strayreport");
+          const StrayReport = require("../models/StrayReport");
           const report = await StrayReport.findOne({ caseId: request.caseId });
           if (report) {
             report.status = "Needs Help";
@@ -636,7 +636,7 @@ exports.acceptFromMap = catchAsync(async (req: Request, res: Response, next: Nex
     }
 
     // Find the stray report
-    const StrayReport = require("../models/strayreport");
+    const StrayReport = require("../models/StrayReport");
     const report = await StrayReport.findOne({ caseId });
     if (!report) {
       res.status(404).json({ error: "Case not found" });

@@ -45,4 +45,4 @@ RescueMathHelper.FALLBACK_RESCUE_LOCATION = {
     longitude: 79.8612,
     address: "Colombo, Sri Lanka",
 };
-//# sourceMappingURL=RescueMathHelper.js.map
+//# sourceMappingURL=rescueMathHelper.js.map

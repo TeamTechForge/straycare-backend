@@ -3,7 +3,7 @@ const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const Admin = require("../models/Admin");
 const bcrypt = require("bcryptjs");
-import { JwtService } from "../services/JwtService";
+import { JwtService } from "../services/jwtService";
 const { sendAdminInviteEmail } = require("../utils/emailService");
 
 import type { Request, Response } from "express";

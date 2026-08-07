@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NotificationService = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
-const Logger_1 = require("../utils/Logger");
+const logger_1 = require("../utils/logger");
 const Notification = require("../models/Notification");
 const User = require("../models/User");
 // Helper function to send push notifications via Expo Push Service
@@ -47,7 +47,7 @@ class NotificationService {
      */
     static async sendNotification(userId, title, message, type = "info", rescueRequestId = "", caseId = "") {
         if (!userId || !mongoose_1.default.Types.ObjectId.isValid(userId)) {
-            Logger_1.Logger.warn(`Invalid or missing userId: ${userId}`, { service: "NotificationService" });
+            logger_1.Logger.warn(`Invalid or missing userId: ${userId}`, { service: "NotificationService" });
             return;
         }
         try {
@@ -59,23 +59,23 @@ class NotificationService {
                 rescueRequestId,
                 caseId,
             });
-            Logger_1.Logger.info(`Created '${type}' notification for user ${userId}: ${title}`, { service: "NotificationService" });
+            logger_1.Logger.info(`Created '${type}' notification for user ${userId}: ${title}`, { service: "NotificationService" });
             // Send Expo Push Notification if recipient has registered a pushToken
             try {
                 const user = await User.findById(userId);
                 if (user && user.pushToken) {
                     await sendPushNotification(user.pushToken, title, message, { rescueRequestId, caseId });
-                    Logger_1.Logger.info(`Sent Expo push notification to user ${userId}`, { service: "NotificationService" });
+                    logger_1.Logger.info(`Sent Expo push notification to user ${userId}`, { service: "NotificationService" });
                 }
             }
             catch (pushErr) {
-                Logger_1.Logger.error("Failed to send push notification:", pushErr);
+                logger_1.Logger.error("Failed to send push notification:", pushErr);
             }
         }
         catch (err) {
-            Logger_1.Logger.error("Failed to create notification:", err);
+            logger_1.Logger.error("Failed to create notification:", err);
         }
     }
 }
 exports.NotificationService = NotificationService;
-//# sourceMappingURL=NotificationService.js.map
+//# sourceMappingURL=notificationService.js.map

@@ -5,11 +5,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RescueService = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
-const RescueMathHelper_1 = require("../utils/RescueMathHelper");
-const Logger_1 = require("../utils/Logger");
+const rescueMathHelper_1 = require("../utils/rescueMathHelper");
+const logger_1 = require("../utils/logger");
 const RescueStatus_1 = require("../enums/RescueStatus");
 const Rescuer = require("../models/Rescuer");
-const StrayReport = require("../models/strayreport");
+const StrayReport = require("../models/StrayReport");
 class RescueService {
     /**
      * Finds the nearest available rescuer based on coordinates, excluding specific IDs or the reporter themselves.
@@ -45,7 +45,7 @@ class RescueService {
         let nearest = null;
         let minDistance = Infinity;
         rescuers.forEach((rescuer) => {
-            const dist = RescueMathHelper_1.RescueMathHelper.deriveDistance({ latitude, longitude }, rescuer.location);
+            const dist = rescueMathHelper_1.RescueMathHelper.deriveDistance({ latitude, longitude }, rescuer.location);
             if (dist < minDistance) {
                 minDistance = dist;
                 nearest = rescuer;
@@ -67,7 +67,7 @@ class RescueService {
      */
     static async createRescueRequest(payload, rescuer) {
         const RescueRequest = require("../models/RescueRequest");
-        const { NotificationService } = require("./NotificationService");
+        const { NotificationService } = require("./notificationService");
         const request = await RescueRequest.create({
             rescuerId: rescuer._id,
             userId: payload.userId,
@@ -88,10 +88,10 @@ class RescueService {
             rescuerPhone: rescuer.phone || "",
             rescuerAvatar: rescuer.avatar || "",
         });
-        Logger_1.Logger.info(`Request ${request._id} created for ${rescuer.name}`, { service: "RescueService" });
+        logger_1.Logger.info(`Request ${request._id} created for ${rescuer.name}`, { service: "RescueService" });
         if (rescuer.userId) {
             await NotificationService.sendNotification(rescuer.userId, "New Rescue Request", `A new rescue request for a ${payload.animalType || "stray animal"} is near you.`, "info", String(request._id), payload.caseId || "");
-            Logger_1.Logger.info(`Created notification for registered rescuer ${rescuer.userId}`, { service: "RescueService" });
+            logger_1.Logger.info(`Created notification for registered rescuer ${rescuer.userId}`, { service: "RescueService" });
         }
         if (!rescuer.userId) {
             setTimeout(async () => {
@@ -99,22 +99,22 @@ class RescueService {
                     const accepted = Math.random() > 0.3;
                     request.status = accepted ? RescueStatus_1.RescueStatus.ACCEPTED : RescueStatus_1.RescueStatus.REJECTED;
                     await request.save();
-                    Logger_1.Logger.info(`Request ${request._id} resolved to: ${request.status}`, { service: "RescueService" });
+                    logger_1.Logger.info(`Request ${request._id} resolved to: ${request.status}`, { service: "RescueService" });
                     if (accepted && request.userId && mongoose_1.default.Types.ObjectId.isValid(request.userId)) {
                         await NotificationService.sendNotification(request.userId, "Rescue Request Accepted", `${rescuer.name} has accepted your rescue request and is on their way!`, "success");
-                        Logger_1.Logger.info(`Created success notification for reporter ${request.userId}`, { service: "RescueService" });
+                        logger_1.Logger.info(`Created success notification for reporter ${request.userId}`, { service: "RescueService" });
                     }
                 }
                 catch (e) {
-                    Logger_1.Logger.error("Auto-resolve failed", e);
+                    logger_1.Logger.error("Auto-resolve failed", e);
                 }
             }, 4000);
         }
         else {
-            Logger_1.Logger.info(`Matched rescuer ${rescuer.name} is a registered user (${rescuer.userId}). Waiting for real response...`, { service: "RescueService" });
+            logger_1.Logger.info(`Matched rescuer ${rescuer.name} is a registered user (${rescuer.userId}). Waiting for real response...`, { service: "RescueService" });
         }
         return request;
     }
 }
 exports.RescueService = RescueService;
-//# sourceMappingURL=RescueService.js.map
+//# sourceMappingURL=rescueService.js.map

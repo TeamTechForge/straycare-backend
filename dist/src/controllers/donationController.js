@@ -8,7 +8,7 @@ const crypto_1 = __importDefault(require("crypto"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const mongodb_1 = require("mongodb");
 const catchAsync_1 = require("../utils/catchAsync");
-const DonorLookupService_1 = require("../services/DonorLookupService");
+const donorLookupService_1 = require("../services/donorLookupService");
 const Donation = require("../models/Donation");
 const VetProfile = require("../models/VetProfile");
 const NGOProfile = require("../models/NGOProfile");
@@ -132,6 +132,11 @@ class DonationController {
             const totalAmount = result.length > 0 ? result[0].total : 0;
             res.json({ total: totalAmount });
         });
+        this.getReceivedByOrg = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
+            const { orgId } = req.params;
+            const donations = await Donation.find({ organizationId: orgId, status: "SUCCESS" }).sort({ timestamp: -1 });
+            res.json(donations);
+        });
         this.getReceivedDonations = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
             const userId = req.user?.id;
             const role = req.user?.role;
@@ -152,7 +157,7 @@ class DonationController {
             }
             const orgId = orgProfile._id.toString();
             const donations = await Donation.find({ organizationId: orgId, status: "SUCCESS" }).sort({ timestamp: -1 });
-            const enriched = await DonorLookupService_1.donorLookupService.attachDonorNames(donations);
+            const enriched = await donorLookupService_1.donorLookupService.attachDonorNames(donations);
             res.json(enriched);
         });
         this.getAllDonations = (0, catchAsync_1.catchAsync)(async (req, res, next) => {

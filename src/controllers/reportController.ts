@@ -1,7 +1,7 @@
 import { catchAsync } from "../utils/catchAsync";
 import type { NextFunction } from "express";
-import { NotificationService } from "../services/NotificationService";
-const StrayReport = require("../models/strayreport");
+import { NotificationService } from "../services/notificationService";
+const StrayReport = require("../models/StrayReport");
 
 import type { Request, Response } from "express";
 
@@ -169,7 +169,7 @@ exports.createReport = catchAsync(async (req: Request, res: Response, next: Next
       let rescueRequest = null;
       if (req.body.preventAutoMatch !== true) {
         try {
-          const { RescueService } = require("../services/RescueService");
+          const { RescueService } = require("../services/rescueService");
           const User = require("../models/User");
           
           const reporterUser = req.user ? await User.findById(req.user.id) : null;

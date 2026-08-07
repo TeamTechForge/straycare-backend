@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { Logger } from "../utils/Logger";
+import { Logger } from "../utils/logger";
 
 const Notification = require("../models/Notification");
 const User = require("../models/User");

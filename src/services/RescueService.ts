@@ -1,10 +1,10 @@
 import mongoose from "mongoose";
-import { RescueMathHelper } from "../utils/RescueMathHelper";
-import { Logger } from "../utils/Logger";
+import { RescueMathHelper } from "../utils/rescueMathHelper";
+import { Logger } from "../utils/logger";
 import { RescueStatus } from "../enums/RescueStatus";
 
 const Rescuer = require("../models/Rescuer");
-const StrayReport = require("../models/strayreport");
+const StrayReport = require("../models/StrayReport");
 
 export interface FindNearestRescuerParams {
   latitude: number;
@@ -106,7 +106,7 @@ export class RescueService {
    */
   public static async createRescueRequest(payload: RescueRequestPayload, rescuer: any): Promise<any> {
     const RescueRequest = require("../models/RescueRequest");
-    const { NotificationService } = require("./NotificationService");
+    const { NotificationService } = require("./notificationService");
 
     const request = await RescueRequest.create({
       rescuerId: rescuer._id,
