@@ -3,6 +3,9 @@ import mongoose from "mongoose";
 interface ITimelineEntry {
   status?: string;
   message?: string;
+  rescuerId?: mongoose.Types.ObjectId;
+  rescuerName?: string;
+  rescuerRole?: string;
   timestamp?: Date;
 }
 
@@ -49,6 +52,12 @@ const strayReportSchema = new mongoose.Schema(
       {
         status: { type: String },
         message: { type: String },
+        rescuerId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        rescuerName: { type: String },
+        rescuerRole: { type: String },
         timestamp: { type: Date, default: Date.now },
       },
     ],
