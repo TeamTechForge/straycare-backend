@@ -113,8 +113,9 @@ exports.listRescuers = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
 // POST /api/rescue/find-nearest
 // ─────────────────────────────────────────────────────────────
 exports.findNearestRescuer = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
-    const { latitude, longitude, excludeIds, caseId } = req.body;
-    console.log(`[RESCUE] Finding nearest rescuer to lat:${latitude} lng:${longitude}, excluding: ${excludeIds || "none"}, caseId: ${caseId || "none"}`);
+    const { latitude, longitude, excludeIds, caseId, maxDistanceKm } = req.body;
+    const maxDist = maxDistanceKm !== undefined && Number.isFinite(Number(maxDistanceKm)) ? Number(maxDistanceKm) : 5;
+    console.log(`[RESCUE] Finding nearest rescuer to lat:${latitude} lng:${longitude} within ${maxDist}km, excluding: ${excludeIds || "none"}, caseId: ${caseId || "none"}`);
     if (latitude === undefined || longitude === undefined) {
         res.status(400).json({ error: "latitude and longitude are required" });
         return;
@@ -125,14 +126,17 @@ exports.findNearestRescuer = (0, catchAsync_1.catchAsync)(async (req, res, next)
         res.status(400).json({ error: "latitude and longitude must be valid numbers" });
         return;
     }
+    const reporterUserId = req.user ? req.user.id : req.body.reporterUserId;
     const result = await RescueService_1.RescueService.findNearestRescuer({
         latitude: lat,
         longitude: lng,
         excludeIds,
-        caseId
+        caseId,
+        maxDistanceKm: maxDist,
+        reporterUserId,
     });
     if (!result) {
-        res.status(404).json({ error: "No rescuers available right now. Please try again later." });
+        res.status(404).json({ error: `No rescuers available within ${maxDist}km right now. Please try again later.` });
         return;
     }
     console.log(`[RESCUE] Nearest rescuer: ${result.rescuer.name} at ${result.distance} km`);
@@ -334,6 +338,7 @@ exports.checkRequestStatus = (0, catchAsync_1.catchAsync)(async (req, res, next)
         rescuer: request.rescuerId
             ? {
                 _id: String(request.rescuerId._id),
+                userId: String(request.rescuerId.userId || ""),
                 name: request.rescuerId.name,
                 phone: request.rescuerId.phone,
                 avatar: request.rescuerId.avatar || "",
@@ -517,6 +522,13 @@ exports.updateRescueDetails = (0, catchAsync_1.catchAsync)(async (req, res, next
         return;
     }
     if (history) {
+        if (history.rescuerId && req.user) {
+            const rescuerDoc = await Rescuer.findOne({ userId: req.user.id });
+            if (!rescuerDoc || String(history.rescuerId) !== String(rescuerDoc._id)) {
+                res.status(403).json({ error: "Forbidden. Only the assigned rescuer can update or manage this case." });
+                return;
+            }
+        }
         if (history.summary && history.summary !== "Pending rescue request" && history.summary !== "Completed rescue" && history.summary.trim() !== "") {
             history.summary = `${newUpdate}\n${history.summary}`;
         }

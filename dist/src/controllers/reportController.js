@@ -135,11 +135,12 @@ exports.createReport = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
                 const { RescueService } = require("../services/RescueService");
                 const User = require("../models/User");
                 const reporterUser = req.user ? await User.findById(req.user.id) : null;
-                console.log(`[STRAY] Attempting automatic rescuer matching for report ${newReport.caseId}`);
+                console.log(`[STRAY] Attempting automatic rescuer matching within 5km for report ${newReport.caseId}`);
                 const nearestResult = await RescueService.findNearestRescuer({
                     latitude: newReport.location.lat,
                     longitude: newReport.location.lng,
                     caseId: newReport.caseId,
+                    maxDistanceKm: 5,
                 });
                 if (nearestResult) {
                     const distanceKm = Number(nearestResult.distance);

@@ -29,9 +29,16 @@ class PrivacyService {
         return false;
     }
     async canMessage(senderId, recipientId) {
-        const recipient = await User.findById(recipientId).select("messagingPrivacy").lean();
-        if (!recipient)
+        const recipient = await User.findById(recipientId).select("messagingPrivacy blockedUsers").lean();
+        const sender = await User.findById(senderId).select("blockedUsers").lean();
+        if (!recipient || !sender)
             return { allowed: false, reason: "User not found" };
+        if (sender.blockedUsers && sender.blockedUsers.map((id) => id.toString()).includes(recipientId.toString())) {
+            return { allowed: false, reason: "You have blocked this user" };
+        }
+        if (recipient.blockedUsers && recipient.blockedUsers.map((id) => id.toString()).includes(senderId.toString())) {
+            return { allowed: false, reason: "You have been blocked by this user" };
+        }
         const privacy = recipient.messagingPrivacy || "everyone";
         if (privacy === "everyone")
             return { allowed: true };
@@ -60,9 +67,16 @@ class PrivacyService {
         return { allowed: true };
     }
     async canCall(callerId, receiverId) {
-        const receiver = await User.findById(receiverId).select("callingPrivacy").lean();
-        if (!receiver)
+        const receiver = await User.findById(receiverId).select("callingPrivacy blockedUsers").lean();
+        const caller = await User.findById(callerId).select("blockedUsers").lean();
+        if (!receiver || !caller)
             return { allowed: false, reason: "User not found" };
+        if (caller.blockedUsers && caller.blockedUsers.map((id) => id.toString()).includes(receiverId.toString())) {
+            return { allowed: false, reason: "You have blocked this user" };
+        }
+        if (receiver.blockedUsers && receiver.blockedUsers.map((id) => id.toString()).includes(callerId.toString())) {
+            return { allowed: false, reason: "You have been blocked by this user" };
+        }
         const privacy = receiver.callingPrivacy || "everyone";
         if (privacy === "everyone")
             return { allowed: true };

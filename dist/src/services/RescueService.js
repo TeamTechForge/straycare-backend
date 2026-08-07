@@ -12,15 +12,15 @@ const Rescuer = require("../models/Rescuer");
 const StrayReport = require("../models/strayreport");
 class RescueService {
     /**
-     * Finds the nearest available rescuer based on coordinates, excluding specific IDs or the reporter themselves.
+     * Finds the nearest available rescuer within a specified max distance (default 5km) based on coordinates, excluding specific IDs or the reporter themselves.
      */
     static async findNearestRescuer(params) {
-        const { latitude, longitude, excludeIds, caseId } = params;
-        let reporterUserId = null;
-        if (caseId) {
+        const { latitude, longitude, excludeIds, caseId, maxDistanceKm = 5 } = params;
+        let reporterUserId = params.reporterUserId || null;
+        if (!reporterUserId && caseId) {
             const report = await StrayReport.findOne({ caseId });
             if (report && report.reporterUserId) {
-                reporterUserId = report.reporterUserId;
+                reporterUserId = String(report.reporterUserId);
             }
         }
         const query = { isAvailable: true };
@@ -35,7 +35,7 @@ class RescueService {
         if (ninIds.length > 0) {
             query._id = { $nin: ninIds };
         }
-        if (reporterUserId) {
+        if (reporterUserId && mongoose_1.default.Types.ObjectId.isValid(reporterUserId)) {
             query.userId = { $ne: new mongoose_1.default.Types.ObjectId(reporterUserId) };
         }
         const rescuers = await Rescuer.find(query);
@@ -45,8 +45,17 @@ class RescueService {
         let nearest = null;
         let minDistance = Infinity;
         rescuers.forEach((rescuer) => {
+            // Ensure reporter is never selected as rescuer
+            if (reporterUserId) {
+                const rescuerUserIdStr = rescuer.userId ? String(rescuer.userId) : "";
+                const rescuerIdStr = rescuer._id ? String(rescuer._id) : "";
+                const repIdStr = String(reporterUserId);
+                if (rescuerUserIdStr === repIdStr || rescuerIdStr === repIdStr) {
+                    return;
+                }
+            }
             const dist = RescueMathHelper_1.RescueMathHelper.deriveDistance({ latitude, longitude }, rescuer.location);
-            if (dist < minDistance) {
+            if (dist <= maxDistanceKm && dist < minDistance) {
                 minDistance = dist;
                 nearest = rescuer;
             }

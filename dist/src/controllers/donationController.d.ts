@@ -26,6 +26,7 @@ export declare class DonationController {
     notifyPayhere: (req: Request, res: Response) => void;
     getHistory: (req: Request, res: Response, next: NextFunction) => void;
     getTotalForOrg: (req: Request, res: Response, next: NextFunction) => void;
+    getReceivedByOrg: (req: Request, res: Response, next: NextFunction) => void;
     getReceivedDonations: (req: Request, res: Response, next: NextFunction) => void;
     getAllDonations: (req: Request, res: Response, next: NextFunction) => void;
 }

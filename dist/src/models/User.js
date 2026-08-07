@@ -82,8 +82,15 @@ const userSchema = new mongoose_1.default.Schema({
     },
     pushToken: {
         type: String,
-        default: null,
     },
-}, { timestamps: true });
+    blockedUsers: [
+        {
+            type: mongoose_1.default.Schema.Types.ObjectId,
+            ref: "User",
+        },
+    ],
+}, {
+    timestamps: true,
+});
 module.exports = mongoose_1.default.model("User", userSchema);
 //# sourceMappingURL=User.js.map

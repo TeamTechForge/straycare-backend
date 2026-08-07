@@ -131,8 +131,9 @@ exports.listRescuers = catchAsync(async (req: Request, res: Response, next: Next
 // POST /api/rescue/find-nearest
 // ─────────────────────────────────────────────────────────────
 exports.findNearestRescuer = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const { latitude, longitude, excludeIds, caseId } = req.body;
-    console.log(`[RESCUE] Finding nearest rescuer to lat:${latitude} lng:${longitude}, excluding: ${excludeIds || "none"}, caseId: ${caseId || "none"}`);
+    const { latitude, longitude, excludeIds, caseId, maxDistanceKm } = req.body;
+    const maxDist = maxDistanceKm !== undefined && Number.isFinite(Number(maxDistanceKm)) ? Number(maxDistanceKm) : 5;
+    console.log(`[RESCUE] Finding nearest rescuer to lat:${latitude} lng:${longitude} within ${maxDist}km, excluding: ${excludeIds || "none"}, caseId: ${caseId || "none"}`);
 
     if (latitude === undefined || longitude === undefined) {
       res.status(400).json({ error: "latitude and longitude are required" });
@@ -147,15 +148,19 @@ exports.findNearestRescuer = catchAsync(async (req: Request, res: Response, next
       return;
     }
 
+    const reporterUserId = req.user ? req.user.id : req.body.reporterUserId;
+
     const result = await RescueService.findNearestRescuer({
       latitude: lat,
       longitude: lng,
       excludeIds,
-      caseId
+      caseId,
+      maxDistanceKm: maxDist,
+      reporterUserId,
     });
 
     if (!result) {
-      res.status(404).json({ error: "No rescuers available right now. Please try again later." });
+      res.status(404).json({ error: `No rescuers available within ${maxDist}km right now. Please try again later.` });
       return;
     }
 
@@ -312,6 +317,23 @@ exports.listUserRescues = catchAsync(async (req: Request, res: Response, next: N
       return rightTime - leftTime;
     });
 
+    // Overlay the real StrayReport status onto each record so the profile
+    // shows "Under Rescue", "Treated", etc. instead of the raw request status.
+    const StrayReportModel = require("../models/strayreport");
+    const caseIds = all.map((r: any) => r.caseId).filter(Boolean);
+    if (caseIds.length > 0) {
+      const strayReports = await StrayReportModel.find({ caseId: { $in: caseIds } }).select("caseId status").lean();
+      const statusMap: Record<string, string> = {};
+      for (const sr of strayReports) {
+        if (sr.caseId && sr.status) statusMap[sr.caseId] = sr.status;
+      }
+      for (const record of all as any[]) {
+        if (record.caseId && statusMap[record.caseId]) {
+          record.status = statusMap[record.caseId];
+        }
+      }
+    }
+
     Logger.info(`Found ${all.length} rescues for user ID: ${userId}`, { service: "RescueController" });
     res.json(all);
   });;
@@ -335,6 +357,17 @@ exports.getRescueById = catchAsync(async (req: Request, res: Response, next: Nex
       }
 
       const formatted = formatCaseRecord({ request: history, history, rescuer: rescuerDoc });
+      
+      const StrayReport = require("../models/strayreport");
+      const stray = await StrayReport.findOne({ caseId: history.caseId || id });
+      if (stray) {
+        if (stray.status) formatted.status = stray.status;
+        if (stray.userId) formatted.reporter.id = stray.userId;
+        if (stray.reporter?.profileImage) formatted.reporter.avatar = stray.reporter.profileImage;
+        if (stray.reporter?.name) formatted.reporter.name = stray.reporter.name;
+        formatted.timeline = stray.timeline || [];
+      }
+
       res.json({
         ...formatted,
         reporterLocation: formatted.reporter.location,
@@ -350,6 +383,17 @@ exports.getRescueById = catchAsync(async (req: Request, res: Response, next: Nex
 
     if (pendingRequest) {
       const formatted = formatCaseRecord({ request: pendingRequest, rescuer: pendingRequest.rescuerId || null });
+      
+      const StrayReport = require("../models/strayreport");
+      const stray = await StrayReport.findOne({ caseId: pendingRequest.caseId || id });
+      if (stray) {
+        if (stray.status) formatted.status = stray.status;
+        if (stray.userId) formatted.reporter.id = stray.userId;
+        if (stray.reporter?.profileImage) formatted.reporter.avatar = stray.reporter.profileImage;
+        if (stray.reporter?.name) formatted.reporter.name = stray.reporter.name;
+        formatted.timeline = stray.timeline || [];
+      }
+
       res.json({
         ...formatted,
         reporterLocation: formatted.reporter.location,
@@ -374,6 +418,13 @@ exports.getLiveTracking = catchAsync(async (req: Request, res: Response, next: N
     }
 
     const formatted = formatCaseRecord({ request, rescuer: request.rescuerId || null });
+    
+    const StrayReport = require("../models/strayreport");
+    const stray = await StrayReport.findOne({ caseId: request.caseId || requestId });
+    if (stray && stray.status) {
+      formatted.status = stray.status;
+    }
+
     res.json({
       ...formatted,
       reporterLocation: formatted.reporter.location,
@@ -401,6 +452,7 @@ exports.checkRequestStatus = catchAsync(async (req: Request, res: Response, next
       rescuer: request.rescuerId
         ? {
           _id: String(request.rescuerId._id),
+          userId: String(request.rescuerId.userId || ""),
           name: request.rescuerId.name,
           phone: request.rescuerId.phone,
           avatar: request.rescuerId.avatar || "",
@@ -552,10 +604,10 @@ exports.respondToRescueRequest = catchAsync(async (req: Request, res: Response, 
 // PATCH /api/rescue/request/:id/details
 exports.updateRescueDetails = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { id } = req.params;
-    const { summary } = req.body;
+    const { summary, status } = req.body;
 
-    if (!summary) {
-      res.status(400).json({ error: "Details/summary are required" });
+    if (!summary && !status) {
+      res.status(400).json({ error: "Details/summary or status are required" });
       return;
     }
 
@@ -581,36 +633,64 @@ exports.updateRescueDetails = catchAsync(async (req: Request, res: Response, nex
       history = await RescueHistory.findOne({ caseId: id });
     }
 
-    const timestamp = new Date().toLocaleString("en-US", { hour12: true });
-    const newUpdate = `[${timestamp}] ${summary}`;
-
-    if (request) {
-      if (request.rescuerId && req.user) {
-        const rescuerDoc = await Rescuer.findOne({ userId: req.user.id });
-        if (!rescuerDoc || String(request.rescuerId) !== String(rescuerDoc._id)) {
-          res.status(403).json({ error: "Forbidden. Only the assigned rescuer can update or manage this case." });
-          return;
-        }
+    // Authenticate rescuer
+    const activeDoc = request || history;
+    if (activeDoc && activeDoc.rescuerId && req.user) {
+      const rescuerDoc = await Rescuer.findOne({ userId: req.user.id });
+      if (!rescuerDoc || String(activeDoc.rescuerId) !== String(rescuerDoc._id)) {
+        res.status(403).json({ error: "Forbidden. Only the assigned rescuer can update or manage this case." });
+        return;
       }
-
-      if (request.summary && request.summary !== "Pending rescue request" && request.summary !== "Completed rescue" && request.summary.trim() !== "") {
-        request.summary = `${newUpdate}\n${request.summary}`;
-      } else {
-        request.summary = newUpdate;
-      }
-      await request.save();
-      res.json({ success: true, request });
-      return;
     }
 
-    if (history) {
-      if (history.summary && history.summary !== "Pending rescue request" && history.summary !== "Completed rescue" && history.summary.trim() !== "") {
-        history.summary = `${newUpdate}\n${history.summary}`;
-      } else {
-        history.summary = newUpdate;
+    // Block updates if the case is already completed
+    if (activeDoc && activeDoc.caseId) {
+      const StrayReportCheck = require("../models/strayreport");
+      const existingReport = await StrayReportCheck.findOne({ caseId: activeDoc.caseId }).select("status").lean();
+      if (existingReport && existingReport.status === "Completed") {
+        res.status(400).json({ error: "This rescue case has been completed and can no longer be updated." });
+        return;
       }
-      await history.save();
-      res.json({ success: true, history });
+    }
+
+    const timestamp = new Date().toLocaleString("en-US", { hour12: true });
+    let newUpdate = "";
+
+    if (summary) {
+      newUpdate = `[${timestamp}] ${summary}`;
+      if (activeDoc) {
+        if (activeDoc.summary && activeDoc.summary !== "Pending rescue request" && activeDoc.summary !== "Completed rescue" && activeDoc.summary.trim() !== "") {
+          activeDoc.summary = `${newUpdate}\n${activeDoc.summary}`;
+        } else {
+          activeDoc.summary = newUpdate;
+        }
+      }
+    }
+
+    // If status is provided, update StrayReport, and optionally RescueRequest
+    let strayReport: any = null;
+    if (status && activeDoc && activeDoc.caseId) {
+      const StrayReportModel = require("../models/strayreport");
+      strayReport = await StrayReportModel.findOne({ caseId: activeDoc.caseId });
+      if (strayReport) {
+        strayReport.status = status;
+        if (!strayReport.timeline) strayReport.timeline = [];
+        strayReport.timeline.push({
+          status: status,
+          message: summary || `Status updated to ${status}`,
+          timestamp: new Date(),
+        });
+        await strayReport.save();
+      }
+
+      if (status === "Completed") {
+        activeDoc.status = "completed";
+      }
+    }
+
+    if (activeDoc) {
+      await activeDoc.save();
+      res.json({ success: true, doc: activeDoc, report: strayReport });
       return;
     }
 

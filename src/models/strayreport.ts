@@ -16,7 +16,7 @@ interface IStrayReport extends mongoose.Document {
   caseId: string;
   animalType: string;
   description: string;
-  status: "Needs Help" | "Under Rescue" | "Treated" | "Ready for Adoption";
+  status: "Needs Help" | "Under Rescue" | "Treated" | "Ready for Adoption" | "Completed";
   location: IStrayReportLocation;
   photos: string[];
   anonymous: boolean;
@@ -34,7 +34,7 @@ const strayReportSchema = new mongoose.Schema(
     description: { type: String, default: "" },
     status: {
       type: String,
-      enum: ["Needs Help", "Under Rescue", "Treated", "Ready for Adoption"],
+      enum: ["Needs Help", "Under Rescue", "Treated", "Ready for Adoption", "Completed"],
       default: "Needs Help",
     },
     location: {
