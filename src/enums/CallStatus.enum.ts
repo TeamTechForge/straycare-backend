@@ -1,0 +1,9 @@
+export enum CallStatus {
+  RINGING = "RINGING",
+  ANSWERED = "ANSWERED",
+  MISSED = "MISSED",
+  REJECTED = "REJECTED",
+  FAILED = "FAILED",
+  ENDED = "ENDED",
+  BUSY = "BUSY",
+}
