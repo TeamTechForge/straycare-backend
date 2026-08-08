@@ -8,10 +8,10 @@ const VetProfile = require("../models/VetProfile");
 const GeneralUserProfile = require("../models/GeneralUserProfile");
 
 import { Role } from "../enums/Role.enum";
-import { AuthValidator } from "../validators/AuthValidator";
-import { JwtService } from "../services/JwtService";
-import { PasswordService } from "../services/PasswordService";
-import { NotificationService } from "../services/NotificationService";
+import { AuthValidator } from "../validators/authValidator";
+import { JwtService } from "../services/jwtService";
+import { PasswordService } from "../services/passwordService";
+import { NotificationService } from "../services/notificationService";
 const { sendPasswordResetCodeEmail } = require("../utils/emailService");
 import type { Request, Response, NextFunction } from "express";
 const Notification = require("../models/Notification");
@@ -51,7 +51,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
     await NotificationService.sendNotification(
       String(user._id),
       "Welcome to StrayCare!",
-      `Hi ${name}, welcome to our community! Together we can save more stray animals. 🐾`,
+      `Hi ${name}, welcome to our community! Together we can save more stray animals. ðŸ¾`,
       "welcome"
     );
 
@@ -313,12 +313,12 @@ const googleAuth = catchAsync(async (req: Request, res: Response, next: NextFunc
   let isNewUser = false;
 
   if (user) {
-    // Existing user — update googleId and avatar if not already set
+    // Existing user â€” update googleId and avatar if not already set
     if (!user.googleId) user.googleId = uid;
     if (!user.avatar && picture) user.avatar = picture;
     await user.save();
   } else {
-    // New user — create account
+    // New user â€” create account
     isNewUser = true;
     user = await User.create({
       name: displayName || email.split("@")[0],
@@ -332,7 +332,7 @@ const googleAuth = catchAsync(async (req: Request, res: Response, next: NextFunc
     await NotificationService.sendNotification(
       String(user._id),
       "Welcome to StrayCare!",
-      `Hi ${user.name}, welcome to our community! Together we can save more stray animals. 🐾`,
+      `Hi ${user.name}, welcome to our community! Together we can save more stray animals. ðŸ¾`,
       "welcome"
     );
   }

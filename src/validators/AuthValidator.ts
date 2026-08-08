@@ -1,4 +1,4 @@
-// src/validators/AuthValidator.ts
+// src/validators/authValidator.ts
 
 export class AuthValidator {
   /**

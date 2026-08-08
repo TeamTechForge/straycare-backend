@@ -1,4 +1,4 @@
-// src/utils/RescueMathHelper.ts
+// src/utils/rescueMathHelper.ts
 
 export class RescueMathHelper {
   private static readonly FALLBACK_RESCUE_LOCATION = {
