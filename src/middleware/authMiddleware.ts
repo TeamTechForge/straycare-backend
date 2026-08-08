@@ -33,5 +33,6 @@ const verifyToken = (req: Request, res: Response, next: NextFunction): void => {
 
 // Support both `require("...middleware")` (returns verifyToken directly)
 // and `const { verifyToken } = require("...middleware")` (destructured import)
-module.exports = verifyToken;
-module.exports.verifyToken = verifyToken;
+const exportedVerifyToken = verifyToken as typeof verifyToken & { verifyToken: typeof verifyToken };
+exportedVerifyToken.verifyToken = verifyToken;
+export = exportedVerifyToken;
