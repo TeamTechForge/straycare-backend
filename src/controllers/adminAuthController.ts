@@ -3,8 +3,8 @@ import type { NextFunction } from "express";
 const Admin = require("../models/Admin");
 const { sendPasswordResetEmail } = require("../utils/emailService");
 
-import { JwtService } from "../services/JwtService";
-import { PasswordService } from "../services/PasswordService";
+import { JwtService } from "../services/jwtService";
+import { PasswordService } from "../services/passwordService";
 import type { Request, Response } from "express";
 
 exports.login = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {

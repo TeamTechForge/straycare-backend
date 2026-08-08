@@ -1,7 +1,7 @@
 import { catchAsync } from "../utils/catchAsync";
 import type { NextFunction } from "express";
-import { NotificationService } from "../services/NotificationService";
-const StrayReport = require("../models/strayreport");
+import { NotificationService } from "../services/notificationService";
+const StrayReport = require("../models/StrayReport");
 
 import type { Request, Response } from "express";
 
