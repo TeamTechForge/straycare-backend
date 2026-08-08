@@ -108,6 +108,25 @@ const login = catchAsync(async (req: Request, res: Response, next: NextFunction)
       return;
     }
 
+    // ── Check account status (Suspended / Warned) ──────────────
+    let accountStatus: string | null = user.accountStatus || null;
+
+    if (user.role === "vet") {
+      const vetProfile = await VetProfile.findOne({ userId: user._id });
+      if (vetProfile?.accountStatus) accountStatus = vetProfile.accountStatus;
+    } else if (user.role === "ngo") {
+      const ngoProfile = await NGOProfile.findOne({ userId: user._id });
+      if (ngoProfile?.accountStatus) accountStatus = ngoProfile.accountStatus;
+    } else if (user.role === "volunteer") {
+      const volunteerProfile = await VolunteerProfile.findOne({ userId: user._id });
+      if (volunteerProfile?.accountStatus) accountStatus = volunteerProfile.accountStatus;
+    }
+
+    if (accountStatus === "Suspended") {
+      res.status(403).json({ message: "Your account has been suspended." });
+      return;
+    }
+
     const token = JwtService.generateToken({ id: user._id, role: user.role });
 
     res.status(200).json({
@@ -123,6 +142,9 @@ const login = catchAsync(async (req: Request, res: Response, next: NextFunction)
         roleSelected: user.roleSelected,
         isApproved: user.isApproved,
       },
+      ...(accountStatus === "Warned" && {
+        warning: "Your account has received a warning due to a reported issue. Please be mindful of community guidelines going forward.",
+      }),
     });
 });
 

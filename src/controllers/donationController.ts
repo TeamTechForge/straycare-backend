@@ -135,6 +135,13 @@ export class DonationController {
 
     const donorId = req.user?.id || null;
 
+    // Prevent duplicate records if the same order gets submitted more than once
+    const existing = await Donation.findOne({ orderId });
+    if (existing) {
+      res.json({ success: true, donation: existing });
+      return;
+    }
+
     const donation = await Donation.create({
       orderId,
       amount: parseFloat(amount as string),

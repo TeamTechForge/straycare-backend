@@ -18,6 +18,7 @@ interface IUser extends mongoose.Document {
   callingPrivacy: "everyone" | "contacts" | "relatedOnly" | "none";
   profileImage: string;
   pushToken?: string;
+  accountStatus?: string;
   organizationName?: string; // Added dynamically in getMe
   createdAt: Date;
   updatedAt: Date;
@@ -113,6 +114,10 @@ const userSchema = new mongoose.Schema(
       default: "",
     },
     pushToken: {
+      type: String,
+      default: null,
+    },
+    accountStatus: {
       type: String,
       default: null,
     },
