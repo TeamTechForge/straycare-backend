@@ -34,14 +34,17 @@ export class ProfileStatsService {
       const rescuer = await Rescuer.findOne({ userId });
       const rescuerIdQuery = rescuer ? rescuer._id : userId;
 
+      const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
       const totalRescues = await RescueHistory.countDocuments({ 
         $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
       });
       const activeRescues = await RescueRequest.countDocuments({ 
-        rescuerId: rescuerIdQuery, 
-        status: { $in: ["accepted", "under_rescue"] } 
+        $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }], 
+        status: { $in: ["accepted", "under_rescue", "Under Rescue"] } 
       });
-      const totalAttempts = await RescueRequest.countDocuments({ rescuerId: rescuerIdQuery });
+      const totalAttempts = await RescueRequest.countDocuments({ 
+        $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
+      });
       const completionRate = totalAttempts > 0 ? Math.round((totalRescues / totalAttempts) * 100) : 100;
 
       return {
@@ -53,6 +56,7 @@ export class ProfileStatsService {
           rescueCompletionRate: completionRate,
         },
         stats: {
+          reportsCount: reportCount,
           rescuesCompleted: totalRescues + activeRescues,
           activeRescues: activeRescues
         }
@@ -63,12 +67,13 @@ export class ProfileStatsService {
       const rescuer = await Rescuer.findOne({ userId });
       const rescuerIdQuery = rescuer ? rescuer._id : userId;
 
+      const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
       const totalRescues = await RescueHistory.countDocuments({ 
         $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
       });
       const activeRescues = await RescueRequest.countDocuments({ 
-        rescuerId: rescuerIdQuery, 
-        status: { $in: ["accepted", "under_rescue"] } 
+        $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }], 
+        status: { $in: ["accepted", "under_rescue", "Under Rescue"] } 
       });
 
       return {
@@ -83,6 +88,7 @@ export class ProfileStatsService {
           emergencyAvailability: vetProfile.emergencyAvailability || false,
         },
         stats: {
+          reportsCount: reportCount,
           rescuesCompleted: totalRescues + activeRescues,
           animalsTreated: vetProfile.animalsTreated || 0
         }
@@ -93,12 +99,13 @@ export class ProfileStatsService {
       const rescuer = await Rescuer.findOne({ userId });
       const rescuerIdQuery = rescuer ? rescuer._id : userId;
 
+      const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
       const totalRescues = await RescueHistory.countDocuments({ 
         $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
       });
       const activeRescues = await RescueRequest.countDocuments({ 
-        rescuerId: rescuerIdQuery, 
-        status: { $in: ["accepted", "under_rescue"] } 
+        $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }], 
+        status: { $in: ["accepted", "under_rescue", "Under Rescue"] } 
       });
 
       return {
@@ -111,6 +118,7 @@ export class ProfileStatsService {
           donationCampaignCount: ngoProfile.donationCampaignCount || 0,
         },
         stats: {
+          reportsCount: reportCount,
           rescuesCompleted: totalRescues + activeRescues,
           totalAdoptions: ngoProfile.totalAdoptions || 0,
           donationCampaignCount: ngoProfile.donationCampaignCount || 0

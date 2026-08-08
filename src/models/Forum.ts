@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 
 interface IForumComment {
   userId?: string;
+  userName?: string;
   text?: string;
   timestamp?: Date;
 }
@@ -20,6 +21,7 @@ const forumSchema = new mongoose.Schema({
   comments: [
     {
       userId: String,                              // Who wrote the comment
+      userName: String,                            // Actual username of commenter
       text: String,                                // The comment text
       timestamp: { type: Date, default: Date.now } // When it was posted
     }

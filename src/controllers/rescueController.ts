@@ -448,32 +448,39 @@ exports.listUserRescues = catchAsync(async (req: Request, res: Response, next: N
       rescuerDoc = await Rescuer.findOne({ $or: [{ userId: userId }, { _id: userId }] });
     }
 
-    const orConditions: any[] = [];
-    if (userId && mongoose.Types.ObjectId.isValid(userId as string)) {
-      orConditions.push({ userId: userId });
-    }
+    const rescuerConditions: any[] = [];
     if (rescuerDoc) {
-      orConditions.push({ rescuerId: rescuerDoc._id });
+      rescuerConditions.push({ rescuerId: rescuerDoc._id });
     }
     if (userId) {
-      orConditions.push({ rescuerId: userId });
+      rescuerConditions.push({ rescuerId: userId });
     }
 
-    const pendingQuery = orConditions.length > 0
-      ? { $or: orConditions, status: { $ne: RescueStatus.REJECTED } }
-      : { status: { $ne: RescueStatus.REJECTED } };
+    if (rescuerConditions.length === 0) {
+      Logger.info(`No rescuer profile or ID for user ID: ${userId}`, { service: "RescueController" });
+      res.json([]);
+      return;
+    }
 
-    const completedQuery = orConditions.length > 0
-      ? { $or: orConditions, status: RescueStatus.COMPLETED }
-      : { status: RescueStatus.COMPLETED };
+    // "Under Rescue" active cases: must be assigned to this rescuer AND accepted
+    const activeQuery = {
+      $or: rescuerConditions,
+      status: { $in: [RescueStatus.ACCEPTED, "accepted", "under rescue", "Under Rescue"] },
+    };
 
-    const [pending, completed] = await Promise.all([
-      RescueRequest.find(pendingQuery).sort({ createdAt: -1 }),
+    // Completed rescue cases: assigned to this rescuer AND completed
+    const completedQuery = {
+      $or: rescuerConditions,
+      status: { $in: [RescueStatus.COMPLETED, "completed", "Completed"] },
+    };
+
+    const [active, completed] = await Promise.all([
+      RescueRequest.find(activeQuery).sort({ createdAt: -1 }),
       RescueHistory.find(completedQuery).sort({ completedAt: -1, createdAt: -1 }),
     ]);
 
-    const enrichedPending = await Promise.all(
-      pending.map(async (request: any) => {
+    const enrichedActive = await Promise.all(
+      active.map(async (request: any) => {
         const enriched = await enrichCaseRecordWithReporterAndStray(request.toObject ? request.toObject() : request);
         return formatCaseRecord({ request: enriched, rescuer: enriched.rescuer || null });
       })
@@ -486,13 +493,13 @@ exports.listUserRescues = catchAsync(async (req: Request, res: Response, next: N
       })
     );
 
-    const all = [...enrichedPending, ...enrichedCompleted].sort((left: any, right: any) => {
+    const all = [...enrichedActive, ...enrichedCompleted].sort((left: any, right: any) => {
       const leftTime = new Date(left.completedAt || left.createdAt).getTime();
       const rightTime = new Date(right.completedAt || right.createdAt).getTime();
       return rightTime - leftTime;
     });
 
-    Logger.info(`Found ${all.length} rescues for user ID: ${userId}`, { service: "RescueController" });
+    Logger.info(`Found ${all.length} assigned rescues for user ID: ${userId}`, { service: "RescueController" });
     res.json(all);
   });;
 
@@ -641,6 +648,11 @@ exports.respondToRescueRequest = catchAsync(async (req: Request, res: Response, 
     const request = await RescueRequest.findById(id);
     if (!request) {
       res.status(404).json({ error: "Request not found" });
+      return;
+    }
+
+    if (action === "accept" && request.userId && req.user?.id && String(request.userId) === String(req.user.id)) {
+      res.status(403).json({ error: "You cannot accept or take a rescue request for a case you reported yourself." });
       return;
     }
 
@@ -867,6 +879,12 @@ exports.acceptFromMap = catchAsync(async (req: Request, res: Response, next: Nex
     const report = await StrayReport.findOne({ caseId });
     if (!report) {
       res.status(404).json({ error: "Case not found" });
+      return;
+    }
+
+    // 🔒 Check if user is attempting to accept a case they reported themselves
+    if (report.reporterUserId && String(report.reporterUserId) === String(userId)) {
+      res.status(403).json({ error: "You cannot accept or take a rescue request for a case you reported yourself." });
       return;
     }
 
