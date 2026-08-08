@@ -9,8 +9,8 @@ const RescueRequest = require("../models/RescueRequest");
 const RescueHistory = require("../models/RescueHistory");
 const { getDistance } = require("../utils/distance");
 
-import { NotificationService } from "../services/NotificationService";
-import { RescueService } from "../services/RescueService";
+import { NotificationService } from "../services/notificationService";
+import { RescueService } from "../services/rescueService";
 import { Logger } from "../utils/Logger";
 import { RescueMathHelper } from "../utils/RescueMathHelper";
 import { RescueStatus } from "../enums/RescueStatus";
@@ -126,7 +126,7 @@ const formatCaseRecord = ({ request, rescuer = null, history = null }: { request
 const enrichCaseRecordWithReporterAndStray = async (formatted: any, caseIdOrId: string = "", requestOrHistoryUser: string = "") => {
   try {
     const User = require("../models/User");
-    const StrayReport = require("../models/strayreport");
+    const StrayReport = require("../models/StrayReport");
 
     const stray = await StrayReport.findOne({
       $or: [{ caseId: caseIdOrId }, { caseId: formatted.caseId }]
@@ -261,9 +261,9 @@ exports.listRescuers = catchAsync(async (req: Request, res: Response, next: Next
     res.json({ count: rescuers.length, rescuers });
   });;
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // POST /api/rescue/find-nearest
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 exports.findNearestRescuer = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { latitude, longitude, excludeIds, caseId, maxDistanceKm } = req.body;
     const maxDist = maxDistanceKm !== undefined && Number.isFinite(Number(maxDistanceKm)) ? Number(maxDistanceKm) : 5;
@@ -337,7 +337,7 @@ exports.sendRescueRequest = catchAsync(async (req: Request, res: Response, next:
 
     let stray = null;
     if (caseId) {
-      const StrayReport = require("../models/strayreport");
+      const StrayReport = require("../models/StrayReport");
       stray = await StrayReport.findOne({ caseId });
     }
 
@@ -664,7 +664,7 @@ exports.respondToRescueRequest = catchAsync(async (req: Request, res: Response, 
     if (action === "accept") {
       // 1. Update StrayReport status to "Under Rescue"
       try {
-        const StrayReport = require("../models/strayreport");
+        const StrayReport = require("../models/StrayReport");
         const report = await StrayReport.findOne({ caseId: request.caseId });
         if (report) {
           report.status = "Under Rescue";
@@ -738,7 +738,7 @@ exports.respondToRescueRequest = catchAsync(async (req: Request, res: Response, 
           console.log(`[RESCUE] Successfully forwarded case ${request.caseId} to next rescuer ${nextRescuerResult.rescuer.name}`);
         } else {
           console.log(`[RESCUE] No more available rescuers found for case ${request.caseId}. Fallback to public map.`);
-          const StrayReport = require("../models/strayreport");
+          const StrayReport = require("../models/StrayReport");
           const report = await StrayReport.findOne({ caseId: request.caseId });
           if (report) {
             report.status = "Needs Help";
@@ -804,7 +804,7 @@ exports.updateRescueDetails = catchAsync(async (req: Request, res: Response, nex
 
     // Block updates if the case is already completed
     if (activeDoc && activeDoc.caseId) {
-      const StrayReportCheck = require("../models/strayreport");
+      const StrayReportCheck = require("../models/StrayReport");
       const existingReport = await StrayReportCheck.findOne({ caseId: activeDoc.caseId }).select("status").lean();
       if (existingReport && existingReport.status === "Completed") {
         res.status(400).json({ error: "This rescue case has been completed and can no longer be updated." });
@@ -829,7 +829,7 @@ exports.updateRescueDetails = catchAsync(async (req: Request, res: Response, nex
     // If status is provided, update StrayReport, and optionally RescueRequest
     let strayReport: any = null;
     if (status && activeDoc && activeDoc.caseId) {
-      const StrayReportModel = require("../models/strayreport");
+      const StrayReportModel = require("../models/StrayReport");
       strayReport = await StrayReportModel.findOne({ caseId: activeDoc.caseId });
       if (strayReport) {
         strayReport.status = status;
@@ -875,7 +875,7 @@ exports.acceptFromMap = catchAsync(async (req: Request, res: Response, next: Nex
     }
 
     // Find the stray report
-    const StrayReport = require("../models/strayreport");
+    const StrayReport = require("../models/StrayReport");
     const report = await StrayReport.findOne({ caseId });
     if (!report) {
       res.status(404).json({ error: "Case not found" });

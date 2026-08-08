@@ -5,7 +5,7 @@ import { CallEvents } from "../enums/CallEvents";
 import { ICallStartDTO, ICallOfferDTO, ICallAnswerDTO, IIceCandidateDTO, ICallEndDTO, ICallDeclineDTO, ICallAcceptDTO } from "../types/call";
 import { CallStatus } from "../enums/CallStatus.enum";
 import { Logger as logger } from "../utils/Logger";
-import callLogService from "./CallLogService";
+import callLogService from "./callLogService";
 
 class CallSignallingService {
   // Mapping of userId -> Set of socketIds in the /call namespace

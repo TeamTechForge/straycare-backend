@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import CallLogService from "../services/CallLogService";
+import CallLogService from "../services/callLogService";
 import { Logger as logger } from "../utils/Logger";
 
 class CallLogController {

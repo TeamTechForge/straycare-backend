@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { mockRequest, mockResponse, mockNext } from '../../helpers/mockRequestResponse';
-import authMiddleware from '../../../src/middleware/authMiddleware';
+const { verifyToken: authMiddleware } = require('../../../src/middleware/authMiddleware');
 
 // Mock jsonwebtoken
 jest.mock('jsonwebtoken');
@@ -61,7 +61,7 @@ describe('Auth Middleware', () => {
     authMiddleware(req as Request, res as Response, next);
 
     expect(jwt.verify).toHaveBeenCalledWith('valid-token', 'test-secret');
-    expect(req.user).toEqual({ id: 'user123', role: 'general_user' });
+    expect((req as any).user).toEqual({ id: 'user123', role: 'general_user' });
     expect(next).toHaveBeenCalledTimes(1);
   });
 });
