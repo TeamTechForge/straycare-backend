@@ -16,7 +16,7 @@ import mongoose from "mongoose";
 import { ProfileStatsService } from "../services/profileStatsService";
 import { NotificationService } from "../services/notificationService";
 
-import PrivacyService from "../services/privacyService";
+import PrivacyService from "../services/PrivacyService";
 
 // Fetch another user's public profile data (safe, sanitised)
 exports.getPublicProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {

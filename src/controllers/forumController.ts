@@ -6,7 +6,7 @@ const User = require("../models/User");
 
 import type { Request, Response } from "express";
 
-import { AppError } from "../utils/appError";
+import { AppError } from "../utils/AppError";
 
 // GET all posts
 exports.listPosts = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -57,9 +57,7 @@ exports.listPosts = catchAsync(async (req: Request, res: Response, next: NextFun
       likes: post.likes,
       // check if this user already liked
       likedByMe: userId ? post.likedByUsers.includes(userId) : false,
-      isMine: post.userId
-        ? (userId ? String(post.userId) === String(userId) : false)
-        : true,
+      isMine: post.userId && userId ? String(post.userId) === String(userId) : false,
       commentCount: post.commentCount || 0,
       createdAt: post.createdAt,
       imageUrl: post.imageUrl || "",
@@ -179,6 +177,16 @@ exports.togglePostLike = catchAsync(async (req: Request, res: Response, next: Ne
 exports.getThread = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { rescueId } = req.params;
 
+    // extract logged in userId if token present
+    let tokenUserId: string | null = null;
+    if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+      try {
+        const jwt = require("jsonwebtoken");
+        const decoded = jwt.verify(req.headers.authorization.split(" ")[1], process.env.JWT_SECRET as string) as any;
+        tokenUserId = decoded.id;
+      } catch (err) {}
+    }
+
     // find thread
     let thread = await Forum.findOne({ rescueId });
 
@@ -187,27 +195,73 @@ exports.getThread = catchAsync(async (req: Request, res: Response, next: NextFun
       thread = await Forum.create({ rescueId, comments: [] });
     }
 
+    const mongoose = require("mongoose");
+    const commentsFormatted = await Promise.all(
+      thread.comments.map(async (comment: any, index: number) => {
+        let commenterName = comment.userName || "";
+        if (!commenterName && comment.userId && comment.userId !== "guest" && comment.userId !== "forum-guest") {
+          try {
+            if (mongoose.Types.ObjectId.isValid(comment.userId)) {
+              const u = await User.findById(comment.userId).select("name").lean();
+              if (u && u.name) commenterName = u.name;
+            }
+          } catch (e) {}
+        }
+        if (!commenterName) commenterName = "User";
+
+        return {
+          id: `${thread.rescueId}-${index}`,
+          userId: comment.userId || "guest",
+          userName: commenterName,
+          isMine: tokenUserId && comment.userId ? String(comment.userId) === String(tokenUserId) : false,
+          text: comment.text,
+          timestamp: comment.timestamp,
+        };
+      })
+    );
+
     res.json({
       rescueId: thread.rescueId,
-      comments: thread.comments.map((comment: any, index: number) => ({
-        id: `${thread.rescueId}-${index}`,
-        userId: comment.userId || "guest",
-        text: comment.text,
-        timestamp: comment.timestamp,
-      })),
+      comments: commentsFormatted,
     });
 });
 
 // ADD comment
 exports.addComment = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { rescueId } = req.params;
-    const { text, userId = "guest" } = req.body;
+    const { text } = req.body;
 
     // check empty comment
     if (!text || !String(text).trim()) {
       res.status(400).json({ message: "Comment text is required" });
       return;
     }
+
+    let commenterId = req.user ? req.user.id : (req.body.userId || "guest");
+    let commenterName = (req.user as any)?.name || (req.body.userName || "");
+
+    if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+      try {
+        const jwt = require("jsonwebtoken");
+        const decoded = jwt.verify(req.headers.authorization.split(" ")[1], process.env.JWT_SECRET as string) as any;
+        if (decoded && decoded.id) {
+          commenterId = decoded.id;
+          const u = await User.findById(commenterId).select("name").lean();
+          if (u && u.name) commenterName = u.name;
+        }
+      } catch (err) {}
+    }
+
+    const mongoose = require("mongoose");
+    if (!commenterName && commenterId && commenterId !== "guest" && commenterId !== "forum-guest") {
+      try {
+        if (mongoose.Types.ObjectId.isValid(commenterId)) {
+          const u = await User.findById(commenterId).select("name").lean();
+          if (u && u.name) commenterName = u.name;
+        }
+      } catch (e) {}
+    }
+    if (!commenterName) commenterName = "User";
 
     let thread = await Forum.findOne({ rescueId });
 
@@ -218,7 +272,8 @@ exports.addComment = catchAsync(async (req: Request, res: Response, next: NextFu
 
     // push new comment
     thread.comments.push({
-      userId,
+      userId: commenterId,
+      userName: commenterName,
       text,
       timestamp: new Date(),
     });
@@ -230,38 +285,44 @@ exports.addComment = catchAsync(async (req: Request, res: Response, next: NextFu
       commentCount: thread.comments.length,
     });
 
-    // Notify the post author if someone else replies to their thread
-    if (post && post.userId && String(post.userId) !== String(userId)) {
+    // Notify the post author ONLY if someone else replies to their thread (never for own comments)
+    const postAuthorId = post && post.userId ? String(post.userId).trim() : "";
+    const currentCommenterId = commenterId ? String(commenterId).trim() : "";
+    const isOwnPost = Boolean(postAuthorId && currentCommenterId && postAuthorId === currentCommenterId);
+
+    if (postAuthorId && !isOwnPost) {
       try {
-        const mongoose = require("mongoose");
         const { NotificationService } = require("../services/notificationService");
-        const User = require("../models/User");
-        let replierName = "Someone";
-        if (mongoose.Types.ObjectId.isValid(userId)) {
-          const replier = await User.findById(userId);
-          if (replier) replierName = replier.name;
-        }
+        const newCommentIndex = thread.comments.length - 1;
+        const targetCommentId = `${rescueId}-${newCommentIndex}`;
+
         await NotificationService.sendNotification(
-          String(post.userId),
+          postAuthorId,
           "Reply to your Discussion",
-          `${replierName} replied to your thread "${post.title}": "${text.substring(0, 40)}${text.length > 40 ? "..." : ""}"`,
-          "info"
+          `${commenterName} replied to your thread "${post.title}": "${text.substring(0, 40)}${text.length > 40 ? "..." : ""}"`,
+          "info",
+          targetCommentId,
+          String(post._id)
         );
       } catch (err: any) {
         console.error("[FORUM] Failed to send reply notification to post author:", err.message || err);
       }
     }
 
+    const commentsFormatted = thread.comments.map((comment: any, index: number) => ({
+      id: `${thread.rescueId}-${index}`,
+      userId: comment.userId || "guest",
+      userName: comment.userName || commenterName,
+      isMine: String(comment.userId) === String(commenterId),
+      text: comment.text,
+      timestamp: comment.timestamp,
+    }));
+
     res.json({
       message: "Comment added",
       thread: {
         rescueId: thread.rescueId,
-        comments: thread.comments.map((comment: any, index: number) => ({
-          id: `${thread.rescueId}-${index}`,
-          userId: comment.userId || "guest",
-          text: comment.text,
-          timestamp: comment.timestamp,
-        })),
+        comments: commentsFormatted,
       },
     });
 });
