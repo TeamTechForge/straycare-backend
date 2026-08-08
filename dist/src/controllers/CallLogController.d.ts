@@ -19,4 +19,4 @@ declare class CallLogController {
 }
 declare const _default: CallLogController;
 export default _default;
-//# sourceMappingURL=callLogController.d.ts.map
+//# sourceMappingURL=CallLogController.d.ts.map

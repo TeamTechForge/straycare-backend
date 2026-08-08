@@ -4,6 +4,8 @@ export interface FindNearestRescuerParams {
     longitude: number;
     excludeIds?: string[];
     caseId?: string;
+    maxDistanceKm?: number;
+    reporterUserId?: string;
 }
 export interface NearestRescuerResult {
     rescuer: mongoose.Document | any;
@@ -26,7 +28,7 @@ export interface RescueRequestPayload {
 }
 export declare class RescueService {
     /**
-     * Finds the nearest available rescuer based on coordinates, excluding specific IDs or the reporter themselves.
+     * Finds the nearest available rescuer within a specified max distance (default 5km) based on coordinates, excluding specific IDs or the reporter themselves.
      */
     static findNearestRescuer(params: FindNearestRescuerParams): Promise<NearestRescuerResult | null>;
     /**
@@ -38,4 +40,4 @@ export declare class RescueService {
      */
     static createRescueRequest(payload: RescueRequestPayload, rescuer: any): Promise<any>;
 }
-//# sourceMappingURL=rescueService.d.ts.map
+//# sourceMappingURL=RescueService.d.ts.map

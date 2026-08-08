@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const CallLog_1 = __importDefault(require("../models/CallLog"));
 const CallStatus_enum_1 = require("../enums/CallStatus.enum");
 const CallDirection_enum_1 = require("../enums/CallDirection.enum");
-const logger_1 = require("../utils/logger");
+const Logger_1 = require("../utils/Logger");
 const mongoose_1 = __importDefault(require("mongoose"));
 class CallLogService {
     /**
@@ -21,10 +21,10 @@ class CallLogService {
                 startedAt: new Date(),
                 isSeen: false,
             });
-            logger_1.Logger.info(`[CallLogService] Created ${status} call log for caller: ${callerId}, receiver: ${receiverId}`);
+            Logger_1.Logger.info(`[CallLogService] Created ${status} call log for caller: ${callerId}, receiver: ${receiverId}`);
         }
         catch (error) {
-            logger_1.Logger.error(`[CallLogService] Failed to create call log`, error);
+            Logger_1.Logger.error(`[CallLogService] Failed to create call log`, error);
         }
     }
     /**
@@ -38,7 +38,7 @@ class CallLogService {
             }).sort({ createdAt: -1 });
         }
         catch (error) {
-            logger_1.Logger.error(`[CallLogService] Failed to find active call for user ${userId}`, error);
+            Logger_1.Logger.error(`[CallLogService] Failed to find active call for user ${userId}`, error);
             return null;
         }
     }
@@ -52,11 +52,11 @@ class CallLogService {
                 log.status = CallStatus_enum_1.CallStatus.ANSWERED;
                 log.answeredAt = new Date();
                 await log.save();
-                logger_1.Logger.info(`[CallLogService] Marked call log as ANSWERED for caller: ${callerId}`);
+                Logger_1.Logger.info(`[CallLogService] Marked call log as ANSWERED for caller: ${callerId}`);
             }
         }
         catch (error) {
-            logger_1.Logger.error(`[CallLogService] Failed to mark call answered`, error);
+            Logger_1.Logger.error(`[CallLogService] Failed to mark call answered`, error);
         }
     }
     /**
@@ -69,11 +69,11 @@ class CallLogService {
                 log.status = CallStatus_enum_1.CallStatus.REJECTED;
                 log.endedAt = new Date();
                 await log.save();
-                logger_1.Logger.info(`[CallLogService] Marked call log as REJECTED for caller: ${callerId}`);
+                Logger_1.Logger.info(`[CallLogService] Marked call log as REJECTED for caller: ${callerId}`);
             }
         }
         catch (error) {
-            logger_1.Logger.error(`[CallLogService] Failed to mark call rejected`, error);
+            Logger_1.Logger.error(`[CallLogService] Failed to mark call rejected`, error);
         }
     }
     /**
@@ -102,11 +102,11 @@ class CallLogService {
                     }
                 }
                 await log.save();
-                logger_1.Logger.info(`[CallLogService] Completed call log with status ${log.status}`);
+                Logger_1.Logger.info(`[CallLogService] Completed call log with status ${log.status}`);
             }
         }
         catch (error) {
-            logger_1.Logger.error(`[CallLogService] Failed to complete call`, error);
+            Logger_1.Logger.error(`[CallLogService] Failed to complete call`, error);
         }
     }
     /**
@@ -165,10 +165,10 @@ class CallLogService {
             await CallLog_1.default.updateMany({ receiver: new mongoose_1.default.Types.ObjectId(userId), status: CallStatus_enum_1.CallStatus.MISSED, isSeen: { $ne: true } }, { $set: { isSeen: true } });
         }
         catch (error) {
-            logger_1.Logger.error(`[CallLogService] Failed to mark calls as seen`, error);
+            Logger_1.Logger.error(`[CallLogService] Failed to mark calls as seen`, error);
             throw error;
         }
     }
 }
 exports.default = new CallLogService();
-//# sourceMappingURL=callLogService.js.map
+//# sourceMappingURL=CallLogService.js.map

@@ -16,6 +16,8 @@ router.post("/notify", donationController_1.donationController.notifyPayhere);
 router.get("/history", authMiddleware, donationController_1.donationController.getHistory);
 // Get total donations for an organization
 router.get("/total/:orgId", donationController_1.donationController.getTotalForOrg);
+// Get received donations for an organization
+router.get("/received/:orgId", donationController_1.donationController.getReceivedByOrg);
 // Get donations received by the logged-in vet/NGO, with donor names attached
 router.get("/received", authMiddleware, donationController_1.donationController.getReceivedDonations);
 // Get all donations (admin dashboard)

@@ -8,7 +8,7 @@ const crypto_1 = __importDefault(require("crypto"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const mongodb_1 = require("mongodb");
 const catchAsync_1 = require("../utils/catchAsync");
-const donorLookupService_1 = require("../services/donorLookupService");
+const DonorLookupService_1 = require("../services/DonorLookupService");
 const Donation = require("../models/Donation");
 const VetProfile = require("../models/VetProfile");
 const NGOProfile = require("../models/NGOProfile");
@@ -157,7 +157,7 @@ class DonationController {
             }
             const orgId = orgProfile._id.toString();
             const donations = await Donation.find({ organizationId: orgId, status: "SUCCESS" }).sort({ timestamp: -1 });
-            const enriched = await donorLookupService_1.donorLookupService.attachDonorNames(donations);
+            const enriched = await DonorLookupService_1.donorLookupService.attachDonorNames(donations);
             res.json(enriched);
         });
         this.getAllDonations = (0, catchAsync_1.catchAsync)(async (req, res, next) => {

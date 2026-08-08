@@ -22,4 +22,4 @@ class AuthValidator {
     }
 }
 exports.AuthValidator = AuthValidator;
-//# sourceMappingURL=authValidator.js.map
+//# sourceMappingURL=AuthValidator.js.map

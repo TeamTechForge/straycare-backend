@@ -6,17 +6,17 @@ const VolunteerProfile = require("../models/VolunteerProfile");
 const VetProfile = require("../models/VetProfile");
 const NGOProfile = require("../models/NGOProfile");
 const ForumPost = require("../models/ForumPost");
-const StrayReport = require("../models/StrayReport");
+const StrayReport = require("../models/strayreport");
 const RescueHistory = require("../models/RescueHistory");
 const RescueRequest = require("../models/RescueRequest");
 const UserReport = require("../models/UserReport");
 
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
-import { ProfileStatsService } from "../services/profileStatsService";
-import { NotificationService } from "../services/notificationService";
+import { ProfileStatsService } from "../services/ProfileStatsService";
+import { NotificationService } from "../services/NotificationService";
 
-import PrivacyService from "../services/privacyService";
+import PrivacyService from "../services/PrivacyService";
 
 // Fetch another user's public profile data (safe, sanitised)
 exports.getPublicProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {

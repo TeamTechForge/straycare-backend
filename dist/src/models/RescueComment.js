@@ -11,6 +11,7 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const rescueCommentSchema = new mongoose_1.default.Schema({
     // Which rescue case this comment belongs to
     rescueRequestId: { type: String, required: true, index: true },
+    caseId: { type: String, default: "", index: true },
     // Who wrote this comment
     userId: { type: String, default: "guest-user" },
     userName: { type: String, default: "Anonymous" },

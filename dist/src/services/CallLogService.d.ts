@@ -41,4 +41,4 @@ declare class CallLogService {
 }
 declare const _default: CallLogService;
 export default _default;
-//# sourceMappingURL=callLogService.d.ts.map
+//# sourceMappingURL=CallLogService.d.ts.map

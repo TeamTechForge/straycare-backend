@@ -1,16 +1,18 @@
 import mongoose from "mongoose";
-import { RescueMathHelper } from "../utils/rescueMathHelper";
-import { Logger } from "../utils/logger";
+import { RescueMathHelper } from "../utils/RescueMathHelper";
+import { Logger } from "../utils/Logger";
 import { RescueStatus } from "../enums/RescueStatus";
 
 const Rescuer = require("../models/Rescuer");
-const StrayReport = require("../models/StrayReport");
+const StrayReport = require("../models/strayreport");
 
 export interface FindNearestRescuerParams {
   latitude: number;
   longitude: number;
   excludeIds?: string[];
   caseId?: string;
+  maxDistanceKm?: number;
+  reporterUserId?: string;
 }
 
 export interface NearestRescuerResult {
@@ -36,20 +38,21 @@ export interface RescueRequestPayload {
 
 export class RescueService {
   /**
-   * Finds the nearest available rescuer based on coordinates, excluding specific IDs or the reporter themselves.
+   * Finds the nearest available rescuer within a specified max distance (default 5km) based on coordinates, excluding specific IDs or the reporter themselves.
    */
   public static async findNearestRescuer(params: FindNearestRescuerParams): Promise<NearestRescuerResult | null> {
-    const { latitude, longitude, excludeIds, caseId } = params;
+    const { latitude, longitude, excludeIds, caseId, maxDistanceKm = 10 } = params;
+    const StrayReport = require("../models/strayreport");
 
-    let reporterUserId: string | null = null;
-    if (caseId) {
+    let reporterUserId: string | null = params.reporterUserId || null;
+    if (!reporterUserId && caseId) {
       const report = await StrayReport.findOne({ caseId });
       if (report && report.reporterUserId) {
-        reporterUserId = report.reporterUserId;
+        reporterUserId = String(report.reporterUserId);
       }
     }
 
-    const query: Record<string, any> = { isAvailable: true };
+    const query: Record<string, any> = { isAvailable: { $ne: false } };
 
     const ninIds: mongoose.Types.ObjectId[] = [];
     if (excludeIds && Array.isArray(excludeIds) && excludeIds.length > 0) {
@@ -64,7 +67,7 @@ export class RescueService {
       query._id = { $nin: ninIds };
     }
 
-    if (reporterUserId) {
+    if (reporterUserId && mongoose.Types.ObjectId.isValid(reporterUserId)) {
       query.userId = { $ne: new mongoose.Types.ObjectId(reporterUserId) };
     }
 
@@ -78,6 +81,16 @@ export class RescueService {
     let minDistance = Infinity;
 
     rescuers.forEach((rescuer: any) => {
+      // Ensure reporter is never selected as rescuer for their own report
+      if (reporterUserId) {
+        const rescuerUserIdStr = rescuer.userId ? String(rescuer.userId) : "";
+        const rescuerIdStr = rescuer._id ? String(rescuer._id) : "";
+        const repIdStr = String(reporterUserId);
+        if (rescuerUserIdStr === repIdStr || rescuerIdStr === repIdStr) {
+          return;
+        }
+      }
+
       const dist = RescueMathHelper.deriveDistance(
         { latitude, longitude }, 
         rescuer.location
@@ -106,7 +119,17 @@ export class RescueService {
    */
   public static async createRescueRequest(payload: RescueRequestPayload, rescuer: any): Promise<any> {
     const RescueRequest = require("../models/RescueRequest");
-    const { NotificationService } = require("./notificationService");
+    const User = require("../models/User");
+    const { NotificationService } = require("./NotificationService");
+
+    let rescuerUser = null;
+    if (rescuer.userId && mongoose.Types.ObjectId.isValid(String(rescuer.userId))) {
+      rescuerUser = await User.findById(rescuer.userId).select("name phone profileImage avatar");
+    }
+
+    const rescuerName = rescuerUser?.name || rescuer.name || "Rescuer";
+    const rescuerPhone = rescuerUser?.phone || rescuer.phone || "";
+    const rescuerAvatar = rescuerUser?.profileImage || rescuerUser?.avatar || rescuer.avatar || "";
 
     const request = await RescueRequest.create({
       rescuerId: rescuer._id,
@@ -115,7 +138,7 @@ export class RescueService {
       caseId: payload.caseId || "",
       animalType: payload.animalType || "Unknown animal",
       description: payload.description || "Pending rescue request",
-      photos: payload.photos,
+      photos: payload.photos || [],
       reporterName: payload.reporterName || "Reporter",
       reporterPhone: payload.reporterPhone || "",
       reporterAvatar: payload.reporterAvatar || "",
@@ -124,12 +147,12 @@ export class RescueService {
       distanceKm: payload.distanceKm ?? null,
       etaMinutes: payload.etaMinutes ?? null,
       summary: payload.summary || "Pending rescue request",
-      rescuerName: rescuer.name,
-      rescuerPhone: rescuer.phone || "",
-      rescuerAvatar: rescuer.avatar || "",
+      rescuerName,
+      rescuerPhone,
+      rescuerAvatar,
     });
 
-    Logger.info(`Request ${request._id} created for ${rescuer.name}`, { service: "RescueService" });
+    Logger.info(`Request ${request._id} created for rescuer ${rescuerName} (caseId: ${payload.caseId})`, { service: "RescueService" });
 
     if (rescuer.userId) {
       await NotificationService.sendNotification(
@@ -140,33 +163,7 @@ export class RescueService {
         String(request._id),
         payload.caseId || ""
       );
-      Logger.info(`Created notification for registered rescuer ${rescuer.userId}`, { service: "RescueService" });
-    }
-
-    if (!rescuer.userId) {
-      setTimeout(async () => {
-        try {
-          const accepted = Math.random() > 0.3;
-          request.status = accepted ? RescueStatus.ACCEPTED : RescueStatus.REJECTED;
-          await request.save();
-
-          Logger.info(`Request ${request._id} resolved to: ${request.status}`, { service: "RescueService" });
-
-          if (accepted && request.userId && mongoose.Types.ObjectId.isValid(request.userId)) {
-            await NotificationService.sendNotification(
-              request.userId,
-              "Rescue Request Accepted",
-              `${rescuer.name} has accepted your rescue request and is on their way!`,
-              "success"
-            );
-            Logger.info(`Created success notification for reporter ${request.userId}`, { service: "RescueService" });
-          }
-        } catch (e: any) {
-          Logger.error("Auto-resolve failed", e);
-        }
-      }, 4000);
-    } else {
-      Logger.info(`Matched rescuer ${rescuer.name} is a registered user (${rescuer.userId}). Waiting for real response...`, { service: "RescueService" });
+      Logger.info(`Created notification for registered rescuer user ${rescuer.userId}`, { service: "RescueService" });
     }
 
     return request;

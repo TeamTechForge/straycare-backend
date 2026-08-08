@@ -46,6 +46,9 @@ exports.listPosts = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         likes: post.likes,
         // check if this user already liked
         likedByMe: userId ? post.likedByUsers.includes(userId) : false,
+        isMine: post.userId
+            ? (userId ? String(post.userId) === String(userId) : false)
+            : true,
         commentCount: post.commentCount || 0,
         createdAt: post.createdAt,
         imageUrl: post.imageUrl || "",
@@ -210,5 +213,27 @@ exports.addComment = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
             })),
         },
     });
+});
+exports.deletePost = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
+    const { postId } = req.params;
+    const userId = req.user ? req.user.id : null;
+    if (!userId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+    }
+    const post = await ForumPost.findById(postId);
+    if (!post) {
+        res.status(404).json({ error: "Post not found" });
+        return;
+    }
+    if (post.userId && String(post.userId) !== String(userId)) {
+        res.status(403).json({ error: "You can only delete your own posts" });
+        return;
+    }
+    await ForumPost.findByIdAndDelete(postId);
+    // Also delete the associated thread
+    await Forum.findOneAndDelete({ rescueId: postId });
+    console.log(`[FORUM] Post ${postId} deleted by user ${userId}`);
+    res.json({ message: "Post deleted successfully" });
 });
 //# sourceMappingURL=forumController.js.map

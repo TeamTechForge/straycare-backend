@@ -12,10 +12,36 @@ const RescueComment = require("../models/RescueComment");
  *   - Each top-level comment has a `replies` array of child comments
  */
 exports.getComments = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
-    const { id } = req.params;
-    console.log(`[COMMENTS] Fetching comments for rescue: ${id}`);
-    // Fetch all comments for this rescue, oldest first
-    const allComments = await RescueComment.find({ rescueRequestId: id }).sort({
+    const targetId = String(req.params.id);
+    console.log(`[COMMENTS] Fetching comments for rescue: ${targetId}`);
+    const mongoose = require("mongoose");
+    const RescueRequest = require("../models/RescueRequest");
+    let matchIds = [targetId];
+    try {
+        const isObjId = mongoose.Types.ObjectId.isValid(targetId);
+        const reqDoc = await RescueRequest.findOne({
+            $or: [
+                { _id: isObjId ? targetId : null },
+                { caseId: targetId }
+            ]
+        });
+        if (reqDoc) {
+            if (reqDoc._id)
+                matchIds.push(String(reqDoc._id));
+            if (reqDoc.caseId)
+                matchIds.push(reqDoc.caseId);
+        }
+    }
+    catch (err) {
+        console.error("[COMMENTS] Error matching rescue request ID:", err.message);
+    }
+    // Fetch all comments matching either rescueRequestId or caseId, oldest first
+    const allComments = await RescueComment.find({
+        $or: [
+            { rescueRequestId: { $in: matchIds } },
+            { caseId: { $in: matchIds } }
+        ]
+    }).sort({
         createdAt: 1,
     });
     // Separate top-level and replies
@@ -49,17 +75,39 @@ exports.getComments = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
  * Body: { text, userId?, userName?, userAvatar? }
  */
 exports.addComment = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
-    const { id } = req.params;
+    const targetId = String(req.params.id);
     const { text, userId, userName, userAvatar } = req.body;
     if (!text || !text.trim()) {
         res.status(400).json({ error: "Comment text is required" });
         return;
     }
-    console.log(`[COMMENTS] Adding comment to rescue: ${id}`);
+    console.log(`[COMMENTS] Adding comment to rescue: ${targetId}`);
+    const mongoose = require("mongoose");
+    const RescueRequest = require("../models/RescueRequest");
+    let caseIdVal = "";
+    let requestIdVal = targetId;
+    try {
+        const isObjId = mongoose.Types.ObjectId.isValid(targetId);
+        const reqDoc = await RescueRequest.findOne({
+            $or: [
+                { _id: isObjId ? targetId : null },
+                { caseId: targetId }
+            ]
+        });
+        if (reqDoc) {
+            requestIdVal = String(reqDoc._id);
+            caseIdVal = reqDoc.caseId || "";
+        }
+    }
+    catch (err) {
+        console.error("[COMMENTS] Error resolving case info for comment:", err.message);
+    }
+    const authUser = req.user;
     const comment = await RescueComment.create({
-        rescueRequestId: id,
-        userId: userId || "guest-user",
-        userName: userName || "You",
+        rescueRequestId: requestIdVal,
+        caseId: caseIdVal,
+        userId: userId || authUser?.id || "guest-user",
+        userName: userName || authUser?.name || "User",
         userAvatar: userAvatar || "",
         text: text.trim(),
         parentCommentId: null,
@@ -76,7 +124,8 @@ exports.addComment = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
  * Body: { text, userId?, userName?, userAvatar? }
  */
 exports.addReply = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
-    const { id, commentId } = req.params;
+    const targetId = String(req.params.id);
+    const commentId = String(req.params.commentId);
     const { text, userId, userName, userAvatar } = req.body;
     if (!text || !text.trim()) {
         res.status(400).json({ error: "Reply text is required" });
@@ -88,11 +137,35 @@ exports.addReply = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         res.status(404).json({ error: "Parent comment not found" });
         return;
     }
-    console.log(`[COMMENTS] Adding reply to comment ${commentId} on rescue: ${id}`);
+    console.log(`[COMMENTS] Adding reply to comment ${commentId} on rescue: ${targetId}`);
+    const mongoose = require("mongoose");
+    const RescueRequest = require("../models/RescueRequest");
+    let caseIdVal = parentComment.caseId || "";
+    let requestIdVal = parentComment.rescueRequestId || targetId;
+    try {
+        if (!caseIdVal) {
+            const isObjId = mongoose.Types.ObjectId.isValid(targetId);
+            const reqDoc = await RescueRequest.findOne({
+                $or: [
+                    { _id: isObjId ? targetId : null },
+                    { caseId: targetId }
+                ]
+            });
+            if (reqDoc) {
+                requestIdVal = String(reqDoc._id);
+                caseIdVal = reqDoc.caseId || "";
+            }
+        }
+    }
+    catch (err) {
+        console.error("[COMMENTS] Error resolving case info for reply:", err.message);
+    }
+    const authUser = req.user;
     const reply = await RescueComment.create({
-        rescueRequestId: id,
-        userId: userId || "guest-user",
-        userName: userName || "You",
+        rescueRequestId: requestIdVal,
+        caseId: caseIdVal,
+        userId: userId || authUser?.id || "guest-user",
+        userName: userName || authUser?.name || "User",
         userAvatar: userAvatar || "",
         text: text.trim(),
         parentCommentId: commentId,

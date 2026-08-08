@@ -2,39 +2,43 @@
 // This file connects our app to the MongoDB database.
 // It reads the database address from the .env file (MONGO_URI).
 // If the connection fails or is missing, it falls back to a local in-memory database for development.
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose = require("mongoose");
 const { MongoMemoryServer } = require("mongodb-memory-server");
-const logger_1 = require("../utils/logger");
+const Logger_1 = require("../utils/Logger");
+const dns_1 = __importDefault(require("dns"));
+try {
+    dns_1.default.setDefaultResultOrder("ipv4first");
+    dns_1.default.setServers(["8.8.8.8", "1.1.1.1"]);
+}
+catch (e) {
+    // ignore
+}
 let mongod = null;
 // connectDB is called once when the server starts
 const connectDB = async () => {
     // Read the MongoDB connection string from environment variables
     let mongoURI = process.env.MONGO_URI;
     if (!mongoURI) {
-        logger_1.Logger.warn("⚠️ MONGO_URI is undefined. Falling back to in-memory MongoDB...", { service: "Database" });
+        Logger_1.Logger.warn("⚠️ MONGO_URI is undefined. Falling back to in-memory MongoDB...", { service: "Database" });
         await startMemoryServer();
         return;
     }
     try {
-        logger_1.Logger.info(`Connecting to MongoDB at ${mongoURI}...`, { service: "Database" });
+        Logger_1.Logger.info(`Connecting to MongoDB at ${mongoURI}...`, { service: "Database" });
         await mongoose.connect(mongoURI, {
             serverSelectionTimeoutMS: 5000, // 5s timeout to trigger fallback quickly if offline
             socketTimeoutMS: 45000,
         });
-        logger_1.Logger.info("MongoDB connected", { service: "Database" });
+        Logger_1.Logger.info("MongoDB connected", { service: "Database" });
     }
     catch (error) {
-        logger_1.Logger.warn(`⚠️ MongoDB connection to local/configured DB failed: ${error.message}`, { service: "Database" });
-        // Fallback to memory server if the configured URI was localhost or 127.0.0.1
-        if (mongoURI.includes("localhost") || mongoURI.includes("127.0.0.1")) {
-            logger_1.Logger.info("Falling back to in-memory MongoDB...", { service: "Database" });
-            await startMemoryServer();
-        }
-        else {
-            logger_1.Logger.error("❌ External database connection failed. Exiting...");
-            process.exit(1);
-        }
+        Logger_1.Logger.warn(`⚠️ MongoDB connection to configured DB failed: ${error.message}`, { service: "Database" });
+        Logger_1.Logger.info("Falling back to in-memory MongoDB server...", { service: "Database" });
+        await startMemoryServer();
     }
 };
 const startMemoryServer = async () => {
@@ -46,17 +50,35 @@ const startMemoryServer = async () => {
             launchTimeout: 60000
         });
         const memoryURI = mongod.getUri();
-        logger_1.Logger.info(`In-memory MongoDB Server started at: ${memoryURI}`, { service: "Database" });
+        Logger_1.Logger.info(`In-memory MongoDB Server started at: ${memoryURI}`, { service: "Database" });
         // Override the environment variable so other components (like GridFS) use the correct URI
         process.env.MONGO_URI = memoryURI;
         await mongoose.connect(memoryURI, {
             serverSelectionTimeoutMS: 10000,
             socketTimeoutMS: 45000,
         });
-        logger_1.Logger.info("Connected to in-memory MongoDB successfully!", { service: "Database" });
+        Logger_1.Logger.info("Connected to in-memory MongoDB successfully!", { service: "Database" });
+        try {
+            const Rescuer = require("../models/Rescuer");
+            const rescuerCount = await Rescuer.countDocuments();
+            if (rescuerCount === 0) {
+                const sampleRescuers = [
+                    { name: "Nimal Perera", phone: "+94-77-123-4567", isAvailable: true, location: { latitude: 6.9271, longitude: 79.8612 } },
+                    { name: "Kasuni Fernando", phone: "+94-71-234-5678", isAvailable: true, location: { latitude: 6.9147, longitude: 79.8725 } },
+                    { name: "Ravindu Jayasuriya", phone: "+94-76-345-6789", isAvailable: true, location: { latitude: 6.9069, longitude: 79.9022 } },
+                    { name: "Tharushi Silva", phone: "+94-75-456-7890", isAvailable: true, location: { latitude: 6.9446, longitude: 79.8458 } },
+                    { name: "Isuru Wickramasinghe", phone: "+94-78-567-8901", isAvailable: true, location: { latitude: 6.9561, longitude: 79.8807 } },
+                ];
+                await Rescuer.insertMany(sampleRescuers);
+                Logger_1.Logger.info("Seeded sample rescuers into in-memory MongoDB", { service: "Database" });
+            }
+        }
+        catch (seedErr) {
+            Logger_1.Logger.warn("Auto-seed skipped:", seedErr.message);
+        }
     }
     catch (err) {
-        logger_1.Logger.error("❌ Failed to start in-memory MongoDB server:", err);
+        Logger_1.Logger.error("❌ Failed to start in-memory MongoDB server:", err);
         process.exit(1);
     }
 };
@@ -64,7 +86,7 @@ const startMemoryServer = async () => {
 process.on("SIGINT", async () => {
     if (mongod) {
         await mongod.stop();
-        logger_1.Logger.info("In-memory MongoDB Server stopped.", { service: "Database" });
+        Logger_1.Logger.info("In-memory MongoDB Server stopped.", { service: "Database" });
     }
 });
 // Export so server.js can call this when starting up

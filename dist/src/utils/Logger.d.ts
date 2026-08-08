@@ -13,4 +13,4 @@ export declare class Logger {
      */
     static error(message: string, error?: any): void;
 }
-//# sourceMappingURL=logger.d.ts.map
+//# sourceMappingURL=Logger.d.ts.map

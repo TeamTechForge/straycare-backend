@@ -6,7 +6,7 @@ const VolunteerProfile = require("../models/VolunteerProfile");
 const VetProfile = require("../models/VetProfile");
 const NGOProfile = require("../models/NGOProfile");
 const ForumPost = require("../models/ForumPost");
-const StrayReport = require("../models/StrayReport");
+const StrayReport = require("../models/strayreport");
 const RescueHistory = require("../models/RescueHistory");
 const RescueRequest = require("../models/RescueRequest");
 const Rescuer = require("../models/Rescuer");
@@ -127,4 +127,4 @@ ProfileStatsService.strategies = {
         };
     }
 };
-//# sourceMappingURL=profileStatsService.js.map
+//# sourceMappingURL=ProfileStatsService.js.map

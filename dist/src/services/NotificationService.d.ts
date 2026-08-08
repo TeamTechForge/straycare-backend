@@ -11,4 +11,4 @@ export declare class NotificationService {
      */
     static sendNotification(userId: string, title: string, message: string, type?: "info" | "success" | "warning" | "error" | "welcome", rescueRequestId?: string, caseId?: string): Promise<void>;
 }
-//# sourceMappingURL=notificationService.d.ts.map
+//# sourceMappingURL=NotificationService.d.ts.map

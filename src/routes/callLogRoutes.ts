@@ -1,5 +1,5 @@
 import { Router } from "express";
-import CallLogController from "../controllers/callLogController";
+import CallLogController from "../controllers/CallLogController";
 const { verifyToken } = require("../middleware/authMiddleware");
 
 const router = Router();

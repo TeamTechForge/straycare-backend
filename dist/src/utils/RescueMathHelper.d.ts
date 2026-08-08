@@ -5,4 +5,4 @@ export declare class RescueMathHelper {
     static deriveDistance(from: any, to: any): number;
     static deriveEta(distanceKm: number): number;
 }
-//# sourceMappingURL=rescueMathHelper.d.ts.map
+//# sourceMappingURL=RescueMathHelper.d.ts.map

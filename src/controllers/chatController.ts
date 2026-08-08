@@ -6,7 +6,7 @@ const User = require("../models/User");
 
 import type { Request, Response, NextFunction } from "express";
 
-import PrivacyService from "../services/privacyService";
+import PrivacyService from "../services/PrivacyService";
 
 // ── Helpers ─────────────────────────────────────────────────────
 

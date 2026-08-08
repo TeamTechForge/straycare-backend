@@ -8,7 +8,7 @@ const catchAsync_1 = require("../utils/catchAsync");
 const Conversation = require("../models/Conversation");
 const Message = require("../models/Message");
 const User = require("../models/User");
-const privacyService_1 = __importDefault(require("../services/privacyService"));
+const PrivacyService_1 = __importDefault(require("../services/PrivacyService"));
 // ── Helpers ─────────────────────────────────────────────────────
 const Role_enum_1 = require("../enums/Role.enum");
 const profileModels = {
@@ -83,7 +83,7 @@ const getOrCreateConversation = (0, catchAsync_1.catchAsync)(async (req, res, ne
         return;
     }
     // Evaluate permissions without failing the request (so the UI can render gracefully)
-    const privacyResult = await privacyService_1.default.canMessage(userId, participantId);
+    const privacyResult = await PrivacyService_1.default.canMessage(userId, participantId);
     // Check for existing conversation between these two users
     let conversation = await Conversation.findOne({
         participants: { $all: [userId, participantId], $size: 2 },
@@ -223,7 +223,7 @@ const sendMessage = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     // Enforce privacy strictness on actual sending
     const otherParticipantId = conversation.participants.find((p) => p.toString() !== userId);
     if (otherParticipantId) {
-        const privacyResult = await privacyService_1.default.canMessage(userId, otherParticipantId.toString());
+        const privacyResult = await PrivacyService_1.default.canMessage(userId, otherParticipantId.toString());
         if (!privacyResult.allowed) {
             console.warn(`[chatController] ❌ Message Blocked by Privacy: ${privacyResult.reason}`);
             res.status(403).json({ message: privacyResult.reason });

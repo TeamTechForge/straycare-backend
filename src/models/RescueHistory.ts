@@ -76,4 +76,4 @@ const rescueHistorySchema = new mongoose.Schema({
   completedAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 
-module.exports = mongoose.model<IRescueHistory>("RescueHistory", rescueHistorySchema);
+module.exports = mongoose.models.RescueHistory || mongoose.model<IRescueHistory>("RescueHistory", rescueHistorySchema);

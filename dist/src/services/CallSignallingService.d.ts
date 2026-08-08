@@ -19,4 +19,4 @@ declare class CallSignallingService {
 }
 declare const _default: CallSignallingService;
 export default _default;
-//# sourceMappingURL=callSignallingService.d.ts.map
+//# sourceMappingURL=CallSignallingService.d.ts.map

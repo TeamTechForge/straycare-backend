@@ -106,4 +106,4 @@ class PrivacyService {
     }
 }
 exports.default = new PrivacyService();
-//# sourceMappingURL=privacyService.js.map
+//# sourceMappingURL=PrivacyService.js.map

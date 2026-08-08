@@ -17,4 +17,4 @@ export declare class JwtService {
      */
     static verifyToken(token: string): any;
 }
-//# sourceMappingURL=jwtService.d.ts.map
+//# sourceMappingURL=JwtService.d.ts.map

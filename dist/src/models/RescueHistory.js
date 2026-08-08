@@ -44,5 +44,5 @@ const rescueHistorySchema = new mongoose_1.default.Schema({
     outcome: { type: String, default: "completed" },
     completedAt: { type: Date, default: Date.now },
 }, { timestamps: true });
-module.exports = mongoose_1.default.model("RescueHistory", rescueHistorySchema);
+module.exports = mongoose_1.default.models.RescueHistory || mongoose_1.default.model("RescueHistory", rescueHistorySchema);
 //# sourceMappingURL=RescueHistory.js.map

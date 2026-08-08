@@ -1,7 +1,7 @@
 import CallLog from "../models/CallLog";
 import { CallStatus } from "../enums/CallStatus.enum";
 import { CallDirection } from "../enums/CallDirection.enum";
-import { Logger as logger } from "../utils/logger";
+import { Logger as logger } from "../utils/Logger";
 import { ICallLogDTO } from "../types/callLog";
 import mongoose from "mongoose";
 

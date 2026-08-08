@@ -15,4 +15,4 @@ declare class PrivacyService {
 }
 declare const _default: PrivacyService;
 export default _default;
-//# sourceMappingURL=privacyService.d.ts.map
+//# sourceMappingURL=PrivacyService.d.ts.map

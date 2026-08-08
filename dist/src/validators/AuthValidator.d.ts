@@ -7,4 +7,4 @@ export declare class AuthValidator {
         message?: string;
     };
 }
-//# sourceMappingURL=authValidator.d.ts.map
+//# sourceMappingURL=AuthValidator.d.ts.map
