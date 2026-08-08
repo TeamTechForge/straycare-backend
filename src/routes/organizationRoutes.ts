@@ -5,13 +5,20 @@ const { ObjectId } = require("mongodb");
 const router = express.Router();
 
 import type { Request, Response } from "express";
- 
-// Get all organizations (vetprofiles + ngoprofiles)
+
+// Filter: only verified orgs that have provided both merchant credentials
+const eligibleFilter = {
+  status: "Verified",
+  merchantId: { $exists: true, $nin: [null, ""] },
+  merchantSecret: { $exists: true, $nin: [null, ""] },
+};
+
+// Get all organizations (vetprofiles + ngoprofiles) — only verified & payment-ready
 router.get("/", async (req: Request, res: Response) => {
   try {
     const db = mongoose.connection.db;
-    const vets = await db.collection("vetprofiles").find({}).toArray();
-    const shelters = await db.collection("ngoprofiles").find({}).toArray();
+    const vets = await db.collection("vetprofiles").find(eligibleFilter).toArray();
+    const shelters = await db.collection("ngoprofiles").find(eligibleFilter).toArray();
     res.json([...vets, ...shelters]);
   } catch (err) {
     console.error("Error fetching organizations:", err);
@@ -19,16 +26,16 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
  
-// Get organizations by category
+// Get organizations by category — only verified & payment-ready
 router.get("/category/:category", async (req: Request, res: Response) => {
   try {
     const db = mongoose.connection.db;
     let results: any[] = [];
  
     if (req.params.category === "Support Vet Clinic") {
-      results = await db.collection("vetprofiles").find({}).toArray();
+      results = await db.collection("vetprofiles").find(eligibleFilter).toArray();
     } else if (req.params.category === "Support Shelter") {
-      results = await db.collection("ngoprofiles").find({}).toArray();
+      results = await db.collection("ngoprofiles").find(eligibleFilter).toArray();
     }
  
     res.json(results);
