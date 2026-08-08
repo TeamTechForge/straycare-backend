@@ -7,9 +7,36 @@ const User = require("../models/User");
 // GET all posts
 exports.listPosts = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     // get user id if sent 
-    const userId = req.query.userId ? String(req.query.userId) : null;
+    let userId = req.query.userId ? String(req.query.userId) : null;
+    if (userId === "forum-guest") {
+        userId = null;
+    }
+    if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+        const token = req.headers.authorization.split(" ")[1];
+        try {
+            const jwt = require("jsonwebtoken");
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            userId = decoded.id;
+        }
+        catch (err) {
+            // ignore invalid token
+        }
+    }
+    let blockedIds = [];
+    if (userId) {
+        // 1. Users I have blocked
+        const me = await User.findById(userId).select("blockedUsers").lean();
+        if (me && me.blockedUsers) {
+            blockedIds = [...blockedIds, ...me.blockedUsers.map((id) => String(id))];
+        }
+        // 2. Users who have blocked me
+        const usersWhoBlockedMe = await User.find({ blockedUsers: userId }).select("_id").lean();
+        const usersWhoBlockedMeIds = usersWhoBlockedMe.map((u) => String(u._id));
+        blockedIds = [...blockedIds, ...usersWhoBlockedMeIds];
+    }
     // get posts from DB 
-    const posts = await ForumPost.find().sort({ createdAt: -1 });
+    const query = blockedIds.length > 0 ? { userId: { $nin: blockedIds } } : {};
+    const posts = await ForumPost.find(query).sort({ createdAt: -1 });
     // format response
     const response = posts.map((post) => ({
         id: String(post._id),
@@ -19,14 +46,18 @@ exports.listPosts = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         likes: post.likes,
         // check if this user already liked
         likedByMe: userId ? post.likedByUsers.includes(userId) : false,
+        isMine: post.userId
+            ? (userId ? String(post.userId) === String(userId) : false)
+            : true,
         commentCount: post.commentCount || 0,
         createdAt: post.createdAt,
+        imageUrl: post.imageUrl || "",
     }));
     res.json(response);
 });
 // CREATE new post
 exports.createPost = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
-    const { title, tag = "GENERAL", author } = req.body;
+    const { title, tag = "GENERAL", author, imageUrl } = req.body;
     console.log("[FORUM][POST] /api/forum/posts from", req.ip, "title:", title);
     // simple validation
     if (!title || !String(title).trim()) {
@@ -46,9 +77,25 @@ exports.createPost = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         tag,
         author: authorName,
         userId,
+        imageUrl: imageUrl || "",
     });
     // create empty thread for comments (if not exist)
     await Forum.findOneAndUpdate({ rescueId: String(post._id) }, { $setOnInsert: { rescueId: String(post._id), comments: [] } }, { new: true, upsert: true });
+    // Dispatch in-app notifications to all registered users (except the author)
+    try {
+        const { NotificationService } = require("../services/notificationService");
+        const allUsers = await User.find({
+            role: { $in: ["general_user", "volunteer", "ngo", "vet"] },
+            _id: { $ne: userId }
+        });
+        console.log(`[FORUM] Dispatching new post notifications to ${allUsers.length} users`);
+        for (const u of allUsers) {
+            await NotificationService.sendNotification(String(u._id), "New Discussion Thread", `${authorName} started a new discussion: "${post.title}"`, "info");
+        }
+    }
+    catch (err) {
+        console.error("[FORUM] Failed to dispatch new discussion notifications:", err.message || err);
+    }
     res.status(201).json({
         message: "Post created",
         post: {
@@ -59,6 +106,7 @@ exports.createPost = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
             likes: post.likes,
             likedByMe: false,
             commentCount: post.commentCount || 0,
+            imageUrl: post.imageUrl || "",
             createdAt: post.createdAt,
         },
     });
@@ -132,9 +180,27 @@ exports.addComment = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     });
     await thread.save();
     // update comment count in post (ignore error if post missing)
-    await ForumPost.findByIdAndUpdate(rescueId, {
+    const post = await ForumPost.findByIdAndUpdate(rescueId, {
         commentCount: thread.comments.length,
-    }).catch(() => { });
+    });
+    // Notify the post author if someone else replies to their thread
+    if (post && post.userId && String(post.userId) !== String(userId)) {
+        try {
+            const mongoose = require("mongoose");
+            const { NotificationService } = require("../services/notificationService");
+            const User = require("../models/User");
+            let replierName = "Someone";
+            if (mongoose.Types.ObjectId.isValid(userId)) {
+                const replier = await User.findById(userId);
+                if (replier)
+                    replierName = replier.name;
+            }
+            await NotificationService.sendNotification(String(post.userId), "Reply to your Discussion", `${replierName} replied to your thread "${post.title}": "${text.substring(0, 40)}${text.length > 40 ? "..." : ""}"`, "info");
+        }
+        catch (err) {
+            console.error("[FORUM] Failed to send reply notification to post author:", err.message || err);
+        }
+    }
     res.json({
         message: "Comment added",
         thread: {
@@ -147,5 +213,27 @@ exports.addComment = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
             })),
         },
     });
+});
+exports.deletePost = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
+    const { postId } = req.params;
+    const userId = req.user ? req.user.id : null;
+    if (!userId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+    }
+    const post = await ForumPost.findById(postId);
+    if (!post) {
+        res.status(404).json({ error: "Post not found" });
+        return;
+    }
+    if (post.userId && String(post.userId) !== String(userId)) {
+        res.status(403).json({ error: "You can only delete your own posts" });
+        return;
+    }
+    await ForumPost.findByIdAndDelete(postId);
+    // Also delete the associated thread
+    await Forum.findOneAndDelete({ rescueId: postId });
+    console.log(`[FORUM] Post ${postId} deleted by user ${userId}`);
+    res.json({ message: "Post deleted successfully" });
 });
 //# sourceMappingURL=forumController.js.map

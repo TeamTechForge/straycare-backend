@@ -6,9 +6,9 @@ const User = require("../models/User");
 
 import type { Request, Response, NextFunction } from "express";
 
-import PrivacyService from "../services/PrivacyService";
+import PrivacyService from "../services/privacyService";
 
-// ── Helpers ─────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 import { Role } from "../enums/Role.enum";
 
@@ -38,11 +38,11 @@ const getChatNamespace = (req: Request): any => {
   return io ? io.of("/chat") : null;
 };
 
-// ── GET /api/chat/conversations ─────────────────────────────────
+// â”€â”€ GET /api/chat/conversations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Lists all conversations for the authenticated user, sorted by latest activity.
 const getConversations = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
-    console.log(`[chatController] 🔍 getConversations. User: ${userId}`);
+    console.log(`[chatController] ðŸ” getConversations. User: ${userId}`);
 
     const conversations = await Conversation.find({
       participants: userId,
@@ -52,28 +52,35 @@ const getConversations = catchAsync(async (req: Request, res: Response, next: Ne
       .sort({ "lastMessage.createdAt": -1, updatedAt: -1 })
       .lean();
 
-    // Self-healing check
+    // Self-healing check and inject shelter name for NGOs
+    const NGOProfile = require("../models/NGOProfile");
     for (let conv of conversations) {
       if (conv.participants) {
         for (let p of conv.participants as any[]) {
           if (!p.profileImage) {
             p.profileImage = p.avatar || "";
           }
+          if (p.role === "ngo") {
+            const profile = await NGOProfile.findOne({ userId: p._id }).select("orgName").lean();
+            if (profile && profile.orgName) {
+              p.name = profile.orgName;
+            }
+          }
         }
       }
     }
 
-    console.log(`[chatController] ✅ Found ${conversations.length} conversations for User: ${userId}`);
+    console.log(`[chatController] âœ… Found ${conversations.length} conversations for User: ${userId}`);
     res.status(200).json(conversations);
 });
 
-// ── POST /api/chat/conversations ────────────────────────────────
+// â”€â”€ POST /api/chat/conversations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Finds an existing conversation between two users or creates a new one.
 // Body: { participantId, conversationType?, relatedEntity? }
 const getOrCreateConversation = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     const { participantId, conversationType, relatedEntity } = req.body;
-    console.log(`[chatController] 🔍 getOrCreateConversation. User: ${userId}, Participant: ${participantId}`);
+    console.log(`[chatController] ðŸ” getOrCreateConversation. User: ${userId}, Participant: ${participantId}`);
 
     if (!participantId) {
       res.status(400).json({ message: "participantId is required" });
@@ -100,15 +107,22 @@ const getOrCreateConversation = catchAsync(async (req: Request, res: Response, n
       if (conversation.deletedFor && conversation.deletedFor.includes(userId)) {
         await Conversation.findByIdAndUpdate(conversation._id, { $pull: { deletedFor: userId } });
       }
-      // Self-healing check
+      // Self-healing check and inject shelter name for NGOs
+      const NGOProfile = require("../models/NGOProfile");
       if (conversation.participants) {
         for (let p of conversation.participants) {
           if (!p.profileImage) {
             p.profileImage = p.avatar || "";
           }
+          if (p.role === "ngo") {
+            const profile = await NGOProfile.findOne({ userId: p._id }).select("orgName").lean();
+            if (profile && profile.orgName) {
+              p.name = profile.orgName;
+            }
+          }
         }
       }
-      console.log(`[chatController] ✅ Found existing conversation: ${conversation._id}`);
+      console.log(`[chatController] âœ… Found existing conversation: ${conversation._id}`);
       res.status(200).json({
         ...conversation,
         permissions: { canMessage: privacyResult.allowed }
@@ -120,7 +134,7 @@ const getOrCreateConversation = catchAsync(async (req: Request, res: Response, n
     // but the UI will disable sending messages. This allows users to open chat and see "not accepting messages".
     
     // Create new conversation
-    console.log(`[chatController] 🆕 Creating new conversation session. User: ${userId}, Participant: ${participantId}`);
+    console.log(`[chatController] ðŸ†• Creating new conversation session. User: ${userId}, Participant: ${participantId}`);
     const newConversation = await Conversation.create({
       participants: [userId, participantId],
       conversationType: conversationType || "direct",
@@ -132,30 +146,37 @@ const getOrCreateConversation = catchAsync(async (req: Request, res: Response, n
       .populate("participants", "name email role profileCompleted profileImage avatar")
       .lean();
 
-    // Self-healing check
+    // Self-healing check and inject shelter name for NGOs
+    const NGOProfile = require("../models/NGOProfile");
     if (conversation && conversation.participants) {
       for (let p of conversation.participants) {
         if (!p.profileImage) {
           p.profileImage = p.avatar || "";
         }
+        if (p.role === "ngo") {
+          const profile = await NGOProfile.findOne({ userId: p._id }).select("orgName").lean();
+          if (profile && profile.orgName) {
+            p.name = profile.orgName;
+          }
+        }
       }
     }
 
-    console.log(`[chatController] ✅ Conversation created: ${conversation._id}`);
+    console.log(`[chatController] âœ… Conversation created: ${conversation._id}`);
     res.status(201).json({
       ...conversation,
       permissions: { canMessage: privacyResult.allowed }
     });
 });
 
-// ── GET /api/chat/messages/:conversationId ──────────────────────
+// â”€â”€ GET /api/chat/messages/:conversationId â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Paginated messages for a conversation (cursor-based, newest first).
 // Query: ?before=<messageId>&limit=<number>
 const getMessages = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     const { conversationId } = req.params;
     const { before, limit = 30 } = req.query;
-    console.log(`[chatController] 🔍 getMessages. User: ${userId}, Conversation: ${conversationId}, Limit: ${limit}`);
+    console.log(`[chatController] ðŸ” getMessages. User: ${userId}, Conversation: ${conversationId}, Limit: ${limit}`);
 
     // Verify user is a participant
     const conversation = await Conversation.findOne({
@@ -164,7 +185,7 @@ const getMessages = catchAsync(async (req: Request, res: Response, next: NextFun
     }).lean();
 
     if (!conversation) {
-      console.warn(`[chatController] ❌ Conversation ${conversationId} not found or user is not a participant`);
+      console.warn(`[chatController] âŒ Conversation ${conversationId} not found or user is not a participant`);
       res.status(404).json({ message: "Conversation not found" });
       return;
     }
@@ -200,11 +221,11 @@ const getMessages = catchAsync(async (req: Request, res: Response, next: NextFun
       return msg;
     });
 
-    console.log(`[chatController] ✅ Found ${processedMessages.length} messages for Conversation: ${conversationId}`);
+    console.log(`[chatController] âœ… Found ${processedMessages.length} messages for Conversation: ${conversationId}`);
     res.status(200).json(processedMessages);
 });
 
-// ── POST /api/chat/messages ─────────────────────────────────────
+// â”€â”€ POST /api/chat/messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Sends a new message. Body: { conversationId, text?, type?, imageUrl?, imagePublicId?, location? }
 const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
@@ -216,7 +237,7 @@ const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFun
       imagePublicId,
       location,
     } = req.body;
-    console.log(`[chatController] ✉️ sendMessage. User: ${userId}, Conversation: ${conversationId}, Type: ${type}`);
+    console.log(`[chatController] âœ‰ï¸ sendMessage. User: ${userId}, Conversation: ${conversationId}, Type: ${type}`);
 
     if (!conversationId) {
       res.status(400).json({ message: "conversationId is required" });
@@ -230,7 +251,7 @@ const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFun
     });
 
     if (!conversation) {
-      console.warn(`[chatController] ❌ Conversation ${conversationId} not found or user is not a participant`);
+      console.warn(`[chatController] âŒ Conversation ${conversationId} not found or user is not a participant`);
       res.status(404).json({ message: "Conversation not found" });
       return;
     }
@@ -240,7 +261,7 @@ const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFun
     if (otherParticipantId) {
       const privacyResult = await PrivacyService.canMessage(userId, otherParticipantId.toString());
       if (!privacyResult.allowed) {
-        console.warn(`[chatController] ❌ Message Blocked by Privacy: ${privacyResult.reason}`);
+        console.warn(`[chatController] âŒ Message Blocked by Privacy: ${privacyResult.reason}`);
         res.status(403).json({ message: privacyResult.reason });
         return;
       }
@@ -260,7 +281,7 @@ const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFun
 
     // Update conversation's lastMessage snapshot
     const lastMessagePreview =
-      type === "image" ? "📷 Photo" : type === "location" ? "📍 Location" : text || "";
+      type === "image" ? "ðŸ“· Photo" : type === "location" ? "ðŸ“ Location" : text || "";
 
     conversation.lastMessage = {
       text: lastMessagePreview,
@@ -281,7 +302,7 @@ const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFun
     conversation.deletedFor = []; // Reactivate conversation for all participants when a new message is sent
 
     await conversation.save();
-    console.log(`[chatController] ✅ Message ${message._id} saved and conversation snapshot updated`);
+    console.log(`[chatController] âœ… Message ${message._id} saved and conversation snapshot updated`);
 
     // Populate sender info for the socket event
     const populatedMessage = await Message.findById(message._id)
@@ -309,18 +330,18 @@ const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFun
         chatNamespace.to(`user:${participantId}`).emit("message:new", payload);
       }
 
-      console.log(`[chatController] ✅ Emitted message:new to room ${conversationId} and ${conversation.participants.length} participant personal rooms`);
+      console.log(`[chatController] âœ… Emitted message:new to room ${conversationId} and ${conversation.participants.length} participant personal rooms`);
     }
 
     res.status(201).json(populatedMessage);
 });
 
-// ── PUT /api/chat/messages/:conversationId/read ─────────────────
+// â”€â”€ PUT /api/chat/messages/:conversationId/read â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Marks all messages in a conversation as read by the authenticated user.
 const markAsRead = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     const { conversationId } = req.params;
-    console.log(`[chatController] 📖 markAsRead. User: ${userId}, Conversation: ${conversationId}`);
+    console.log(`[chatController] ðŸ“– markAsRead. User: ${userId}, Conversation: ${conversationId}`);
 
     // Verify user is a participant
     const conversation = await Conversation.findOne({
@@ -329,7 +350,7 @@ const markAsRead = catchAsync(async (req: Request, res: Response, next: NextFunc
     });
 
     if (!conversation) {
-      console.warn(`[chatController] ❌ Conversation ${conversationId} not found or user is not a participant`);
+      console.warn(`[chatController] âŒ Conversation ${conversationId} not found or user is not a participant`);
       res.status(404).json({ message: "Conversation not found" });
       return;
     }
@@ -346,7 +367,7 @@ const markAsRead = catchAsync(async (req: Request, res: Response, next: NextFunc
     // Reset unread count for this user
     conversation.unreadCounts.set(userId, 0);
     await conversation.save();
-    console.log(`[chatController] ✅ Marked messages as read. Updated ${updateResult.modifiedCount} messages for user: ${userId}`);
+    console.log(`[chatController] âœ… Marked messages as read. Updated ${updateResult.modifiedCount} messages for user: ${userId}`);
 
     // Notify other participants via socket
     const chatNamespace = getChatNamespace(req);
@@ -355,13 +376,13 @@ const markAsRead = catchAsync(async (req: Request, res: Response, next: NextFunc
         conversationId,
         readBy: userId,
       });
-      console.log(`[chatController] ✅ Emitted message:read-ack to room ${conversationId}`);
+      console.log(`[chatController] âœ… Emitted message:read-ack to room ${conversationId}`);
     }
 
     res.status(200).json({ message: "Messages marked as read" });
 });
 
-// ── DELETE /api/chat/conversations/:conversationId ──────────────
+// â”€â”€ DELETE /api/chat/conversations/:conversationId â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Soft deletes a conversation for the current user.
 const deleteConversation = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
@@ -378,11 +399,11 @@ const deleteConversation = catchAsync(async (req: Request, res: Response, next: 
       return;
     }
 
-    console.log(`[chatController] 🗑️ Conversation ${conversationId} soft deleted for User: ${userId}`);
+    console.log(`[chatController] ðŸ—‘ï¸ Conversation ${conversationId} soft deleted for User: ${userId}`);
     res.status(200).json({ message: "Conversation deleted successfully", conversationId });
 });
 
-// ── DELETE /api/chat/messages/:messageId ────────────────────────
+// â”€â”€ DELETE /api/chat/messages/:messageId â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Deletes a message (Delete for Me or Delete for Everyone).
 const deleteMessage = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
@@ -408,7 +429,7 @@ const deleteMessage = catchAsync(async (req: Request, res: Response, next: NextF
     if (type === "me") {
       // Add user to deletedFor array
       await Message.findByIdAndUpdate(messageId, { $addToSet: { deletedFor: userId } });
-      console.log(`[chatController] 🗑️ Message ${messageId} deleted for user ${userId}`);
+      console.log(`[chatController] ðŸ—‘ï¸ Message ${messageId} deleted for user ${userId}`);
     } else if (type === "everyone") {
       // Verify that the sender is the one deleting for everyone
       if (message.sender.toString() !== userId) {
@@ -432,7 +453,7 @@ const deleteMessage = catchAsync(async (req: Request, res: Response, next: NextF
         await conversation.save();
       }
 
-      console.log(`[chatController] 🗑️ Message ${messageId} deleted for everyone`);
+      console.log(`[chatController] ðŸ—‘ï¸ Message ${messageId} deleted for everyone`);
 
       // Notify other participant via socket
       const chatNamespace = getChatNamespace(req);

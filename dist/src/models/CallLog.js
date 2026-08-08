@@ -3,13 +3,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-// src/models/CallLog.js
 const mongoose_1 = __importDefault(require("mongoose"));
+const CallStatus_enum_1 = require("../enums/CallStatus.enum");
 const callLogSchema = new mongoose_1.default.Schema({
-    conversationId: {
-        type: mongoose_1.default.Schema.Types.ObjectId,
-        ref: "Conversation",
-    },
     caller: {
         type: mongoose_1.default.Schema.Types.ObjectId,
         ref: "User",
@@ -22,12 +18,14 @@ const callLogSchema = new mongoose_1.default.Schema({
     },
     status: {
         type: String,
-        enum: ["ringing", "answered", "missed", "rejected", "ended"],
-        default: "ringing",
+        enum: Object.values(CallStatus_enum_1.CallStatus),
+        default: CallStatus_enum_1.CallStatus.RINGING,
     },
     startedAt: { type: Date },
+    answeredAt: { type: Date },
     endedAt: { type: Date },
-    duration: { type: Number, default: 0 }, // seconds
+    duration: { type: Number, default: 0 },
+    isSeen: { type: Boolean, default: false },
 }, { timestamps: true });
-module.exports = mongoose_1.default.model("CallLog", callLogSchema);
+exports.default = mongoose_1.default.model("CallLog", callLogSchema);
 //# sourceMappingURL=CallLog.js.map

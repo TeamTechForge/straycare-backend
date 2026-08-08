@@ -6,17 +6,17 @@ const VolunteerProfile = require("../models/VolunteerProfile");
 const VetProfile = require("../models/VetProfile");
 const NGOProfile = require("../models/NGOProfile");
 const ForumPost = require("../models/ForumPost");
-const StrayReport = require("../models/strayreport");
+const StrayReport = require("../models/StrayReport");
 const RescueHistory = require("../models/RescueHistory");
 const RescueRequest = require("../models/RescueRequest");
 const UserReport = require("../models/UserReport");
 
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
-import { ProfileStatsService } from "../services/ProfileStatsService";
-import { NotificationService } from "../services/NotificationService";
+import { ProfileStatsService } from "../services/profileStatsService";
+import { NotificationService } from "../services/notificationService";
 
-import PrivacyService from "../services/PrivacyService";
+import PrivacyService from "../services/privacyService";
 
 // Fetch another user's public profile data (safe, sanitised)
 exports.getPublicProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -87,7 +87,52 @@ exports.updatePrivacySettings = catchAsync(async (req: Request, res: Response, n
     message: "Privacy settings updated successfully",
     user: updatedUser
   });
-});;
+});
+
+// Block or unblock a user
+exports.toggleBlockUser = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const currentUserId = req.user!.id;
+  const targetUserId = req.params.id as string;
+
+  if (!mongoose.Types.ObjectId.isValid(targetUserId)) {
+    res.status(400).json({ message: "Invalid user ID format" });
+    return;
+  }
+
+  if (currentUserId === targetUserId) {
+    res.status(400).json({ message: "You cannot block yourself" });
+    return;
+  }
+
+  const currentUser = await User.findById(currentUserId);
+  if (!currentUser) {
+    res.status(404).json({ message: "Current user not found" });
+    return;
+  }
+
+  const targetUser = await User.findById(targetUserId);
+  if (!targetUser) {
+    res.status(404).json({ message: "Target user not found" });
+    return;
+  }
+
+  const isBlocked = currentUser.blockedUsers && currentUser.blockedUsers.includes(targetUserId);
+
+  let updateOp;
+  let statusMessage;
+
+  if (isBlocked) {
+    updateOp = { $pull: { blockedUsers: targetUserId } };
+    statusMessage = "User unblocked successfully";
+  } else {
+    updateOp = { $addToSet: { blockedUsers: targetUserId } };
+    statusMessage = "User blocked successfully";
+  }
+
+  await User.findByIdAndUpdate(currentUserId, updateOp);
+
+  res.status(200).json({ message: statusMessage, isBlocked: !isBlocked });
+});
 
 // Fetch user's posts
 exports.getUserPosts = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {

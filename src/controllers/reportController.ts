@@ -1,7 +1,7 @@
 import { catchAsync } from "../utils/catchAsync";
 import type { NextFunction } from "express";
-import { NotificationService } from "../services/NotificationService";
-const StrayReport = require("../models/strayreport");
+import { NotificationService } from "../services/notificationService";
+const StrayReport = require("../models/StrayReport");
 
 import type { Request, Response } from "express";
 
@@ -162,9 +162,67 @@ exports.createReport = catchAsync(async (req: Request, res: Response, next: Next
     try {
       const newReport = await StrayReport.create(reportPayload);
       console.log("[STRAY][SUCCESS] Report created:", newReport._id);
+
+      // ────────────────────────────────────────────────────────
+      // AUTOMATIC NEAREST RESCUER LOOKUP & REQUEST
+      // ────────────────────────────────────────────────────────
+      let rescueRequest = null;
+      if (req.body.preventAutoMatch !== true) {
+        try {
+          const { RescueService } = require("../services/rescueService");
+          const User = require("../models/User");
+          
+          const reporterUser = req.user ? await User.findById(req.user.id) : null;
+          
+          console.log(`[STRAY] Attempting automatic rescuer matching within 5km for report ${newReport.caseId}`);
+          const nearestResult = await RescueService.findNearestRescuer({
+            latitude: newReport.location.lat,
+            longitude: newReport.location.lng,
+            caseId: newReport.caseId,
+            maxDistanceKm: 5,
+          });
+
+        if (nearestResult) {
+          const distanceKm = Number(nearestResult.distance);
+          const etaMinutes = Math.max(3, Math.round(distanceKm * 6));
+          const requestPayload = {
+            userId: newReport.reporterUserId || String(reporterUser?._id) || "anonymous",
+            caseId: newReport.caseId,
+            animalType: newReport.animalType,
+            description: newReport.notes || newReport.description || req.body.notes || req.body.description || "Stray animal needs help",
+            photos: (newReport.photos && newReport.photos.length > 0) ? newReport.photos : (req.body.photos || []),
+            reporterName: newReport.anonymous ? "Anonymous Reporter" : (reporterUser?.name || req.body.reporterName || "Reporter"),
+            reporterPhone: newReport.anonymous ? "" : (reporterUser?.phone || req.body.reporterPhone || ""),
+            reporterAvatar: newReport.anonymous ? "" : (reporterUser?.profileImage || reporterUser?.avatar || req.body.reporterAvatar || ""),
+            reporterLocation: {
+              latitude: newReport.location.lat,
+              longitude: newReport.location.lng,
+              address: newReport.location.address || "",
+            },
+            rescueLocation: {
+              latitude: newReport.location.lat,
+              longitude: newReport.location.lng,
+              address: newReport.location.address || "",
+            },
+            distanceKm,
+            etaMinutes,
+            summary: newReport.notes || newReport.description || "Automatic rescue assignment",
+          };
+
+          rescueRequest = await RescueService.createRescueRequest(requestPayload, nearestResult.rescuer);
+          console.log(`[STRAY] Successfully sent request ${rescueRequest._id} to nearest rescuer ${nearestResult.rescuer.name}`);
+        } else {
+          console.log("[STRAY] No available rescuers found for this case");
+        }
+      } catch (err: any) {
+        console.error("[STRAY] Automatic rescue matching failed:", err.message || err);
+      }
+    }
+
       res.status(201).json({
         message: "Report submitted successfully",
         request: newReport,
+        rescueRequest,
       });
     } catch (error: any) {
       // Handle duplicate key error (E11000)
@@ -217,7 +275,12 @@ exports.getReportByCaseId = catchAsync(async (req: Request, res: Response, next:
 
 // 3. GET ALL REPORTS
 exports.getAllReports = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const reports = await StrayReport.find({}, {
+    // Hide cases that are currently pending assignment to a specific rescuer
+    const RescueRequest = require("../models/RescueRequest");
+    const pendingRequests = await RescueRequest.find({ status: "pending" });
+    const pendingCaseIds = pendingRequests.map((r: any) => r.caseId).filter(Boolean);
+
+    const reports = await StrayReport.find({ caseId: { $nin: pendingCaseIds } }, {
       status: 1,
       location: 1,
       caseId: 1,
@@ -229,7 +292,7 @@ exports.getAllReports = catchAsync(async (req: Request, res: Response, next: Nex
       photos: 1,
       createdAt: 1
     });
-    console.log("[STRAY][GET] Fetched all reports:", reports.length);
+    console.log("[STRAY][GET] Fetched all reports (excluding pending rescue assignments):", reports.length);
     res.json(reports);
   });;
 
@@ -254,7 +317,7 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
       return;
     }
 
-    const rescuerRoles = ["volunteer", "ngo", "vet"];
+    const rescuerRoles = ["volunteer", "ngo", "vet", "rescuer"];
     if (!rescuerRoles.includes(user.role)) {
       console.warn(`[STRAY][UNAUTHORIZED] User ${userId} (role: ${user.role}) attempted to update case status`);
       res.status(403).json({
@@ -270,6 +333,25 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
     if (!report) {
       res.status(404).json({ message: "Case not found" });
       return;
+    }
+
+    // 🔒 Check if case is assigned to a rescuer — only assigned rescuer can manage/update status
+    const RescueRequest = require("../models/RescueRequest");
+    const Rescuer = require("../models/Rescuer");
+
+    const activeRequest = await RescueRequest.findOne({
+      caseId,
+      status: { $in: ["pending", "accepted", "Under Rescue"] },
+    });
+
+    if (activeRequest && activeRequest.rescuerId) {
+      const rescuerDoc = await Rescuer.findOne({ userId });
+      if (!rescuerDoc || String(activeRequest.rescuerId) !== String(rescuerDoc._id)) {
+        res.status(403).json({
+          message: "Forbidden. Only the assigned rescuer can manage or update status for this case.",
+        });
+        return;
+      }
     }
 
     // Update main status

@@ -7,6 +7,9 @@ const transporter = nodemailer.createTransport({
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
     },
+    tls: {
+        rejectUnauthorized: false,
+    },
 });
 // Password reset email
 const sendPasswordResetEmail = async (toEmail, resetLink) => {
@@ -65,5 +68,33 @@ const sendAdminInviteEmail = async (toEmail, inviteLink, username) => {
     };
     await transporter.sendMail(mailOptions);
 };
-module.exports = { sendPasswordResetEmail, sendAdminInviteEmail };
+// 6-Digit Code Password reset email for general users
+const sendPasswordResetCodeEmail = async (toEmail, code) => {
+    const mailOptions = {
+        from: `"StrayCare Support" <${process.env.EMAIL_USER}>`,
+        to: toEmail,
+        subject: "StrayCare - Your Password Reset Code",
+        html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #F5A623;">StrayCare Password Reset</h2>
+        <p>You requested a password reset for your account.</p>
+        <p>Enter the following 6-digit code in the app to reset your password. This code expires in <strong>15 minutes</strong>.</p>
+        <div style="
+          display: inline-block;
+          padding: 12px 24px;
+          background: #fde7c7;
+          color: #333;
+          font-size: 24px;
+          letter-spacing: 4px;
+          border-radius: 8px;
+          font-weight: bold;
+          margin: 20px 0;
+        ">${code}</div>
+        <p style="color: #888; font-size: 13px;">If you didn't request this, ignore this email. Your password won't change.</p>
+      </div>
+    `,
+    };
+    await transporter.sendMail(mailOptions);
+};
+module.exports = { sendPasswordResetEmail, sendAdminInviteEmail, sendPasswordResetCodeEmail };
 //# sourceMappingURL=emailService.js.map

@@ -28,11 +28,14 @@ module.exports = (io) => {
             CallSignallingService_1.default.handleCallStart(io, payload);
         });
         // Handle call accepted/declined/ended
+        socket.on(CallEvents_1.CallEvents.ACCEPTED, (payload) => {
+            CallSignallingService_1.default.handleCallAccept(io, payload);
+        });
         socket.on(CallEvents_1.CallEvents.DECLINED, (payload) => {
             CallSignallingService_1.default.handleCallDecline(io, payload);
         });
         socket.on(CallEvents_1.CallEvents.ENDED, (payload) => {
-            CallSignallingService_1.default.handleCallEnd(io, payload);
+            CallSignallingService_1.default.handleCallEnd(io, payload, socket.userId);
         });
         // WebRTC Signalling: Offer, Answer, ICE
         socket.on(CallEvents_1.CallEvents.WEBRTC_OFFER, (payload) => {
@@ -46,6 +49,7 @@ module.exports = (io) => {
         });
         socket.on("disconnect", () => {
             if (socket.userId) {
+                CallSignallingService_1.default.handleDisconnect(io, socket.userId);
                 CallSignallingService_1.default.unregisterUser(socket.userId, socket.id);
             }
             Logger_1.Logger.info(`[Call Socket] Disconnected: ${socket.id}`);

@@ -22,13 +22,12 @@ const profileRoutes = require("./routes/profileRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const { userRouter, reportRouter, adminRouter } = require("./routes/userRoutes");
-const donationRoutes = require("./routes/donation.routes");
-const organizationRoutes = require("./routes/organization.routes");
-const rescueCasesRoutes = require("./routes/rescues");
-const usersManagementRoutes = require("./routes/users.routes");
-const reportedUsersRoutes = require("./routes/reportedUsers.routes");
+const donationRoutes = require("./routes/donationRoutes");
+const organizationRoutes = require("./routes/organizationRoutes");
+const usersManagementRoutes = require("./routes/usersRoutes");
+const reportedUsersRoutes = require("./routes/reportedUsersRoutes");
 const moderationRoutes = require("./routes/moderationRoutes");
-const adminNotificationsRoutes = require("./routes/adminNotifications.routes");
+const adminNotificationsRoutes = require("./routes/adminNotificationsRoutes");
 const adminManagementRoutes = require("./routes/adminRoutes");
 const searchRoutes = require("./routes/searchRoutes");
 const errorHandler = require("./middleware/errorHandler");
@@ -58,10 +57,10 @@ app.use(cors({
         if (!origin)
             return callback(null, true);
         const isAllowed = allowedOrigins.includes(origin) ||
+            // Allow any device on the 10.x.x.x range (Expo development, Android emulator)
+            /^https?:\/\/10\.[0-9]+\.[0-9]+\.[0-9]+(:[0-9]+)?$/.test(origin) ||
             // Allow any device on the 192.168.x.x home/office network (LAN)
             /^https?:\/\/192\.168\.[0-9]+\.[0-9]+(:[0-9]+)?$/.test(origin) ||
-            // Allow Android emulator (its special IP that maps to your PC)
-            /^https?:\/\/10\.0\.[0-9]+\.[0-9]+(:[0-9]+)?$/.test(origin) ||
             // Allow Docker or mobile hotspot IPs
             /^https?:\/\/172\.[0-9]+\.[0-9]+\.[0-9]+(:[0-9]+)?$/.test(origin) ||
             // Allow localhost in any form
@@ -84,6 +83,7 @@ app.use("/api/admin", adminAuthRoutes);
 app.use("/api/profiles", profileRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/call-logs", require("./routes/callLogRoutes"));
 app.use("/api/chat", chatRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/users", userRouter);
@@ -91,12 +91,12 @@ app.use("/api/reports", reportRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/donations", donationRoutes);
 app.use("/api/organizations", organizationRoutes);
-app.use("/api", rescueCasesRoutes);
 app.use("/api/users", usersManagementRoutes);
 app.use("/api/admin", reportedUsersRoutes);
 app.use("/api/moderation", moderationRoutes);
 app.use("/api/admin-notifications", adminNotificationsRoutes);
 app.use("/api/admins", adminManagementRoutes);
+app.use("/api/support", require("./routes/supportRoutes"));
 app.get("/ping", (req, res) => {
     return res.status(200).json({
         ok: true,

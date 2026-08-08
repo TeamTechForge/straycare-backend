@@ -31,7 +31,23 @@ const verifyToken = (req: Request, res: Response, next: NextFunction): void => {
   }
 };
 
+const optionalToken = (req: Request, res: Response, next: NextFunction): void => {
+  const authHeader = req.headers["authorization"];
+
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.split(" ")[1];
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET) as JwtPayload;
+      req.user = { id: decoded.id, role: decoded.role };
+    } catch (err) {
+      // Ignore invalid token for optional routes
+    }
+  }
+  next();
+};
+
 // Support both `require("...middleware")` (returns verifyToken directly)
-// and `const { verifyToken } = require("...middleware")` (destructured import)
+// and `const { verifyToken, optionalToken } = require("...middleware")`
 module.exports = verifyToken;
 module.exports.verifyToken = verifyToken;
+module.exports.optionalToken = optionalToken;

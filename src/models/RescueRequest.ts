@@ -83,7 +83,7 @@ const rescueRequestSchema = new mongoose.Schema({
   // Current state of the request
   status: {
     type: String,
-    enum: ["pending", "accepted", "rejected", "completed"], // completed supports finished cases in the new history tabs
+    enum: ["pending", "accepted", "rejected", "completed", "cancelled"], // completed supports finished cases in the new history tabs
     default: "pending",
   },
 
@@ -92,4 +92,4 @@ const rescueRequestSchema = new mongoose.Schema({
 });
 
 // Export so rescueController.js can create and query requests
-module.exports = mongoose.model<IRescueRequest>("RescueRequest", rescueRequestSchema);
+module.exports = mongoose.models.RescueRequest || mongoose.model<IRescueRequest>("RescueRequest", rescueRequestSchema);

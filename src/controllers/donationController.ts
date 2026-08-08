@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { ObjectId } from "mongodb";
 import type { Request, Response, NextFunction } from "express";
 import { catchAsync } from "../utils/catchAsync";
-import { donorLookupService } from "../services/DonorLookupService";
+import { donorLookupService } from "../services/donorLookupService";
 
 const Donation = require("../models/Donation");
 const VetProfile = require("../models/VetProfile");
@@ -177,6 +177,12 @@ export class DonationController {
       ]);
       const totalAmount = result.length > 0 ? result[0].total : 0;
     res.json({ total: totalAmount });
+  });
+
+  public getReceivedByOrg = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const { orgId } = req.params;
+    const donations = await Donation.find({ organizationId: orgId, status: "SUCCESS" }).sort({ timestamp: -1 });
+    res.json(donations);
   });
 
   public getReceivedDonations = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
