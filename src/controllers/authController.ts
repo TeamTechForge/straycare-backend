@@ -8,7 +8,7 @@ const VetProfile = require("../models/VetProfile");
 const GeneralUserProfile = require("../models/GeneralUserProfile");
 
 import { Role } from "../enums/Role.enum";
-import { AuthValidator } from "../validators/AuthValidator";
+import { AuthValidator } from "../validators/authValidator";
 import { JwtService } from "../services/JwtService";
 import { PasswordService } from "../services/PasswordService";
 import { NotificationService } from "../services/notificationService";
