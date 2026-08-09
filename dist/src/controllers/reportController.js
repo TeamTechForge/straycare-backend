@@ -132,14 +132,15 @@ exports.createReport = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         let rescueRequest = null;
         if (req.body.preventAutoMatch !== true) {
             try {
-                const { RescueService } = require("../services/RescueService");
+                const { RescueService } = require("../services/rescueService");
                 const User = require("../models/User");
                 const reporterUser = req.user ? await User.findById(req.user.id) : null;
-                console.log(`[STRAY] Attempting automatic rescuer matching for report ${newReport.caseId}`);
+                console.log(`[STRAY] Attempting automatic rescuer matching within 5km for report ${newReport.caseId}`);
                 const nearestResult = await RescueService.findNearestRescuer({
                     latitude: newReport.location.lat,
                     longitude: newReport.location.lng,
                     caseId: newReport.caseId,
+                    maxDistanceKm: 5,
                 });
                 if (nearestResult) {
                     const distanceKm = Number(nearestResult.distance);
@@ -148,11 +149,11 @@ exports.createReport = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
                         userId: newReport.reporterUserId || String(reporterUser?._id) || "anonymous",
                         caseId: newReport.caseId,
                         animalType: newReport.animalType,
-                        description: newReport.description || "Stray animal needs help",
-                        photos: newReport.photos || [],
-                        reporterName: reporterUser?.name || "Reporter",
-                        reporterPhone: reporterUser?.phone || "",
-                        reporterAvatar: reporterUser?.profileImage || "",
+                        description: newReport.notes || newReport.description || req.body.notes || req.body.description || "Stray animal needs help",
+                        photos: (newReport.photos && newReport.photos.length > 0) ? newReport.photos : (req.body.photos || []),
+                        reporterName: newReport.anonymous ? "Anonymous Reporter" : (reporterUser?.name || req.body.reporterName || "Reporter"),
+                        reporterPhone: newReport.anonymous ? "" : (reporterUser?.phone || req.body.reporterPhone || ""),
+                        reporterAvatar: newReport.anonymous ? "" : (reporterUser?.profileImage || reporterUser?.avatar || req.body.reporterAvatar || ""),
                         reporterLocation: {
                             latitude: newReport.location.lat,
                             longitude: newReport.location.lng,
@@ -165,7 +166,7 @@ exports.createReport = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
                         },
                         distanceKm,
                         etaMinutes,
-                        summary: newReport.description || "Automatic rescue assignment",
+                        summary: newReport.notes || newReport.description || "Automatic rescue assignment",
                     };
                     rescueRequest = await RescueService.createRescueRequest(requestPayload, nearestResult.rescuer);
                     console.log(`[STRAY] Successfully sent request ${rescueRequest._id} to nearest rescuer ${nearestResult.rescuer.name}`);

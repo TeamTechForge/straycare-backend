@@ -46,5 +46,5 @@ const rescueRequestSchema = new mongoose_1.default.Schema({
     createdAt: { type: Date, default: Date.now },
 });
 // Export so rescueController.js can create and query requests
-module.exports = mongoose_1.default.model("RescueRequest", rescueRequestSchema);
+module.exports = mongoose_1.default.models.RescueRequest || mongoose_1.default.model("RescueRequest", rescueRequestSchema);
 //# sourceMappingURL=RescueRequest.js.map

@@ -117,24 +117,30 @@ const getMyProfile = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
 });
 const updateGeneralProfile = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     const userId = req.user.id;
-    const { location, bio, profileImage } = req.body;
+    const { name, location, bio, profileImage } = req.body;
     const profile = await GeneralUserProfile.findOneAndUpdate({ userId }, { location, bio, profileImage }, { new: true, runValidators: true });
     if (!profile) {
         res.status(404).json({ message: "Profile not found" });
         return;
     }
-    await User.findByIdAndUpdate(userId, { profileImage: profile.profileImage || "" });
+    const userUpdates = { profileImage: profile.profileImage || "" };
+    if (name)
+        userUpdates.name = name;
+    await User.findByIdAndUpdate(userId, userUpdates);
     res.status(200).json({ message: "Profile updated successfully", profile });
 });
 const updateVolunteerProfile = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     const userId = req.user.id;
-    const { location, bio, profileImage } = req.body;
+    const { name, location, bio, profileImage } = req.body;
     const profile = await VolunteerProfile.findOneAndUpdate({ userId }, { location, bio, profileImage }, { new: true, runValidators: true });
     if (!profile) {
         res.status(404).json({ message: "Profile not found" });
         return;
     }
-    await User.findByIdAndUpdate(userId, { profileImage: profile.profileImage || "" });
+    const userUpdates = { profileImage: profile.profileImage || "" };
+    if (name)
+        userUpdates.name = name;
+    await User.findByIdAndUpdate(userId, userUpdates);
     res.status(200).json({ message: "Profile updated successfully", profile });
 });
 const updateNGOProfile = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
@@ -150,13 +156,16 @@ const updateNGOProfile = (0, catchAsync_1.catchAsync)(async (req, res, next) => 
 });
 const updateVetProfile = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     const userId = req.user.id;
-    const { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret } = req.body;
+    const { name, primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret } = req.body;
     const profile = await VetProfile.findOneAndUpdate({ userId }, { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret }, { new: true, runValidators: true });
     if (!profile) {
         res.status(404).json({ message: "Profile not found" });
         return;
     }
-    await User.findByIdAndUpdate(userId, { profileImage: profile.profileImage || "" });
+    const userUpdates = { profileImage: profile.profileImage || "" };
+    if (name)
+        userUpdates.name = name;
+    await User.findByIdAndUpdate(userId, userUpdates);
     res.status(200).json({ message: "Profile updated successfully", profile });
 });
 module.exports = {

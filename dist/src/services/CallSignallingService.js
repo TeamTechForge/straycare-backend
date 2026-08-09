@@ -1,5 +1,5 @@
 "use strict";
-// src/services/CallSignallingService.ts
+// src/services/callSignallingService.ts
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -56,7 +56,7 @@ class CallSignallingService {
             Logger_1.Logger.error(`[CallSignalling] Error checking busy state`, error);
         }
         try {
-            const PrivacyService = require("./PrivacyService").default;
+            const PrivacyService = require("./privacyService").default;
             const privacyResult = await PrivacyService.canCall(caller.userId, calleeId);
             if (!privacyResult.allowed) {
                 Logger_1.Logger.info(`[CallSignalling] Call blocked by privacy: ${privacyResult.reason}`);

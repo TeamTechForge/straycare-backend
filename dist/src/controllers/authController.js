@@ -15,7 +15,6 @@ const JwtService_1 = require("../services/JwtService");
 const PasswordService_1 = require("../services/PasswordService");
 const NotificationService_1 = require("../services/NotificationService");
 const { sendPasswordResetCodeEmail } = require("../utils/emailService");
-const bcrypt = require("bcryptjs");
 const Notification = require("../models/Notification");
 const register = async (req, res, next) => {
     let user;
@@ -150,7 +149,7 @@ const forgotPassword = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     const hashedCode = crypto.createHash('sha256').update(resetCode).digest('hex');
     if (user) {
         user.resetPasswordToken = hashedCode;
-        user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+        user.resetPasswordExpires = Date.now() + 900000; // 15 minutes
         await user.save();
         try {
             await sendPasswordResetCodeEmail(user.email, resetCode);
@@ -175,7 +174,7 @@ const resetPassword = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         res.status(400).json({ message: "Invalid or expired reset code" });
         return;
     }
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await PasswordService_1.PasswordService.hashPassword(newPassword, 10);
     user.password = hashedPassword;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
@@ -195,7 +194,7 @@ const changePassword = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         res.status(401).json({ message: "Incorrect current password" });
         return;
     }
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await PasswordService_1.PasswordService.hashPassword(newPassword, 10);
     user.password = hashedPassword;
     await user.save();
     res.status(200).json({ message: "Password updated successfully" });

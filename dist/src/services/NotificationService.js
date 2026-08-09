@@ -21,6 +21,8 @@ const sendPushNotification = async (pushToken, title, message, data) => {
             body: JSON.stringify({
                 to: pushToken,
                 sound: "default",
+                priority: "high",
+                channelId: "rescue-alerts",
                 title,
                 body: message,
                 data: data || {},

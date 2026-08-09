@@ -1,4 +1,5 @@
 "use strict";
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProfileStatsService = void 0;
 const GeneralUserProfile = require("../models/GeneralUserProfile");
@@ -31,6 +32,7 @@ class ProfileStatsService {
     }
 }
 exports.ProfileStatsService = ProfileStatsService;
+_a = ProfileStatsService;
 ProfileStatsService.strategies = {
     general_user: async (userId) => {
         const generalProfile = await GeneralUserProfile.findOne({ userId }).lean() || {};

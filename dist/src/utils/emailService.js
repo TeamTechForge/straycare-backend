@@ -78,7 +78,7 @@ const sendPasswordResetCodeEmail = async (toEmail, code) => {
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #F5A623;">StrayCare Password Reset</h2>
         <p>You requested a password reset for your account.</p>
-        <p>Enter the following 6-digit code in the app to reset your password. This code expires in <strong>1 hour</strong>.</p>
+        <p>Enter the following 6-digit code in the app to reset your password. This code expires in <strong>15 minutes</strong>.</p>
         <div style="
           display: inline-block;
           padding: 12px 24px;

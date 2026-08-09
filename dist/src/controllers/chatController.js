@@ -47,12 +47,19 @@ const getConversations = (0, catchAsync_1.catchAsync)(async (req, res, next) => 
         .populate("participants", "name email role profileCompleted profileImage avatar")
         .sort({ "lastMessage.createdAt": -1, updatedAt: -1 })
         .lean();
-    // Self-healing check
+    // Self-healing check and inject shelter name for NGOs
+    const NGOProfile = require("../models/NGOProfile");
     for (let conv of conversations) {
         if (conv.participants) {
             for (let p of conv.participants) {
                 if (!p.profileImage) {
                     p.profileImage = p.avatar || "";
+                }
+                if (p.role === "ngo") {
+                    const profile = await NGOProfile.findOne({ userId: p._id }).select("orgName").lean();
+                    if (profile && profile.orgName) {
+                        p.name = profile.orgName;
+                    }
                 }
             }
         }
@@ -88,11 +95,18 @@ const getOrCreateConversation = (0, catchAsync_1.catchAsync)(async (req, res, ne
         if (conversation.deletedFor && conversation.deletedFor.includes(userId)) {
             await Conversation.findByIdAndUpdate(conversation._id, { $pull: { deletedFor: userId } });
         }
-        // Self-healing check
+        // Self-healing check and inject shelter name for NGOs
+        const NGOProfile = require("../models/NGOProfile");
         if (conversation.participants) {
             for (let p of conversation.participants) {
                 if (!p.profileImage) {
                     p.profileImage = p.avatar || "";
+                }
+                if (p.role === "ngo") {
+                    const profile = await NGOProfile.findOne({ userId: p._id }).select("orgName").lean();
+                    if (profile && profile.orgName) {
+                        p.name = profile.orgName;
+                    }
                 }
             }
         }
@@ -116,11 +130,18 @@ const getOrCreateConversation = (0, catchAsync_1.catchAsync)(async (req, res, ne
     conversation = await Conversation.findById(newConversation._id)
         .populate("participants", "name email role profileCompleted profileImage avatar")
         .lean();
-    // Self-healing check
+    // Self-healing check and inject shelter name for NGOs
+    const NGOProfile = require("../models/NGOProfile");
     if (conversation && conversation.participants) {
         for (let p of conversation.participants) {
             if (!p.profileImage) {
                 p.profileImage = p.avatar || "";
+            }
+            if (p.role === "ngo") {
+                const profile = await NGOProfile.findOne({ userId: p._id }).select("orgName").lean();
+                if (profile && profile.orgName) {
+                    p.name = profile.orgName;
+                }
             }
         }
     }

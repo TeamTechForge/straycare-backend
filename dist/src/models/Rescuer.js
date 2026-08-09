@@ -19,5 +19,5 @@ const rescuerSchema = new mongoose_1.default.Schema({
     },
 });
 // Export so other files can use Rescuer.find(), Rescuer.create(), etc.
-module.exports = mongoose_1.default.model("Rescuer", rescuerSchema);
+module.exports = mongoose_1.default.models.Rescuer || mongoose_1.default.model("Rescuer", rescuerSchema);
 //# sourceMappingURL=Rescuer.js.map

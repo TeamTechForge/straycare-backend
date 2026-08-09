@@ -6,15 +6,15 @@ const VolunteerProfile = require("../models/VolunteerProfile");
 const VetProfile = require("../models/VetProfile");
 const NGOProfile = require("../models/NGOProfile");
 const ForumPost = require("../models/ForumPost");
-const StrayReport = require("../models/strayreport");
+const StrayReport = require("../models/StrayReport");
 const RescueHistory = require("../models/RescueHistory");
 const RescueRequest = require("../models/RescueRequest");
 const UserReport = require("../models/UserReport");
 
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
-import { ProfileStatsService } from "../services/ProfileStatsService";
-import { NotificationService } from "../services/NotificationService";
+import { ProfileStatsService } from "../services/profileStatsService";
+import { NotificationService } from "../services/notificationService";
 
 import PrivacyService from "../services/PrivacyService";
 

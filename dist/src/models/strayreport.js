@@ -10,7 +10,7 @@ const strayReportSchema = new mongoose_1.default.Schema({
     description: { type: String, default: "" },
     status: {
         type: String,
-        enum: ["Needs Help", "Under Rescue", "Treated", "Ready for Adoption"],
+        enum: ["Needs Help", "Under Rescue", "Treated", "Ready for Adoption", "Completed"],
         default: "Needs Help",
     },
     location: {
@@ -30,5 +30,5 @@ const strayReportSchema = new mongoose_1.default.Schema({
     ],
     notes: { type: String, default: "" },
 }, { timestamps: true });
-module.exports = mongoose_1.default.model("StrayReport", strayReportSchema);
+module.exports = mongoose_1.default.models.StrayReport || mongoose_1.default.model("StrayReport", strayReportSchema);
 //# sourceMappingURL=strayreport.js.map
