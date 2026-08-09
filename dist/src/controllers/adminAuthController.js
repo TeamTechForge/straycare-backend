@@ -3,8 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const catchAsync_1 = require("../utils/catchAsync");
 const Admin = require("../models/Admin");
 const { sendPasswordResetEmail } = require("../utils/emailService");
-const JwtService_1 = require("../services/JwtService");
-const PasswordService_1 = require("../services/PasswordService");
+const jwtService_1 = require("../services/jwtService");
+const passwordService_1 = require("../services/passwordService");
 exports.login = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     const { email, password } = req.body;
     const admin = await Admin.findOne({ email });
@@ -12,12 +12,12 @@ exports.login = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         res.status(401).json({ error: "Invalid credentials" });
         return;
     }
-    const match = await PasswordService_1.PasswordService.comparePassword(password, admin.password);
+    const match = await passwordService_1.PasswordService.comparePassword(password, admin.password);
     if (!match) {
         res.status(401).json({ error: "Invalid credentials" });
         return;
     }
-    const token = JwtService_1.JwtService.generateToken({ id: admin._id, role: "admin", username: admin.username }, "8h");
+    const token = jwtService_1.JwtService.generateToken({ id: admin._id, role: "admin", username: admin.username }, "8h");
     res.json({ token, admin: { id: admin._id, username: admin.username, email: admin.email } });
 });
 ;
@@ -28,7 +28,7 @@ exports.forgotPassword = (0, catchAsync_1.catchAsync)(async (req, res, next) => 
         res.json({ message: "If this email exists, a reset link has been sent." });
         return;
     }
-    const token = JwtService_1.JwtService.generateToken({ email }, "1h");
+    const token = jwtService_1.JwtService.generateToken({ email }, "1h");
     admin.resetToken = token;
     admin.resetTokenExpiry = new Date(Date.now() + 3600000);
     await admin.save();
@@ -45,7 +45,7 @@ exports.resetPassword = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     }
     let decoded;
     try {
-        decoded = JwtService_1.JwtService.verifyToken(token);
+        decoded = jwtService_1.JwtService.verifyToken(token);
     }
     catch (err) {
         res.status(400).json({ error: "Invalid or expired token" });

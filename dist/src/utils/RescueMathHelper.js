@@ -1,5 +1,5 @@
 "use strict";
-// src/utils/RescueMathHelper.ts
+// src/utils/rescueMathHelper.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RescueMathHelper = void 0;
 class RescueMathHelper {
@@ -45,4 +45,4 @@ RescueMathHelper.FALLBACK_RESCUE_LOCATION = {
     longitude: 79.8612,
     address: "Colombo, Sri Lanka",
 };
-//# sourceMappingURL=RescueMathHelper.js.map
+//# sourceMappingURL=rescueMathHelper.js.map

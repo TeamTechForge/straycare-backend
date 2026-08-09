@@ -82,6 +82,10 @@ const userSchema = new mongoose_1.default.Schema({
     pushToken: {
         type: String,
     },
+    accountStatus: {
+        type: String,
+        default: null,
+    },
     blockedUsers: [
         {
             type: mongoose_1.default.Schema.Types.ObjectId,

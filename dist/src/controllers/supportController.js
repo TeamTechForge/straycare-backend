@@ -35,4 +35,42 @@ exports.createSupportTicket = async (req, res) => {
         res.status(500).json({ error: "Failed to submit support request" });
     }
 };
+exports.getAllSupportTickets = async (req, res) => {
+    try {
+        const tickets = await SupportTicket.find()
+            .sort({ createdAt: -1 })
+            .populate("userId", "name email");
+        res.json(tickets);
+    }
+    catch (error) {
+        console.error("Error fetching support tickets:", error);
+        res.status(500).json({ error: "Failed to fetch support tickets" });
+    }
+};
+exports.updateSupportTicket = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status, adminReply } = req.body;
+        const validStatuses = ["Pending", "In Progress", "Resolved", "Closed"];
+        if (status && !validStatuses.includes(status)) {
+            res.status(400).json({ error: "Invalid status" });
+            return;
+        }
+        const update = {};
+        if (status)
+            update.status = status;
+        if (adminReply !== undefined)
+            update.adminReply = adminReply;
+        const ticket = await SupportTicket.findByIdAndUpdate(id, update, { new: true });
+        if (!ticket) {
+            res.status(404).json({ error: "Ticket not found" });
+            return;
+        }
+        res.json({ message: "Ticket updated successfully", ticket });
+    }
+    catch (error) {
+        console.error("Error updating support ticket:", error);
+        res.status(500).json({ error: "Failed to update ticket" });
+    }
+};
 //# sourceMappingURL=supportController.js.map
