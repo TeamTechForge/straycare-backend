@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { ObjectId } from "mongodb";
 import type { Request, Response, NextFunction } from "express";
 import { catchAsync } from "../utils/catchAsync";
-import { donorLookupService } from "../services/DonorLookupService";
+import { donorLookupService } from "../services/donorLookupService";
 
 const Donation = require("../models/Donation");
 const VetProfile = require("../models/VetProfile");
