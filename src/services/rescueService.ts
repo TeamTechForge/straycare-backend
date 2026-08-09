@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
-import { RescueMathHelper } from "../utils/RescueMathHelper";
-import { Logger } from "../utils/Logger";
+import { RescueMathHelper } from "../utils/rescueMathHelper";
+import { Logger } from "../utils/logger";
 import { RescueStatus } from "../enums/RescueStatus";
 
 const Rescuer = require("../models/Rescuer");

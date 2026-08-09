@@ -11,8 +11,8 @@ const { getDistance } = require("../utils/distance");
 
 import { NotificationService } from "../services/notificationService";
 import { RescueService } from "../services/rescueService";
-import { Logger } from "../utils/Logger";
-import { RescueMathHelper } from "../utils/RescueMathHelper";
+import { Logger } from "../utils/logger";
+import { RescueMathHelper } from "../utils/rescueMathHelper";
 import { RescueStatus } from "../enums/RescueStatus";
 import type { Request, Response } from "express";
 
