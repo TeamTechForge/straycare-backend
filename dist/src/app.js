@@ -30,6 +30,7 @@ const moderationRoutes = require("./routes/moderationRoutes");
 const adminNotificationsRoutes = require("./routes/adminNotificationsRoutes");
 const adminManagementRoutes = require("./routes/adminRoutes");
 const searchRoutes = require("./routes/searchRoutes");
+const adoptionRoutes = require("./routes/AdoptionRoutes");
 const errorHandler = require("./middleware/errorHandler");
 const app = express();
 // List of frontend origins that are allowed to make requests to this server.
@@ -97,6 +98,7 @@ app.use("/api/moderation", moderationRoutes);
 app.use("/api/admin-notifications", adminNotificationsRoutes);
 app.use("/api/admins", adminManagementRoutes);
 app.use("/api/support", require("./routes/supportRoutes"));
+app.use("/api/adoption", adoptionRoutes);
 app.get("/ping", (req, res) => {
     return res.status(200).json({
         ok: true,

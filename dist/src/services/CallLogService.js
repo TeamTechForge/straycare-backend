@@ -171,4 +171,4 @@ class CallLogService {
     }
 }
 exports.default = new CallLogService();
-//# sourceMappingURL=CallLogService.js.map
+//# sourceMappingURL=callLogService.js.map

@@ -1,5 +1,5 @@
 "use strict";
-// src/utils/RescueMathHelper.ts
+// src/utils/rescueMathHelper.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RescueMathHelper = void 0;
 class RescueMathHelper {

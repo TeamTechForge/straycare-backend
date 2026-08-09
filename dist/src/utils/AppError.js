@@ -1,5 +1,5 @@
 "use strict";
-// src/utils/AppError.ts
+// src/utils/appError.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppError = void 0;
 class AppError extends Error {

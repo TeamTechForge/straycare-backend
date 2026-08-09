@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const CallLogService_1 = __importDefault(require("../services/CallLogService"));
+const callLogService_1 = __importDefault(require("../services/callLogService"));
 const Logger_1 = require("../utils/Logger");
 class CallLogController {
     constructor() {
@@ -17,7 +17,7 @@ class CallLogController {
                     res.status(401).json({ message: "Unauthorized" });
                     return;
                 }
-                const history = await CallLogService_1.default.getHistory(userId);
+                const history = await callLogService_1.default.getHistory(userId);
                 res.status(200).json(history);
             }
             catch (error) {
@@ -36,7 +36,7 @@ class CallLogController {
                     res.status(401).json({ message: "Unauthorized" });
                     return;
                 }
-                const success = await CallLogService_1.default.deleteLog(id, userId);
+                const success = await callLogService_1.default.deleteLog(id, userId);
                 if (success) {
                     res.status(200).json({ message: "Log deleted successfully" });
                 }
@@ -59,7 +59,7 @@ class CallLogController {
                     res.status(401).json({ message: "Unauthorized" });
                     return;
                 }
-                await CallLogService_1.default.clearHistory(userId);
+                await callLogService_1.default.clearHistory(userId);
                 res.status(200).json({ message: "History cleared successfully" });
             }
             catch (error) {
@@ -77,7 +77,7 @@ class CallLogController {
                     res.status(401).json({ message: "Unauthorized" });
                     return;
                 }
-                await CallLogService_1.default.markSeen(userId);
+                await callLogService_1.default.markSeen(userId);
                 res.status(200).json({ message: "Marked as seen" });
             }
             catch (error) {
@@ -88,4 +88,4 @@ class CallLogController {
     }
 }
 exports.default = new CallLogController();
-//# sourceMappingURL=CallLogController.js.map
+//# sourceMappingURL=callLogController.js.map

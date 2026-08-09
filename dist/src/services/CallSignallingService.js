@@ -7,7 +7,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const CallEvents_1 = require("../enums/CallEvents");
 const CallStatus_enum_1 = require("../enums/CallStatus.enum");
 const Logger_1 = require("../utils/Logger");
-const CallLogService_1 = __importDefault(require("./CallLogService"));
+const callLogService_1 = __importDefault(require("./callLogService"));
 class CallSignallingService {
     constructor() {
         // Mapping of userId -> Set of socketIds in the /call namespace
@@ -44,10 +44,10 @@ class CallSignallingService {
     async handleCallStart(io, payload) {
         const { caller, calleeId } = payload;
         try {
-            const activeCall = await CallLogService_1.default.findActiveCall(calleeId);
+            const activeCall = await callLogService_1.default.findActiveCall(calleeId);
             if (activeCall) {
                 Logger_1.Logger.info(`[CallSignalling] User ${calleeId} is BUSY`);
-                CallLogService_1.default.createLog(caller.userId, calleeId, CallStatus_enum_1.CallStatus.BUSY).catch(Logger_1.Logger.error);
+                callLogService_1.default.createLog(caller.userId, calleeId, CallStatus_enum_1.CallStatus.BUSY).catch(Logger_1.Logger.error);
                 io.of("/call").to(`user:${caller.userId}`).emit(CallEvents_1.CallEvents.BUSY, payload);
                 return;
             }
@@ -77,25 +77,25 @@ class CallSignallingService {
             Logger_1.Logger.info(`[CallSignalling] Call from ${caller.userId} to ${calleeId} timed out`);
             this.ringTimeouts.delete(key);
             // Complete log -> Because it's still RINGING, it becomes MISSED.
-            CallLogService_1.default.completeCall(caller.userId, calleeId).catch(Logger_1.Logger.error);
+            callLogService_1.default.completeCall(caller.userId, calleeId).catch(Logger_1.Logger.error);
             // Notify both participants to transition to IDLE and cleanup
             const endPayload = { callerId: caller.userId, calleeId };
             io.of("/call").to(`user:${caller.userId}`).emit(CallEvents_1.CallEvents.ENDED, endPayload);
             io.of("/call").to(`user:${calleeId}`).emit(CallEvents_1.CallEvents.ENDED, endPayload);
         }, 30000));
         // Asynchronously create Call Log
-        CallLogService_1.default.createLog(caller.userId, calleeId).catch(err => Logger_1.Logger.error(`[CallSignalling] Failed to create call log`, err));
+        callLogService_1.default.createLog(caller.userId, calleeId).catch(err => Logger_1.Logger.error(`[CallSignalling] Failed to create call log`, err));
     }
     handleCallAccept(io, payload) {
         Logger_1.Logger.info(`[CallSignalling] Call accepted by ${payload.calleeId}`);
         io.of("/call").to(`user:${payload.callerId}`).emit(CallEvents_1.CallEvents.ACCEPTED, payload);
         this.clearRingTimeout(payload.callerId, payload.calleeId);
         // Asynchronously update Call Log to ANSWERED
-        CallLogService_1.default.markAnswered(payload.callerId, payload.calleeId).catch(err => Logger_1.Logger.error(`[CallSignalling] Failed to mark call answered`, err));
+        callLogService_1.default.markAnswered(payload.callerId, payload.calleeId).catch(err => Logger_1.Logger.error(`[CallSignalling] Failed to mark call answered`, err));
     }
     async verifyActiveSession(userA, userB) {
         try {
-            const activeCall = await CallLogService_1.default.findActiveCall(userA);
+            const activeCall = await callLogService_1.default.findActiveCall(userA);
             if (!activeCall)
                 return false;
             const callerStr = activeCall.caller.toString();
@@ -137,7 +137,7 @@ class CallSignallingService {
         io.of("/call").to(`user:${payload.callerId}`).emit(CallEvents_1.CallEvents.DECLINED, payload);
         this.clearRingTimeout(payload.callerId, payload.calleeId);
         // Asynchronously update Call Log to REJECTED
-        CallLogService_1.default.markRejected(payload.callerId, payload.calleeId).catch(err => Logger_1.Logger.error(`[CallSignalling] Failed to mark call rejected`, err));
+        callLogService_1.default.markRejected(payload.callerId, payload.calleeId).catch(err => Logger_1.Logger.error(`[CallSignalling] Failed to mark call rejected`, err));
     }
     handleCallEnd(io, payload, endedByUserId) {
         Logger_1.Logger.info(`[CallSignalling] Call ended by ${endedByUserId || payload.callerId} for caller: ${payload.callerId}, callee: ${payload.calleeId}`);
@@ -151,12 +151,12 @@ class CallSignallingService {
         // Note: The one who ends the call sends their ID as callerId, which might be the actual receiver. 
         // Wait! The payload might have callerId/calleeId swapped depending on who hangs up!
         // To fix this without swapping, completeCall finds any active call between them.
-        CallLogService_1.default.completeCall(payload.callerId, payload.calleeId).catch(err => Logger_1.Logger.error(`[CallSignalling] Failed to complete call log`, err));
+        callLogService_1.default.completeCall(payload.callerId, payload.calleeId).catch(err => Logger_1.Logger.error(`[CallSignalling] Failed to complete call log`, err));
     }
     async handleDisconnect(io, userId) {
         Logger_1.Logger.info(`[CallSignalling] Handling disconnect for user ${userId}`);
         try {
-            const activeCall = await CallLogService_1.default.findActiveCall(userId);
+            const activeCall = await callLogService_1.default.findActiveCall(userId);
             if (activeCall) {
                 const callerId = activeCall.caller.toString();
                 const calleeId = activeCall.receiver.toString();
@@ -172,4 +172,4 @@ class CallSignallingService {
     }
 }
 exports.default = new CallSignallingService();
-//# sourceMappingURL=CallSignallingService.js.map
+//# sourceMappingURL=callSignallingService.js.map

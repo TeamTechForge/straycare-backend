@@ -23,7 +23,7 @@ const connectDB = async () => {
     // Read the MongoDB connection string from environment variables
     let mongoURI = process.env.MONGO_URI;
     if (!mongoURI) {
-        Logger_1.Logger.warn("⚠️ MONGO_URI is undefined. Falling back to in-memory MongoDB...", { service: "Database" });
+        Logger_1.Logger.warn("âš ï¸ MONGO_URI is undefined. Falling back to in-memory MongoDB...", { service: "Database" });
         await startMemoryServer();
         return;
     }
@@ -36,7 +36,7 @@ const connectDB = async () => {
         Logger_1.Logger.info("MongoDB connected", { service: "Database" });
     }
     catch (error) {
-        Logger_1.Logger.warn(`⚠️ MongoDB connection to configured DB failed: ${error.message}`, { service: "Database" });
+        Logger_1.Logger.warn(`âš ï¸ MongoDB connection to configured DB failed: ${error.message}`, { service: "Database" });
         Logger_1.Logger.info("Falling back to in-memory MongoDB server...", { service: "Database" });
         await startMemoryServer();
     }
@@ -78,7 +78,7 @@ const startMemoryServer = async () => {
         }
     }
     catch (err) {
-        Logger_1.Logger.error("❌ Failed to start in-memory MongoDB server:", err);
+        Logger_1.Logger.error("âŒ Failed to start in-memory MongoDB server:", err);
         process.exit(1);
     }
 };

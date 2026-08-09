@@ -10,13 +10,13 @@ const VolunteerProfile = require("../models/VolunteerProfile");
 const VetProfile = require("../models/VetProfile");
 const NGOProfile = require("../models/NGOProfile");
 const ForumPost = require("../models/ForumPost");
-const StrayReport = require("../models/strayreport");
+const StrayReport = require("../models/StrayReport");
 const RescueHistory = require("../models/RescueHistory");
 const RescueRequest = require("../models/RescueRequest");
 const UserReport = require("../models/UserReport");
 const mongoose_1 = __importDefault(require("mongoose"));
-const ProfileStatsService_1 = require("../services/ProfileStatsService");
-const NotificationService_1 = require("../services/NotificationService");
+const profileStatsService_1 = require("../services/profileStatsService");
+const notificationService_1 = require("../services/notificationService");
 const PrivacyService_1 = __importDefault(require("../services/PrivacyService"));
 // Fetch another user's public profile data (safe, sanitised)
 exports.getPublicProfile = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
@@ -31,7 +31,7 @@ exports.getPublicProfile = (0, catchAsync_1.catchAsync)(async (req, res, next) =
         res.status(404).json({ message: "User not found" });
         return;
     }
-    const { profileData, stats } = await ProfileStatsService_1.ProfileStatsService.getProfileAndStats(userId, user.role);
+    const { profileData, stats } = await profileStatsService_1.ProfileStatsService.getProfileAndStats(userId, user.role);
     const messagePermission = await PrivacyService_1.default.canMessage(currentUserId, userId);
     const callPermission = await PrivacyService_1.default.canCall(currentUserId, userId);
     res.status(200).json({
@@ -275,7 +275,7 @@ exports.approveUser = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         await VetProfile.findOneAndUpdate({ userId: user._id }, { status: "Verified" });
     }
     // Create in-app success notification
-    await NotificationService_1.NotificationService.sendNotification(user._id, "Profile Updated", "Your profile has been updated successfully", "success");
+    await notificationService_1.NotificationService.sendNotification(user._id, "Profile Updated", "Your profile has been updated successfully", "success");
     // Emit real-time update via Socket.IO
     const io = req.app.get("io");
     if (io) {

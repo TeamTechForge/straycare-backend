@@ -3,6 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express = require("express");
 const mongoose = require("mongoose");
 const router = express.Router();
+const Notification = require("../models/Notification");
+const User = require("../models/User");
 // GET all admin notifications
 router.get("/", async (req, res) => {
     try {
@@ -23,18 +25,39 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
     try {
         const { title, audience, message } = req.body;
-        if (!title || !audience || !message) {
+        if (!title || !message) {
             return res.status(400).json({ error: "Missing required fields" });
         }
+        const audienceRoles = Array.isArray(audience) ? audience : [];
+        // Log the admin's broadcast for the "Previously Sent" history list
         const db = mongoose.connection.client.db("straycare");
         const newNotification = {
             title,
-            audience,
+            audience: audienceRoles,
             message,
             createdAt: new Date(),
         };
         const result = await db.collection("admin_notifications").insertOne(newNotification);
-        res.json({ ...newNotification, _id: result.insertedId });
+        // Find every user who should receive this notification
+        const userQuery = audienceRoles.length > 0 ? { role: { $in: audienceRoles } } : {};
+        const targetUsers = await User.find(userQuery).select("_id");
+        // Create one personal Notification document per matching user,
+        // so it shows up in their existing Notifications screen on the mobile app.
+        if (targetUsers.length > 0) {
+            const notificationDocs = targetUsers.map((u) => ({
+                userId: u._id,
+                title,
+                message,
+                type: "info",
+                read: false,
+            }));
+            await Notification.insertMany(notificationDocs);
+        }
+        res.json({
+            ...newNotification,
+            _id: result.insertedId,
+            recipientCount: targetUsers.length,
+        });
     }
     catch (err) {
         console.error("Error creating admin notification:", err);

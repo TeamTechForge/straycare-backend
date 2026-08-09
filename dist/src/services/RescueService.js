@@ -9,14 +9,14 @@ const RescueMathHelper_1 = require("../utils/RescueMathHelper");
 const Logger_1 = require("../utils/Logger");
 const RescueStatus_1 = require("../enums/RescueStatus");
 const Rescuer = require("../models/Rescuer");
-const StrayReport = require("../models/strayreport");
+const StrayReport = require("../models/StrayReport");
 class RescueService {
     /**
      * Finds the nearest available rescuer within a specified max distance (default 5km) based on coordinates, excluding specific IDs or the reporter themselves.
      */
     static async findNearestRescuer(params) {
         const { latitude, longitude, excludeIds, caseId, maxDistanceKm = 10 } = params;
-        const StrayReport = require("../models/strayreport");
+        const StrayReport = require("../models/StrayReport");
         let reporterUserId = params.reporterUserId || null;
         if (!reporterUserId && caseId) {
             const report = await StrayReport.findOne({ caseId });
@@ -78,7 +78,7 @@ class RescueService {
     static async createRescueRequest(payload, rescuer) {
         const RescueRequest = require("../models/RescueRequest");
         const User = require("../models/User");
-        const { NotificationService } = require("./NotificationService");
+        const { NotificationService } = require("./notificationService");
         let rescuerUser = null;
         if (rescuer.userId && mongoose_1.default.Types.ObjectId.isValid(String(rescuer.userId))) {
             rescuerUser = await User.findById(rescuer.userId).select("name phone profileImage avatar");
@@ -115,4 +115,4 @@ class RescueService {
     }
 }
 exports.RescueService = RescueService;
-//# sourceMappingURL=RescueService.js.map
+//# sourceMappingURL=rescueService.js.map

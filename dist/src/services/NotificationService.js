@@ -80,4 +80,4 @@ class NotificationService {
     }
 }
 exports.NotificationService = NotificationService;
-//# sourceMappingURL=NotificationService.js.map
+//# sourceMappingURL=notificationService.js.map

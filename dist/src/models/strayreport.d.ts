@@ -1,2 +1,2 @@
 export {};
-//# sourceMappingURL=strayreport.d.ts.map
+//# sourceMappingURL=StrayReport.d.ts.map
