@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const catchAsync_1 = require("../utils/catchAsync");
-const NotificationService_1 = require("../services/NotificationService");
-const StrayReport = require("../models/strayreport");
+const notificationService_1 = require("../services/notificationService");
+const StrayReport = require("../models/StrayReport");
 // Helper function to send push notifications via Expo
 const sendPushNotification = async (pushToken, title, message, data) => {
     try {
@@ -229,6 +229,26 @@ exports.getReportByCaseId = (0, catchAsync_1.catchAsync)(async (req, res, next) 
             console.warn(`[STRAY] Could not populate reporter for case ${report.caseId}:`, err);
         }
     }
+    // Populate assigned rescuer user ID if active rescue request exists
+    try {
+        const RescueRequest = require("../models/RescueRequest");
+        const Rescuer = require("../models/Rescuer");
+        const activeRequest = await RescueRequest.findOne({
+            caseId: req.params.caseId,
+            status: { $in: ["accepted", "under rescue", "Under Rescue", "completed", "treated", "ready for adoption"] },
+        });
+        if (activeRequest && activeRequest.rescuerId) {
+            let rescuerUserId = String(activeRequest.rescuerId);
+            const rescuerDoc = await Rescuer.findById(activeRequest.rescuerId);
+            if (rescuerDoc && rescuerDoc.userId) {
+                rescuerUserId = String(rescuerDoc.userId);
+            }
+            report._doc.assignedRescuerUserId = rescuerUserId;
+        }
+    }
+    catch (err) {
+        console.warn(`[STRAY] Could not populate assigned rescuer for case ${report.caseId}:`, err);
+    }
     res.json(report);
 });
 ;
@@ -291,16 +311,25 @@ exports.updateCaseStatus = (0, catchAsync_1.catchAsync)(async (req, res, next) =
     const Rescuer = require("../models/Rescuer");
     const activeRequest = await RescueRequest.findOne({
         caseId,
-        status: { $in: ["pending", "accepted", "Under Rescue"] },
+        status: { $in: ["accepted", "under rescue", "Under Rescue", "completed", "treated", "ready for adoption"] },
     });
-    if (activeRequest && activeRequest.rescuerId) {
-        const rescuerDoc = await Rescuer.findOne({ userId });
-        if (!rescuerDoc || String(activeRequest.rescuerId) !== String(rescuerDoc._id)) {
-            res.status(403).json({
-                message: "Forbidden. Only the assigned rescuer can manage or update status for this case.",
-            });
-            return;
-        }
+    if (!activeRequest) {
+        res.status(403).json({
+            message: "Forbidden. A rescuer must accept this case before updating its status.",
+        });
+        return;
+    }
+    const rescuerDoc = await Rescuer.findOne({ userId });
+    const rescuerDocId = rescuerDoc ? String(rescuerDoc._id) : "";
+    const currentUserIdStr = String(userId);
+    const assignedRescuerIdStr = String(activeRequest.rescuerId);
+    const isAssignedRescuer = assignedRescuerIdStr === currentUserIdStr ||
+        (rescuerDocId && assignedRescuerIdStr === rescuerDocId);
+    if (!isAssignedRescuer) {
+        res.status(403).json({
+            message: "Forbidden. Only the accepted rescuer assigned to this case can change its status.",
+        });
+        return;
     }
     // Update main status
     report.status = status;
@@ -329,7 +358,7 @@ exports.updateCaseStatus = (0, catchAsync_1.catchAsync)(async (req, res, next) =
         const notificationMessage = statusMessages[status] || `Status updated to ${status}`;
         try {
             // Save in-app notification
-            await NotificationService_1.NotificationService.sendNotification(report.reporterUserId, "Case Status Update", notificationMessage, "success");
+            await notificationService_1.NotificationService.sendNotification(report.reporterUserId, "Case Status Update", notificationMessage, "success");
             console.log(`[STRAY] Notification sent to reporter for case ${report.caseId}`);
             // Send push notification if user has token
             try {

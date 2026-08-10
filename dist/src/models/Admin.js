@@ -14,6 +14,9 @@ const AdminSchema = new mongoose_1.default.Schema({
     resetTokenExpiry: { type: Date, default: null },
     invitationToken: { type: String, default: null },
     status: { type: String, enum: ["pending", "active"], default: null },
+    emailNotifications: { type: Boolean, default: true },
+    donationAlerts: { type: Boolean, default: true },
+    userReportAlerts: { type: Boolean, default: true },
 });
 AdminSchema.pre("save", async function () {
     if (!this.isModified("password"))

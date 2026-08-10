@@ -180,6 +180,8 @@ describe('Chat Controller Unit Tests', () => {
         conversationId: 'conv1',
         sender: 'user1', // User is sender
         createdAt: new Date(1000), // Same time
+        text: 'Hello', // Will be overwritten by controller on delete
+        isDeletedForEveryone: false, // Will be set to true by controller
         save: jest.fn().mockResolvedValue(true)
       };
       Message.findById.mockResolvedValue(mockMessage);

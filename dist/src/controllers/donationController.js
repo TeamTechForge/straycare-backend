@@ -8,7 +8,7 @@ const crypto_1 = __importDefault(require("crypto"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const mongodb_1 = require("mongodb");
 const catchAsync_1 = require("../utils/catchAsync");
-const DonorLookupService_1 = require("../services/DonorLookupService");
+const donorLookupService_1 = require("../services/donorLookupService");
 const Donation = require("../models/Donation");
 const VetProfile = require("../models/VetProfile");
 const NGOProfile = require("../models/NGOProfile");
@@ -100,6 +100,12 @@ class DonationController {
         this.saveDonation = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
             const { orderId, amount, category, organization, organizationId, frequency, plan, status } = req.body;
             const donorId = req.user?.id || null;
+            // Prevent duplicate records if the same order gets submitted more than once
+            const existing = await Donation.findOne({ orderId });
+            if (existing) {
+                res.json({ success: true, donation: existing });
+                return;
+            }
             const donation = await Donation.create({
                 orderId,
                 amount: parseFloat(amount),
@@ -157,7 +163,7 @@ class DonationController {
             }
             const orgId = orgProfile._id.toString();
             const donations = await Donation.find({ organizationId: orgId, status: "SUCCESS" }).sort({ timestamp: -1 });
-            const enriched = await DonorLookupService_1.donorLookupService.attachDonorNames(donations);
+            const enriched = await donorLookupService_1.donorLookupService.attachDonorNames(donations);
             res.json(enriched);
         });
         this.getAllDonations = (0, catchAsync_1.catchAsync)(async (req, res, next) => {

@@ -8,10 +8,10 @@ const Rescuer = require("../models/Rescuer");
 const RescueRequest = require("../models/RescueRequest");
 const RescueHistory = require("../models/RescueHistory");
 const { getDistance } = require("../utils/distance");
-const NotificationService_1 = require("../services/NotificationService");
-const RescueService_1 = require("../services/RescueService");
-const Logger_1 = require("../utils/Logger");
-const RescueMathHelper_1 = require("../utils/RescueMathHelper");
+const notificationService_1 = require("../services/notificationService");
+const rescueService_1 = require("../services/rescueService");
+const logger_1 = require("../utils/logger");
+const rescueMathHelper_1 = require("../utils/rescueMathHelper");
 const RescueStatus_1 = require("../enums/RescueStatus");
 const findRequestByIdOrCustomId = async (id) => {
     let request = null;
@@ -45,10 +45,10 @@ const normalizePhotoList = (value) => {
 };
 const formatCaseRecord = ({ request, rescuer = null, history = null }) => {
     const requestId = String(request.rescueRequestId || request._id);
-    const rescueLocation = RescueMathHelper_1.RescueMathHelper.normalizeLocation(request.rescueLocation || rescuer?.location, rescuer?.location || FALLBACK_RESCUE_LOCATION, 0);
-    const reporterLocation = RescueMathHelper_1.RescueMathHelper.normalizeLocation(request.reporterLocation, rescueLocation, 0.008);
-    const distanceKm = RescueMathHelper_1.RescueMathHelper.toNumber(request.distanceKm, RescueMathHelper_1.RescueMathHelper.deriveDistance(reporterLocation, rescueLocation));
-    const etaMinutes = RescueMathHelper_1.RescueMathHelper.toNumber(request.etaMinutes, RescueMathHelper_1.RescueMathHelper.deriveEta(distanceKm));
+    const rescueLocation = rescueMathHelper_1.RescueMathHelper.normalizeLocation(request.rescueLocation || rescuer?.location, rescuer?.location || FALLBACK_RESCUE_LOCATION, 0);
+    const reporterLocation = rescueMathHelper_1.RescueMathHelper.normalizeLocation(request.reporterLocation, rescueLocation, 0.008);
+    const distanceKm = rescueMathHelper_1.RescueMathHelper.toNumber(request.distanceKm, rescueMathHelper_1.RescueMathHelper.deriveDistance(reporterLocation, rescueLocation));
+    const etaMinutes = rescueMathHelper_1.RescueMathHelper.toNumber(request.etaMinutes, rescueMathHelper_1.RescueMathHelper.deriveEta(distanceKm));
     const rescuerFromModel = rescuer
         ? {
             id: String(rescuer._id),
@@ -56,7 +56,7 @@ const formatCaseRecord = ({ request, rescuer = null, history = null }) => {
             name: rescuer.name,
             avatar: rescuer.avatar || "",
             phone: rescuer.phone || "",
-            location: RescueMathHelper_1.RescueMathHelper.normalizeLocation(rescuer.location, FALLBACK_RESCUE_LOCATION, 0),
+            location: rescueMathHelper_1.RescueMathHelper.normalizeLocation(rescuer.location, FALLBACK_RESCUE_LOCATION, 0),
         }
         : null;
     const rescuerFromData = history || request.rescuerName
@@ -66,7 +66,7 @@ const formatCaseRecord = ({ request, rescuer = null, history = null }) => {
             name: history?.rescuerName || request.rescuerName || "",
             avatar: history?.rescuerAvatar || request.rescuerAvatar || "",
             phone: history?.rescuerPhone || request.rescuerPhone || "",
-            location: RescueMathHelper_1.RescueMathHelper.normalizeLocation(history?.rescuerLocation || request.rescueLocation, rescueLocation, 0),
+            location: rescueMathHelper_1.RescueMathHelper.normalizeLocation(history?.rescuerLocation || request.rescueLocation, rescueLocation, 0),
         }
         : null;
     const finalRescuer = rescuerFromModel
@@ -109,7 +109,7 @@ const formatCaseRecord = ({ request, rescuer = null, history = null }) => {
 const enrichCaseRecordWithReporterAndStray = async (formatted, caseIdOrId = "", requestOrHistoryUser = "") => {
     try {
         const User = require("../models/User");
-        const StrayReport = require("../models/strayreport");
+        const StrayReport = require("../models/StrayReport");
         const stray = await StrayReport.findOne({
             $or: [{ caseId: caseIdOrId }, { caseId: formatted.caseId }]
         });
@@ -232,9 +232,9 @@ exports.listRescuers = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     res.json({ count: rescuers.length, rescuers });
 });
 ;
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // POST /api/rescue/find-nearest
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 exports.findNearestRescuer = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     const { latitude, longitude, excludeIds, caseId, maxDistanceKm } = req.body;
     const maxDist = maxDistanceKm !== undefined && Number.isFinite(Number(maxDistanceKm)) ? Number(maxDistanceKm) : 5;
@@ -250,7 +250,7 @@ exports.findNearestRescuer = (0, catchAsync_1.catchAsync)(async (req, res, next)
         return;
     }
     const reporterUserId = req.user ? req.user.id : req.body.reporterUserId;
-    const result = await RescueService_1.RescueService.findNearestRescuer({
+    const result = await rescueService_1.RescueService.findNearestRescuer({
         latitude: lat,
         longitude: lng,
         excludeIds,
@@ -269,7 +269,7 @@ exports.findNearestRescuer = (0, catchAsync_1.catchAsync)(async (req, res, next)
 // POST /api/rescue/send-request
 exports.sendRescueRequest = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     const { rescuerId, caseId, animalType, description, notes, photos, reporterName, reporterAvatar, reporterPhone, reporterLocation, rescueLocation, distanceKm, etaMinutes, summary, userId, } = req.body;
-    Logger_1.Logger.info(`Sending request to rescuer ID: ${rescuerId} for user ID: ${userId || "logged-in-user"}`, { service: "RescueController" });
+    logger_1.Logger.info(`Sending request to rescuer ID: ${rescuerId} for user ID: ${userId || "logged-in-user"}`, { service: "RescueController" });
     if (!rescuerId) {
         res.status(400).json({ error: "rescuerId is required" });
         return;
@@ -281,7 +281,7 @@ exports.sendRescueRequest = (0, catchAsync_1.catchAsync)(async (req, res, next) 
     }
     let stray = null;
     if (caseId) {
-        const StrayReport = require("../models/strayreport");
+        const StrayReport = require("../models/StrayReport");
         stray = await StrayReport.findOne({ caseId });
     }
     const User = require("../models/User");
@@ -306,7 +306,7 @@ exports.sendRescueRequest = (0, catchAsync_1.catchAsync)(async (req, res, next) 
         etaMinutes: etaMinutes ?? null,
         summary: summary || description || notes || stray?.notes || stray?.description || "Pending rescue request",
     };
-    const request = await RescueService_1.RescueService.createRescueRequest(payload, rescuer);
+    const request = await rescueService_1.RescueService.createRescueRequest(payload, rescuer);
     res.json({
         requestId: String(request._id),
         status: RescueStatus_1.RescueStatus.PENDING,
@@ -369,34 +369,40 @@ exports.listUserRescues = (0, catchAsync_1.catchAsync)(async (req, res, next) =>
     if (!userId || userId === "logged-in-user" || userId === "undefined") {
         userId = req.user?.id ? String(req.user.id) : "";
     }
-    Logger_1.Logger.info(`Listing rescues for user ID: ${userId}`, { service: "RescueController" });
+    logger_1.Logger.info(`Listing rescues for user ID: ${userId}`, { service: "RescueController" });
     const User = require("../models/User");
     const Rescuer = require("../models/Rescuer");
     let rescuerDoc = null;
     if (userId && mongoose.Types.ObjectId.isValid(userId)) {
         rescuerDoc = await Rescuer.findOne({ $or: [{ userId: userId }, { _id: userId }] });
     }
-    const orConditions = [];
-    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
-        orConditions.push({ userId: userId });
-    }
+    const rescuerConditions = [];
     if (rescuerDoc) {
-        orConditions.push({ rescuerId: rescuerDoc._id });
+        rescuerConditions.push({ rescuerId: rescuerDoc._id });
     }
     if (userId) {
-        orConditions.push({ rescuerId: userId });
+        rescuerConditions.push({ rescuerId: userId });
     }
-    const pendingQuery = orConditions.length > 0
-        ? { $or: orConditions, status: { $ne: RescueStatus_1.RescueStatus.REJECTED } }
-        : { status: { $ne: RescueStatus_1.RescueStatus.REJECTED } };
-    const completedQuery = orConditions.length > 0
-        ? { $or: orConditions, status: RescueStatus_1.RescueStatus.COMPLETED }
-        : { status: RescueStatus_1.RescueStatus.COMPLETED };
-    const [pending, completed] = await Promise.all([
-        RescueRequest.find(pendingQuery).sort({ createdAt: -1 }),
+    if (rescuerConditions.length === 0) {
+        logger_1.Logger.info(`No rescuer profile or ID for user ID: ${userId}`, { service: "RescueController" });
+        res.json([]);
+        return;
+    }
+    // "Under Rescue" active cases: must be assigned to this rescuer AND accepted
+    const activeQuery = {
+        $or: rescuerConditions,
+        status: { $in: [RescueStatus_1.RescueStatus.ACCEPTED, "accepted", "under rescue", "Under Rescue"] },
+    };
+    // Completed rescue cases: assigned to this rescuer AND completed
+    const completedQuery = {
+        $or: rescuerConditions,
+        status: { $in: [RescueStatus_1.RescueStatus.COMPLETED, "completed", "Completed"] },
+    };
+    const [active, completed] = await Promise.all([
+        RescueRequest.find(activeQuery).sort({ createdAt: -1 }),
         RescueHistory.find(completedQuery).sort({ completedAt: -1, createdAt: -1 }),
     ]);
-    const enrichedPending = await Promise.all(pending.map(async (request) => {
+    const enrichedActive = await Promise.all(active.map(async (request) => {
         const enriched = await enrichCaseRecordWithReporterAndStray(request.toObject ? request.toObject() : request);
         return formatCaseRecord({ request: enriched, rescuer: enriched.rescuer || null });
     }));
@@ -404,12 +410,12 @@ exports.listUserRescues = (0, catchAsync_1.catchAsync)(async (req, res, next) =>
         const enriched = await enrichCaseRecordWithReporterAndStray(history.toObject ? history.toObject() : history);
         return formatCaseRecord({ request: enriched, history: enriched });
     }));
-    const all = [...enrichedPending, ...enrichedCompleted].sort((left, right) => {
+    const all = [...enrichedActive, ...enrichedCompleted].sort((left, right) => {
         const leftTime = new Date(left.completedAt || left.createdAt).getTime();
         const rightTime = new Date(right.completedAt || right.createdAt).getTime();
         return rightTime - leftTime;
     });
-    Logger_1.Logger.info(`Found ${all.length} rescues for user ID: ${userId}`, { service: "RescueController" });
+    logger_1.Logger.info(`Found ${all.length} assigned rescues for user ID: ${userId}`, { service: "RescueController" });
     res.json(all);
 });
 ;
@@ -480,7 +486,7 @@ exports.getLiveTracking = (0, catchAsync_1.catchAsync)(async (req, res, next) =>
 ;
 exports.checkRequestStatus = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     const { requestId } = req.params;
-    Logger_1.Logger.info(`Checking status of request: ${requestId}`, { service: "RescueController" });
+    logger_1.Logger.info(`Checking status of request: ${requestId}`, { service: "RescueController" });
     const request = await findRequestByIdOrCustomId(String(requestId));
     if (!request) {
         res.status(404).json({ error: "Request not found" });
@@ -540,13 +546,17 @@ exports.respondToRescueRequest = (0, catchAsync_1.catchAsync)(async (req, res, n
         res.status(404).json({ error: "Request not found" });
         return;
     }
+    if (action === "accept" && request.userId && req.user?.id && String(request.userId) === String(req.user.id)) {
+        res.status(403).json({ error: "You cannot accept or take a rescue request for a case you reported yourself." });
+        return;
+    }
     request.status = action === "accept" ? "accepted" : "rejected";
     await request.save();
     console.log(`[RESCUE] Rescuer responded to request ${id} with: ${request.status}`);
     if (action === "accept") {
         // 1. Update StrayReport status to "Under Rescue"
         try {
-            const StrayReport = require("../models/strayreport");
+            const StrayReport = require("../models/StrayReport");
             const report = await StrayReport.findOne({ caseId: request.caseId });
             if (report) {
                 report.status = "Under Rescue";
@@ -567,7 +577,7 @@ exports.respondToRescueRequest = (0, catchAsync_1.catchAsync)(async (req, res, n
         if (request.userId && mongoose.Types.ObjectId.isValid(request.userId)) {
             try {
                 const rescuer = await Rescuer.findById(request.rescuerId);
-                await NotificationService_1.NotificationService.sendNotification(String(request.userId), "Rescue Request Accepted", `${rescuer.name} has accepted your rescue request and is on their way!`, "success");
+                await notificationService_1.NotificationService.sendNotification(String(request.userId), "Rescue Request Accepted", `${rescuer.name} has accepted your rescue request and is on their way!`, "success");
             }
             catch (err) {
                 console.error("[RESCUE] Failed to create notification for reporter:", err.message);
@@ -583,7 +593,7 @@ exports.respondToRescueRequest = (0, catchAsync_1.catchAsync)(async (req, res, n
             if (request.rescuerId && !excludeIds.includes(String(request.rescuerId))) {
                 excludeIds.push(String(request.rescuerId));
             }
-            const nextRescuerResult = await RescueService_1.RescueService.findNearestRescuer({
+            const nextRescuerResult = await rescueService_1.RescueService.findNearestRescuer({
                 latitude: request.rescueLocation?.latitude || FALLBACK_RESCUE_LOCATION.latitude,
                 longitude: request.rescueLocation?.longitude || FALLBACK_RESCUE_LOCATION.longitude,
                 excludeIds,
@@ -607,12 +617,12 @@ exports.respondToRescueRequest = (0, catchAsync_1.catchAsync)(async (req, res, n
                     etaMinutes,
                     summary: request.summary,
                 };
-                const nextRescueRequest = await RescueService_1.RescueService.createRescueRequest(nextRequestPayload, nextRescuerResult.rescuer);
+                const nextRescueRequest = await rescueService_1.RescueService.createRescueRequest(nextRequestPayload, nextRescuerResult.rescuer);
                 console.log(`[RESCUE] Successfully forwarded case ${request.caseId} to next rescuer ${nextRescuerResult.rescuer.name}`);
             }
             else {
                 console.log(`[RESCUE] No more available rescuers found for case ${request.caseId}. Fallback to public map.`);
-                const StrayReport = require("../models/strayreport");
+                const StrayReport = require("../models/StrayReport");
                 const report = await StrayReport.findOne({ caseId: request.caseId });
                 if (report) {
                     report.status = "Needs Help";
@@ -674,7 +684,7 @@ exports.updateRescueDetails = (0, catchAsync_1.catchAsync)(async (req, res, next
     }
     // Block updates if the case is already completed
     if (activeDoc && activeDoc.caseId) {
-        const StrayReportCheck = require("../models/strayreport");
+        const StrayReportCheck = require("../models/StrayReport");
         const existingReport = await StrayReportCheck.findOne({ caseId: activeDoc.caseId }).select("status").lean();
         if (existingReport && existingReport.status === "Completed") {
             res.status(400).json({ error: "This rescue case has been completed and can no longer be updated." });
@@ -697,7 +707,7 @@ exports.updateRescueDetails = (0, catchAsync_1.catchAsync)(async (req, res, next
     // If status is provided, update StrayReport, and optionally RescueRequest
     let strayReport = null;
     if (status && activeDoc && activeDoc.caseId) {
-        const StrayReportModel = require("../models/strayreport");
+        const StrayReportModel = require("../models/StrayReport");
         strayReport = await StrayReportModel.findOne({ caseId: activeDoc.caseId });
         if (strayReport) {
             strayReport.status = status;
@@ -738,10 +748,15 @@ exports.acceptFromMap = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         return;
     }
     // Find the stray report
-    const StrayReport = require("../models/strayreport");
+    const StrayReport = require("../models/StrayReport");
     const report = await StrayReport.findOne({ caseId });
     if (!report) {
         res.status(404).json({ error: "Case not found" });
+        return;
+    }
+    // 🔒 Check if user is attempting to accept a case they reported themselves
+    if (report.reporterUserId && String(report.reporterUserId) === String(userId)) {
+        res.status(403).json({ error: "You cannot accept or take a rescue request for a case you reported yourself." });
         return;
     }
     if (report.status !== "Needs Help") {
@@ -784,7 +799,7 @@ exports.acceptFromMap = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     // Notify the reporter
     if (report.reporterUserId && mongoose.Types.ObjectId.isValid(report.reporterUserId)) {
         try {
-            await NotificationService_1.NotificationService.sendNotification(String(report.reporterUserId), "Rescue Request Accepted", `${rescuer.name} has accepted your rescue case and is on their way!`, "success", String(request._id), caseId);
+            await notificationService_1.NotificationService.sendNotification(String(report.reporterUserId), "Rescue Request Accepted", `${rescuer.name} has accepted your rescue case and is on their way!`, "success", String(request._id), caseId);
         }
         catch (err) {
             console.error("[RESCUE] Failed to notify reporter:", err.message);

@@ -10,10 +10,10 @@ const VolunteerProfile = require("../models/VolunteerProfile");
 const VetProfile = require("../models/VetProfile");
 const GeneralUserProfile = require("../models/GeneralUserProfile");
 const Role_enum_1 = require("../enums/Role.enum");
-const AuthValidator_1 = require("../validators/AuthValidator");
-const JwtService_1 = require("../services/JwtService");
-const PasswordService_1 = require("../services/PasswordService");
-const NotificationService_1 = require("../services/NotificationService");
+const authValidator_1 = require("../validators/authValidator");
+const jwtService_1 = require("../services/jwtService");
+const passwordService_1 = require("../services/passwordService");
+const notificationService_1 = require("../services/notificationService");
 const { sendPasswordResetCodeEmail } = require("../utils/emailService");
 const Notification = require("../models/Notification");
 const register = async (req, res, next) => {
@@ -21,7 +21,7 @@ const register = async (req, res, next) => {
     try {
         const { name, email, phone, password } = req.body;
         console.log("Register request received for:", req.body.email);
-        const validation = AuthValidator_1.AuthValidator.validateRegistrationPayload(req.body);
+        const validation = authValidator_1.AuthValidator.validateRegistrationPayload(req.body);
         if (!validation.isValid) {
             res.status(400).json({ message: validation.message });
             return;
@@ -31,7 +31,7 @@ const register = async (req, res, next) => {
             res.status(400).json({ message: "Email already registered" });
             return;
         }
-        const hashedPassword = await PasswordService_1.PasswordService.hashPassword(password, 10);
+        const hashedPassword = await passwordService_1.PasswordService.hashPassword(password, 10);
         user = await User.create({
             name,
             email,
@@ -39,8 +39,8 @@ const register = async (req, res, next) => {
             password: hashedPassword,
             role: Role_enum_1.Role.GENERAL_USER,
         });
-        const token = JwtService_1.JwtService.generateToken({ id: user._id, role: user.role });
-        await NotificationService_1.NotificationService.sendNotification(String(user._id), "Welcome to StrayCare!", `Hi ${name}, welcome to our community! Together we can save more stray animals. 🐾`, "welcome");
+        const token = jwtService_1.JwtService.generateToken({ id: user._id, role: user.role });
+        await notificationService_1.NotificationService.sendNotification(String(user._id), "Welcome to StrayCare!", `Hi ${name}, welcome to our community! Together we can save more stray animals. ðŸ¾`, "welcome");
         res.status(201).json({
             message: "Account created successfully",
             token,
@@ -82,12 +82,33 @@ const login = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         res.status(404).json({ message: "Account not found" });
         return;
     }
-    const isMatch = await PasswordService_1.PasswordService.comparePassword(password, user.password);
+    const isMatch = await passwordService_1.PasswordService.comparePassword(password, user.password);
     if (!isMatch) {
         res.status(401).json({ message: "Invalid email or password" });
         return;
     }
-    const token = JwtService_1.JwtService.generateToken({ id: user._id, role: user.role });
+    // ── Check account status (Suspended / Warned) ──────────────
+    let accountStatus = user.accountStatus || null;
+    if (user.role === "vet") {
+        const vetProfile = await VetProfile.findOne({ userId: user._id });
+        if (vetProfile?.accountStatus)
+            accountStatus = vetProfile.accountStatus;
+    }
+    else if (user.role === "ngo") {
+        const ngoProfile = await NGOProfile.findOne({ userId: user._id });
+        if (ngoProfile?.accountStatus)
+            accountStatus = ngoProfile.accountStatus;
+    }
+    else if (user.role === "volunteer") {
+        const volunteerProfile = await VolunteerProfile.findOne({ userId: user._id });
+        if (volunteerProfile?.accountStatus)
+            accountStatus = volunteerProfile.accountStatus;
+    }
+    if (accountStatus === "Suspended") {
+        res.status(403).json({ message: "Your account has been suspended." });
+        return;
+    }
+    const token = jwtService_1.JwtService.generateToken({ id: user._id, role: user.role });
     res.status(200).json({
         message: "Login successful",
         token,
@@ -101,6 +122,9 @@ const login = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
             roleSelected: user.roleSelected,
             isApproved: user.isApproved,
         },
+        ...(accountStatus === "Warned" && {
+            warning: "Your account has received a warning due to a reported issue. Please be mindful of community guidelines going forward.",
+        }),
     });
 });
 const selectRole = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
@@ -120,7 +144,7 @@ const selectRole = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         res.status(404).json({ message: "User not found" });
         return;
     }
-    const token = JwtService_1.JwtService.generateToken({ id: user._id, role: user.role });
+    const token = jwtService_1.JwtService.generateToken({ id: user._id, role: user.role });
     res.status(200).json({
         message: "Role updated successfully",
         token,
@@ -174,7 +198,7 @@ const resetPassword = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         res.status(400).json({ message: "Invalid or expired reset code" });
         return;
     }
-    const hashedPassword = await PasswordService_1.PasswordService.hashPassword(newPassword, 10);
+    const hashedPassword = await passwordService_1.PasswordService.hashPassword(newPassword, 10);
     user.password = hashedPassword;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
@@ -189,12 +213,12 @@ const changePassword = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         res.status(404).json({ message: "User not found" });
         return;
     }
-    const isMatch = await PasswordService_1.PasswordService.comparePassword(currentPassword, user.password);
+    const isMatch = await passwordService_1.PasswordService.comparePassword(currentPassword, user.password);
     if (!isMatch) {
         res.status(401).json({ message: "Incorrect current password" });
         return;
     }
-    const hashedPassword = await PasswordService_1.PasswordService.hashPassword(newPassword, 10);
+    const hashedPassword = await passwordService_1.PasswordService.hashPassword(newPassword, 10);
     user.password = hashedPassword;
     await user.save();
     res.status(200).json({ message: "Password updated successfully" });
@@ -249,7 +273,7 @@ const googleAuth = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
     let user = await User.findOne({ email });
     let isNewUser = false;
     if (user) {
-        // Existing user — update googleId and avatar if not already set
+        // Existing user â€” update googleId and avatar if not already set
         if (!user.googleId)
             user.googleId = uid;
         if (!user.avatar && picture)
@@ -257,7 +281,7 @@ const googleAuth = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
         await user.save();
     }
     else {
-        // New user — create account
+        // New user â€” create account
         isNewUser = true;
         user = await User.create({
             name: displayName || email.split("@")[0],
@@ -267,9 +291,9 @@ const googleAuth = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
             avatar: picture || "",
             role: "general_user",
         });
-        await NotificationService_1.NotificationService.sendNotification(String(user._id), "Welcome to StrayCare!", `Hi ${user.name}, welcome to our community! Together we can save more stray animals. 🐾`, "welcome");
+        await notificationService_1.NotificationService.sendNotification(String(user._id), "Welcome to StrayCare!", `Hi ${user.name}, welcome to our community! Together we can save more stray animals. ðŸ¾`, "welcome");
     }
-    const token = JwtService_1.JwtService.generateToken({ id: user._id, role: user.role });
+    const token = jwtService_1.JwtService.generateToken({ id: user._id, role: user.role });
     res.status(200).json({
         success: true,
         message: isNewUser ? "Account created successfully" : "Login successful",
