@@ -197,6 +197,14 @@ router.patch("/:id/status", async (req: Request, res: Response) => {
       );
       if (result && result.value) {
         updated = result.value;
+        
+        // BUG FIX: Ensure the main User document's `isApproved` flag stays in sync
+        const isApproved = status === "Verified";
+        await db.collection("users").updateOne(
+          { _id: updated.userId },
+          { $set: { isApproved } }
+        );
+        
         break;
       }
     }

@@ -64,7 +64,13 @@ const search = catchAsync(async (req: Request, res: Response, next: NextFunction
           _id: 0,
           userId: "$user._id",
           profileId: "$_id",
-          name: "$orgName",
+          name: {
+            $cond: {
+              if: { $or: [{ $eq: ["$orgName", ""] }, { $eq: ["$orgName", null] }] },
+              then: "$user.name",
+              else: "$orgName"
+            }
+          },
           type: {
             $cond: {
               if: { $regexMatch: { input: "$orgName", regex: "shelter", options: "i" } },
@@ -104,6 +110,7 @@ const search = catchAsync(async (req: Request, res: Response, next: NextFunction
           profileId: "$_id",
           name: "$vetFullName",
           clinicName: "$clinicName",
+          specialization: { $ifNull: ["$specialization", ""] },
           type: { $literal: "Veterinarian" },
           profileImage: { $ifNull: ["$profileImage", ""] },
           location: "$primaryLocation",

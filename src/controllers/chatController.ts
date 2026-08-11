@@ -7,8 +7,9 @@ const User = require("../models/User");
 import type { Request, Response, NextFunction } from "express";
 
 import PrivacyService from "../services/privacyService";
+import { encryptMessage, decryptMessage } from "../services/messageEncryptionService";
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 import { Role } from "../enums/Role.enum";
 
@@ -38,11 +39,11 @@ const getChatNamespace = (req: Request): any => {
   return io ? io.of("/chat") : null;
 };
 
-// â”€â”€ GET /api/chat/conversations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── GET /api/chat/conversations ─────────────────────────────────────────────
 // Lists all conversations for the authenticated user, sorted by latest activity.
 const getConversations = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
-    console.log(`[chatController] ðŸ” getConversations. User: ${userId}`);
+    console.log(`[chatController] 🔍 getConversations. User: ${userId}`);
 
     const conversations = await Conversation.find({
       participants: userId,
@@ -68,19 +69,29 @@ const getConversations = catchAsync(async (req: Request, res: Response, next: Ne
           }
         }
       }
+
+      if (conv.lastMessage?.isEncrypted && conv.lastMessage?.encryptedText) {
+        try {
+          conv.lastMessage.text = decryptMessage(conv.lastMessage.encryptedText);
+        } catch (err) {
+          console.error("Failed to decrypt lastMessage for conv:", conv._id, err);
+          conv.lastMessage.text = "Error decrypting message";
+        }
+        delete conv.lastMessage.encryptedText;
+      }
     }
 
-    console.log(`[chatController] âœ… Found ${conversations.length} conversations for User: ${userId}`);
+    console.log(`[chatController] ✅ Found ${conversations.length} conversations for User: ${userId}`);
     res.status(200).json(conversations);
 });
 
-// â”€â”€ POST /api/chat/conversations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── POST /api/chat/conversations ────────────────────────────────────────────
 // Finds an existing conversation between two users or creates a new one.
 // Body: { participantId, conversationType?, relatedEntity? }
 const getOrCreateConversation = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     const { participantId, conversationType, relatedEntity } = req.body;
-    console.log(`[chatController] ðŸ” getOrCreateConversation. User: ${userId}, Participant: ${participantId}`);
+    console.log(`[chatController] 🔍 getOrCreateConversation. User: ${userId}, Participant: ${participantId}`);
 
     if (!participantId) {
       res.status(400).json({ message: "participantId is required" });
@@ -122,7 +133,18 @@ const getOrCreateConversation = catchAsync(async (req: Request, res: Response, n
           }
         }
       }
-      console.log(`[chatController] âœ… Found existing conversation: ${conversation._id}`);
+
+      if (conversation.lastMessage?.isEncrypted && conversation.lastMessage?.encryptedText) {
+        try {
+          conversation.lastMessage.text = decryptMessage(conversation.lastMessage.encryptedText);
+        } catch (err) {
+          console.error("Failed to decrypt lastMessage for conv:", conversation._id, err);
+          conversation.lastMessage.text = "Error decrypting message";
+        }
+        delete conversation.lastMessage.encryptedText;
+      }
+
+      console.log(`[chatController] ✅ Found existing conversation: ${conversation._id}`);
       res.status(200).json({
         ...conversation,
         permissions: { canMessage: privacyResult.allowed }
@@ -134,7 +156,7 @@ const getOrCreateConversation = catchAsync(async (req: Request, res: Response, n
     // but the UI will disable sending messages. This allows users to open chat and see "not accepting messages".
     
     // Create new conversation
-    console.log(`[chatController] ðŸ†• Creating new conversation session. User: ${userId}, Participant: ${participantId}`);
+    console.log(`[chatController] 🆕 Creating new conversation session. User: ${userId}, Participant: ${participantId}`);
     const newConversation = await Conversation.create({
       participants: [userId, participantId],
       conversationType: conversationType || "direct",
@@ -162,21 +184,21 @@ const getOrCreateConversation = catchAsync(async (req: Request, res: Response, n
       }
     }
 
-    console.log(`[chatController] âœ… Conversation created: ${conversation._id}`);
+    console.log(`[chatController] ✅ Conversation created: ${conversation._id}`);
     res.status(201).json({
       ...conversation,
       permissions: { canMessage: privacyResult.allowed }
     });
 });
 
-// â”€â”€ GET /api/chat/messages/:conversationId â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── GET /api/chat/messages/:conversationId ──────────────────────────────────
 // Paginated messages for a conversation (cursor-based, newest first).
 // Query: ?before=<messageId>&limit=<number>
 const getMessages = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     const { conversationId } = req.params;
     const { before, limit = 30 } = req.query;
-    console.log(`[chatController] ðŸ” getMessages. User: ${userId}, Conversation: ${conversationId}, Limit: ${limit}`);
+    console.log(`[chatController] 🔍 getMessages. User: ${userId}, Conversation: ${conversationId}, Limit: ${limit}`);
 
     // Verify user is a participant
     const conversation = await Conversation.findOne({
@@ -185,7 +207,7 @@ const getMessages = catchAsync(async (req: Request, res: Response, next: NextFun
     }).lean();
 
     if (!conversation) {
-      console.warn(`[chatController] âŒ Conversation ${conversationId} not found or user is not a participant`);
+      console.warn(`[chatController] ❌ Conversation ${conversationId} not found or user is not a participant`);
       res.status(404).json({ message: "Conversation not found" });
       return;
     }
@@ -218,14 +240,41 @@ const getMessages = catchAsync(async (req: Request, res: Response, next: NextFun
           isDeletedForEveryone: true,
         };
       }
+      if (msg.isEncrypted) {
+        if (msg.encryptedText) {
+          try {
+            msg.text = decryptMessage(msg.encryptedText);
+          } catch (err) {
+            console.error("Failed to decrypt message text:", msg._id, err);
+            msg.text = "Error decrypting message";
+          }
+          delete msg.encryptedText;
+        }
+        if (msg.encryptedImageUrl) {
+          try {
+            msg.imageUrl = decryptMessage(msg.encryptedImageUrl);
+          } catch (err) {
+            console.error("Failed to decrypt imageUrl:", msg._id, err);
+          }
+          delete msg.encryptedImageUrl;
+        }
+        if (msg.encryptedLocation) {
+          try {
+            msg.location = JSON.parse(decryptMessage(msg.encryptedLocation));
+          } catch (err) {
+            console.error("Failed to decrypt location:", msg._id, err);
+          }
+          delete msg.encryptedLocation;
+        }
+      }
       return msg;
     });
 
-    console.log(`[chatController] âœ… Found ${processedMessages.length} messages for Conversation: ${conversationId}`);
+    console.log(`[chatController] ✅ Found ${processedMessages.length} messages for Conversation: ${conversationId}`);
     res.status(200).json(processedMessages);
 });
 
-// â”€â”€ POST /api/chat/messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── POST /api/chat/messages ─────────────────────────────────────────────────
 // Sends a new message. Body: { conversationId, text?, type?, imageUrl?, imagePublicId?, location? }
 const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
@@ -237,7 +286,7 @@ const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFun
       imagePublicId,
       location,
     } = req.body;
-    console.log(`[chatController] âœ‰ï¸ sendMessage. User: ${userId}, Conversation: ${conversationId}, Type: ${type}`);
+    console.log(`[chatController] ✈️ sendMessage. User: ${userId}, Conversation: ${conversationId}, Type: ${type}`);
 
     if (!conversationId) {
       res.status(400).json({ message: "conversationId is required" });
@@ -251,7 +300,7 @@ const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFun
     });
 
     if (!conversation) {
-      console.warn(`[chatController] âŒ Conversation ${conversationId} not found or user is not a participant`);
+      console.warn(`[chatController] ❌ Conversation ${conversationId} not found or user is not a participant`);
       res.status(404).json({ message: "Conversation not found" });
       return;
     }
@@ -261,30 +310,72 @@ const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFun
     if (otherParticipantId) {
       const privacyResult = await PrivacyService.canMessage(userId, otherParticipantId.toString());
       if (!privacyResult.allowed) {
-        console.warn(`[chatController] âŒ Message Blocked by Privacy: ${privacyResult.reason}`);
+        console.warn(`[chatController] ❌ Message Blocked by Privacy: ${privacyResult.reason}`);
         res.status(403).json({ message: privacyResult.reason });
         return;
       }
+    }
+
+    let finalPayloadText = text || "";
+    let isEncrypted = false;
+    let encryptedText = undefined;
+    
+    if (finalPayloadText.trim().length > 0) {
+      isEncrypted = true;
+      encryptedText = encryptMessage(finalPayloadText);
+      finalPayloadText = ""; // don't save plaintext to DB
+    }
+
+    let finalImageUrl = imageUrl;
+    let encryptedImageUrl = undefined;
+    if (finalImageUrl) {
+      isEncrypted = true;
+      encryptedImageUrl = encryptMessage(finalImageUrl);
+      finalImageUrl = "";
+    }
+
+    let finalLocation = location;
+    let encryptedLocation = undefined;
+    if (finalLocation) {
+      isEncrypted = true;
+      encryptedLocation = encryptMessage(JSON.stringify(finalLocation));
+      finalLocation = undefined;
     }
 
     // Create the message
     const message = await Message.create({
       conversationId,
       sender: userId,
-      text: text || "",
+      text: finalPayloadText,
       type,
-      imageUrl,
+      imageUrl: finalImageUrl,
       imagePublicId,
-      location,
+      location: finalLocation,
       readBy: [userId], // sender has "read" their own message
+      isEncrypted,
+      encryptedText,
+      encryptedImageUrl,
+      encryptedLocation,
     });
 
     // Update conversation's lastMessage snapshot
     const lastMessagePreview =
-      type === "image" ? "ðŸ“· Photo" : type === "location" ? "ðŸ“ Location" : text || "";
+      type === "image" ? "📷 Photo" : type === "location" ? "📍 Location" : text || "";
+
+    let lastMessageIsEncrypted = false;
+    let lastMessageEncryptedText = undefined;
+    let finalLastMessageText = lastMessagePreview;
+
+    if (finalLastMessageText.trim().length > 0) {
+       lastMessageIsEncrypted = true;
+       lastMessageEncryptedText = encryptMessage(finalLastMessageText);
+       finalLastMessageText = "";
+    }
 
     conversation.lastMessage = {
-      text: lastMessagePreview,
+      text: finalLastMessageText,
+      isEncrypted: lastMessageIsEncrypted,
+      encryptedText: lastMessageEncryptedText,
       sender: userId,
       type,
       createdAt: message.createdAt,
@@ -308,6 +399,34 @@ const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFun
     const populatedMessage = await Message.findById(message._id)
       .populate("sender", "name")
       .lean();
+
+    if (populatedMessage && populatedMessage.isEncrypted) {
+      if (populatedMessage.encryptedText) {
+        try {
+          populatedMessage.text = decryptMessage(populatedMessage.encryptedText);
+        } catch (err) {
+          console.error("Failed to decrypt text for socket payload:", populatedMessage._id, err);
+          populatedMessage.text = "Error decrypting message";
+        }
+        delete populatedMessage.encryptedText;
+      }
+      if (populatedMessage.encryptedImageUrl) {
+        try {
+          populatedMessage.imageUrl = decryptMessage(populatedMessage.encryptedImageUrl);
+        } catch (err) {
+          console.error("Failed to decrypt imageUrl for socket payload:", populatedMessage._id, err);
+        }
+        delete populatedMessage.encryptedImageUrl;
+      }
+      if (populatedMessage.encryptedLocation) {
+        try {
+          populatedMessage.location = JSON.parse(decryptMessage(populatedMessage.encryptedLocation));
+        } catch (err) {
+          console.error("Failed to decrypt location for socket payload:", populatedMessage._id, err);
+        }
+        delete populatedMessage.encryptedLocation;
+      }
+    }
 
     // Emit real-time event to:
     // 1. The conversation room (for users who have this chat screen open)
