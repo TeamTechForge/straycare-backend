@@ -106,7 +106,7 @@ export class DonationController {
       country: "Sri Lanka",
       return_url: `${DonationController.baseUrl}/payhere/return`,
       cancel_url: `${DonationController.baseUrl}/payhere/cancel`,
-      notify_url: `${DonationController.baseUrl}/payhere/notify`,
+      notify_url: `${DonationController.baseUrl}/api/donations/notify`,
     });
   });
 
