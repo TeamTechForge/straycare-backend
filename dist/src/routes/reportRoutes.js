@@ -5,7 +5,8 @@ const express = require("express");
 const { upload } = require("../config/gridfs");
 const router = express.Router();
 // Import controller functions
-const { createReport, getReportByCaseId, getAllReports, updateCaseStatus, getUserNotifications, markNotificationRead, } = require("../controllers/reportController");
+const { createReport, getReportByCaseId, getAllReports, updateCaseStatus, acceptReportFromMap, getUserNotifications, markNotificationRead, } = require("../controllers/reportController");
+const { autocompletePlaces, getPlaceDetails, } = require("../controllers/placesController");
 const { verifyToken } = require("../middleware/authMiddleware");
 const { uploadFileToCloudinary } = require("../utils/cloudinaryUpload");
 // ------------------ UPLOAD ROUTE ------------------
@@ -39,10 +40,15 @@ router.post("/report/submit", verifyToken, upload.array("photos", 5), async (req
 }, createReport);
 // Compatibility route for merged clients posting to /reports
 router.post("/reports", verifyToken, createReport);
+router.post("/report/:caseId/accept", verifyToken, acceptReportFromMap);
 // Fetch a single report by its caseId.Returns full details including photos, notes, timeline, and location.
-router.get("/report/:caseId", getReportByCaseId);
+router.get("/report/:caseId", verifyToken, getReportByCaseId);
 // Fetch all reports.Used by the map screen to display markers.
 router.get("/reports", getAllReports);
+// Google Places requests are proxied through the backend so the service key
+// is never bundled into the mobile application.
+router.get("/places/autocomplete", verifyToken, autocompletePlaces);
+router.get("/places/details", verifyToken, getPlaceDetails);
 // Update the status of a report.Controller also appends a new timeline entry.
 // 🔒 Requires authentication - only rescuers can update
 router.patch("/report/:caseId/status", verifyToken, updateCaseStatus);

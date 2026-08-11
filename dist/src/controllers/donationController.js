@@ -132,6 +132,11 @@ class DonationController {
             const totalAmount = result.length > 0 ? result[0].total : 0;
             res.json({ total: totalAmount });
         });
+        this.getReceivedByOrg = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
+            const { orgId } = req.params;
+            const donations = await Donation.find({ organizationId: orgId, status: "SUCCESS" }).sort({ timestamp: -1 });
+            res.json(donations);
+        });
         this.getReceivedDonations = (0, catchAsync_1.catchAsync)(async (req, res, next) => {
             const userId = req.user?.id;
             const role = req.user?.role;
