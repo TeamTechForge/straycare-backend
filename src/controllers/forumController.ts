@@ -6,7 +6,7 @@ const User = require("../models/User");
 
 import type { Request, Response } from "express";
 
-import { AppError } from "../utils/AppError";
+import { AppError } from "../utils/appError";
 
 // GET all posts
 exports.listPosts = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {

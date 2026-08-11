@@ -7,6 +7,7 @@ const StrayReport = require("../models/StrayReport");
 const RescueHistory = require("../models/RescueHistory");
 const RescueRequest = require("../models/RescueRequest");
 const Rescuer = require("../models/Rescuer");
+const Donation = require("../models/Donation");
 
 interface ProfileResult {
   profileData: any;
@@ -76,6 +77,9 @@ export class ProfileStatsService {
         status: { $in: ["accepted", "under_rescue", "Under Rescue"] } 
       });
 
+      const donations = await Donation.find({ organizationId: userId, status: "SUCCESS" }).lean();
+      const totalDonations = donations.reduce((sum: number, doc: any) => sum + (doc.amount || 0), 0);
+
       return {
         profileData: {
           location: vetProfile.primaryLocation || "",
@@ -90,7 +94,8 @@ export class ProfileStatsService {
         stats: {
           reportsCount: reportCount,
           rescuesCompleted: totalRescues + activeRescues,
-          animalsTreated: vetProfile.animalsTreated || 0
+          animalsTreated: vetProfile.animalsTreated || 0,
+          totalDonations: totalDonations
         }
       };
     },
@@ -108,6 +113,9 @@ export class ProfileStatsService {
         status: { $in: ["accepted", "under_rescue", "Under Rescue"] } 
       });
 
+      const donations = await Donation.find({ organizationId: userId, status: "SUCCESS" }).lean();
+      const totalDonations = donations.reduce((sum: number, doc: any) => sum + (doc.amount || 0), 0);
+
       return {
         profileData: {
           location: ngoProfile.location || "",
@@ -121,7 +129,8 @@ export class ProfileStatsService {
           reportsCount: reportCount,
           rescuesCompleted: totalRescues + activeRescues,
           totalAdoptions: ngoProfile.totalAdoptions || 0,
-          donationCampaignCount: ngoProfile.donationCampaignCount || 0
+          donationCampaignCount: ngoProfile.donationCampaignCount || 0,
+          totalDonations: totalDonations
         }
       };
     }
