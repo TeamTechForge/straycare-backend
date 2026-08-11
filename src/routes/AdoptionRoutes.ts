@@ -6,18 +6,17 @@ createPost,
 updatePost,
 deletePost,
 getMyPosts
-} from "../controllers/AdoptionController"; 
-
+} from "../controllers/adoptionController"; 
 // @ts-ignore - Tells TypeScript to bypass checking this mixed-syntax export
-import verifyToken from "../middleware/authMiddleware"; 
+import authMiddleware from "../middleware/authMiddleware"; 
 
 const router = Router(); 
 
 router.get("/", getAllPosts);
-router.get("/my", verifyToken, getMyPosts);
+router.get("/my", authMiddleware, getMyPosts);
 router.get("/:postId", getPostById);
-router.post("/", verifyToken, createPost);
-router.put("/:postId", verifyToken, updatePost);
-router.delete("/:postId", verifyToken, deletePost); 
+router.post("/", authMiddleware, createPost);
+router.put("/:postId", authMiddleware, updatePost);
+router.delete("/:postId", authMiddleware, deletePost); 
 
 module.exports = router;  
