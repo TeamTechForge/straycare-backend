@@ -15,4 +15,4 @@ export declare class ProfileStatsService {
     static getProfileAndStats(userId: string, role: string): Promise<ProfileResult>;
 }
 export {};
-//# sourceMappingURL=ProfileStatsService.d.ts.map
+//# sourceMappingURL=profileStatsService.d.ts.map

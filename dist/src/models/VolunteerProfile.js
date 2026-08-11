@@ -14,6 +14,7 @@ const VolunteerProfileSchema = new mongoose_1.default.Schema({
     location: { type: String, default: "" },
     bio: { type: String, default: "" },
     profileImage: { type: String, default: "" },
+    accountStatus: { type: String, default: null },
 }, { timestamps: true });
 module.exports = mongoose_1.default.model("VolunteerProfile", VolunteerProfileSchema);
 //# sourceMappingURL=VolunteerProfile.js.map

@@ -4,7 +4,7 @@
 
 const mongoose = require("mongoose");
 const { MongoMemoryServer } = require("mongodb-memory-server");
-import { Logger } from "../utils/Logger";
+import { Logger } from "../utils/logger";
 import dns from "dns";
 
 try {

@@ -5,18 +5,18 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RescueService = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
-const RescueMathHelper_1 = require("../utils/RescueMathHelper");
-const Logger_1 = require("../utils/Logger");
+const rescueMathHelper_1 = require("../utils/rescueMathHelper");
+const logger_1 = require("../utils/logger");
 const RescueStatus_1 = require("../enums/RescueStatus");
 const Rescuer = require("../models/Rescuer");
-const StrayReport = require("../models/strayreport");
+const StrayReport = require("../models/StrayReport");
 class RescueService {
     /**
      * Finds the nearest available rescuer within a specified max distance (default 5km) based on coordinates, excluding specific IDs or the reporter themselves.
      */
     static async findNearestRescuer(params) {
         const { latitude, longitude, excludeIds, caseId, maxDistanceKm = 10 } = params;
-        const StrayReport = require("../models/strayreport");
+        const StrayReport = require("../models/StrayReport");
         let reporterUserId = params.reporterUserId || null;
         if (!reporterUserId && caseId) {
             const report = await StrayReport.findOne({ caseId });
@@ -55,7 +55,7 @@ class RescueService {
                     return;
                 }
             }
-            const dist = RescueMathHelper_1.RescueMathHelper.deriveDistance({ latitude, longitude }, rescuer.location);
+            const dist = rescueMathHelper_1.RescueMathHelper.deriveDistance({ latitude, longitude }, rescuer.location);
             if (dist < minDistance) {
                 minDistance = dist;
                 nearest = rescuer;
@@ -78,7 +78,7 @@ class RescueService {
     static async createRescueRequest(payload, rescuer) {
         const RescueRequest = require("../models/RescueRequest");
         const User = require("../models/User");
-        const { NotificationService } = require("./NotificationService");
+        const { NotificationService } = require("./notificationService");
         let rescuerUser = null;
         if (rescuer.userId && mongoose_1.default.Types.ObjectId.isValid(String(rescuer.userId))) {
             rescuerUser = await User.findById(rescuer.userId).select("name phone profileImage avatar");
@@ -106,13 +106,13 @@ class RescueService {
             rescuerPhone,
             rescuerAvatar,
         });
-        Logger_1.Logger.info(`Request ${request._id} created for rescuer ${rescuerName} (caseId: ${payload.caseId})`, { service: "RescueService" });
+        logger_1.Logger.info(`Request ${request._id} created for rescuer ${rescuerName} (caseId: ${payload.caseId})`, { service: "RescueService" });
         if (rescuer.userId) {
             await NotificationService.sendNotification(rescuer.userId, "New Rescue Request", `A new rescue request for a ${payload.animalType || "stray animal"} is near you.`, "info", String(request._id), payload.caseId || "");
-            Logger_1.Logger.info(`Created notification for registered rescuer user ${rescuer.userId}`, { service: "RescueService" });
+            logger_1.Logger.info(`Created notification for registered rescuer user ${rescuer.userId}`, { service: "RescueService" });
         }
         return request;
     }
 }
 exports.RescueService = RescueService;
-//# sourceMappingURL=RescueService.js.map
+//# sourceMappingURL=rescueService.js.map

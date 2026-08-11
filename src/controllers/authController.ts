@@ -8,9 +8,9 @@ const VetProfile = require("../models/VetProfile");
 const GeneralUserProfile = require("../models/GeneralUserProfile");
 
 import { Role } from "../enums/Role.enum";
-import { AuthValidator } from "../validators/AuthValidator";
-import { JwtService } from "../services/JwtService";
-import { PasswordService } from "../services/PasswordService";
+import { AuthValidator } from "../validators/authValidator";
+import { JwtService } from "../services/jwtService";
+import { PasswordService } from "../services/passwordService";
 import { NotificationService } from "../services/notificationService";
 const { sendPasswordResetCodeEmail } = require("../utils/emailService");
 import type { Request, Response, NextFunction } from "express";

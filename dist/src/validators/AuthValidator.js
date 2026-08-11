@@ -1,5 +1,5 @@
 "use strict";
-// src/validators/AuthValidator.ts
+// src/validators/authValidator.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthValidator = void 0;
 class AuthValidator {
@@ -22,4 +22,4 @@ class AuthValidator {
     }
 }
 exports.AuthValidator = AuthValidator;
-//# sourceMappingURL=AuthValidator.js.map
+//# sourceMappingURL=authValidator.js.map

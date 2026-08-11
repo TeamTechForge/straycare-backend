@@ -31,4 +31,4 @@ const strayReportSchema = new mongoose_1.default.Schema({
     notes: { type: String, default: "" },
 }, { timestamps: true });
 module.exports = mongoose_1.default.models.StrayReport || mongoose_1.default.model("StrayReport", strayReportSchema);
-//# sourceMappingURL=strayreport.js.map
+//# sourceMappingURL=StrayReport.js.map
