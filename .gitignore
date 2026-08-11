@@ -4,3 +4,5 @@ src/config/serviceAccountKey.json
 src/config/*.json
 src/firebase-service.json
 uploads/
+dist/
+coverage/
