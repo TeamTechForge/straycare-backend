@@ -120,19 +120,23 @@ class CallLogService {
     .lean();
 
     return logs.map((log: any) => {
-      const isIncoming = log.receiver._id.toString() === userId;
+      // Safely handle cases where the user was deleted (populate returns null)
+      const receiverId = log.receiver?._id ? log.receiver._id.toString() : log.receiver?.toString() || "unknown";
+      const callerId = log.caller?._id ? log.caller._id.toString() : log.caller?.toString() || "unknown";
+
+      const isIncoming = receiverId === userId;
       
       return {
         _id: log._id.toString(),
         caller: {
-          userId: log.caller._id.toString(),
-          name: log.caller.name,
-          profileImage: log.caller.profileImage,
+          userId: callerId,
+          name: log.caller?.name || "Deleted User",
+          profileImage: log.caller?.profileImage || "",
         },
         receiver: {
-          userId: log.receiver._id.toString(),
-          name: log.receiver.name,
-          profileImage: log.receiver.profileImage,
+          userId: receiverId,
+          name: log.receiver?.name || "Deleted User",
+          profileImage: log.receiver?.profileImage || "",
         },
         status: log.status,
         direction: isIncoming ? CallDirection.INCOMING : CallDirection.OUTGOING,
