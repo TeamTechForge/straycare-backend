@@ -16,4 +16,4 @@ export declare class PasswordService {
      */
     static comparePassword(password: string, hash: string): Promise<boolean>;
 }
-//# sourceMappingURL=PasswordService.d.ts.map
+//# sourceMappingURL=passwordService.d.ts.map

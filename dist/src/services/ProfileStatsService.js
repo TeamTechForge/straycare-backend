@@ -7,7 +7,7 @@ const VolunteerProfile = require("../models/VolunteerProfile");
 const VetProfile = require("../models/VetProfile");
 const NGOProfile = require("../models/NGOProfile");
 const ForumPost = require("../models/ForumPost");
-const StrayReport = require("../models/strayreport");
+const StrayReport = require("../models/StrayReport");
 const RescueHistory = require("../models/RescueHistory");
 const RescueRequest = require("../models/RescueRequest");
 const Rescuer = require("../models/Rescuer");
@@ -50,14 +50,17 @@ ProfileStatsService.strategies = {
         const volunteerProfile = await VolunteerProfile.findOne({ userId }).lean() || {};
         const rescuer = await Rescuer.findOne({ userId });
         const rescuerIdQuery = rescuer ? rescuer._id : userId;
+        const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
         const totalRescues = await RescueHistory.countDocuments({
             $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
         });
         const activeRescues = await RescueRequest.countDocuments({
-            rescuerId: rescuerIdQuery,
-            status: { $in: ["accepted", "under_rescue"] }
+            $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }],
+            status: { $in: ["accepted", "under_rescue", "Under Rescue"] }
         });
-        const totalAttempts = await RescueRequest.countDocuments({ rescuerId: rescuerIdQuery });
+        const totalAttempts = await RescueRequest.countDocuments({
+            $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
+        });
         const completionRate = totalAttempts > 0 ? Math.round((totalRescues / totalAttempts) * 100) : 100;
         return {
             profileData: {
@@ -68,6 +71,7 @@ ProfileStatsService.strategies = {
                 rescueCompletionRate: completionRate,
             },
             stats: {
+                reportsCount: reportCount,
                 rescuesCompleted: totalRescues + activeRescues,
                 activeRescues: activeRescues
             }
@@ -77,12 +81,13 @@ ProfileStatsService.strategies = {
         const vetProfile = await VetProfile.findOne({ userId }).lean() || {};
         const rescuer = await Rescuer.findOne({ userId });
         const rescuerIdQuery = rescuer ? rescuer._id : userId;
+        const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
         const totalRescues = await RescueHistory.countDocuments({
             $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
         });
         const activeRescues = await RescueRequest.countDocuments({
-            rescuerId: rescuerIdQuery,
-            status: { $in: ["accepted", "under_rescue"] }
+            $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }],
+            status: { $in: ["accepted", "under_rescue", "Under Rescue"] }
         });
         return {
             profileData: {
@@ -96,6 +101,7 @@ ProfileStatsService.strategies = {
                 emergencyAvailability: vetProfile.emergencyAvailability || false,
             },
             stats: {
+                reportsCount: reportCount,
                 rescuesCompleted: totalRescues + activeRescues,
                 animalsTreated: vetProfile.animalsTreated || 0
             }
@@ -105,12 +111,13 @@ ProfileStatsService.strategies = {
         const ngoProfile = await NGOProfile.findOne({ userId }).lean() || {};
         const rescuer = await Rescuer.findOne({ userId });
         const rescuerIdQuery = rescuer ? rescuer._id : userId;
+        const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
         const totalRescues = await RescueHistory.countDocuments({
             $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
         });
         const activeRescues = await RescueRequest.countDocuments({
-            rescuerId: rescuerIdQuery,
-            status: { $in: ["accepted", "under_rescue"] }
+            $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }],
+            status: { $in: ["accepted", "under_rescue", "Under Rescue"] }
         });
         return {
             profileData: {
@@ -122,6 +129,7 @@ ProfileStatsService.strategies = {
                 donationCampaignCount: ngoProfile.donationCampaignCount || 0,
             },
             stats: {
+                reportsCount: reportCount,
                 rescuesCompleted: totalRescues + activeRescues,
                 totalAdoptions: ngoProfile.totalAdoptions || 0,
                 donationCampaignCount: ngoProfile.donationCampaignCount || 0
@@ -129,4 +137,4 @@ ProfileStatsService.strategies = {
         };
     }
 };
-//# sourceMappingURL=ProfileStatsService.js.map
+//# sourceMappingURL=profileStatsService.js.map

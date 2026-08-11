@@ -1,5 +1,5 @@
 "use strict";
-// src/utils/AppError.ts
+// src/utils/appError.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppError = void 0;
 class AppError extends Error {
@@ -11,4 +11,4 @@ class AppError extends Error {
     }
 }
 exports.AppError = AppError;
-//# sourceMappingURL=AppError.js.map
+//# sourceMappingURL=appError.js.map

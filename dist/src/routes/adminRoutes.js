@@ -5,7 +5,7 @@ const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const Admin = require("../models/Admin");
 const bcrypt = require("bcryptjs");
-const JwtService_1 = require("../services/JwtService");
+const jwtService_1 = require("../services/jwtService");
 const { sendAdminInviteEmail } = require("../utils/emailService");
 // GET all admins (active + those with no status but have password)
 router.get("/", authMiddleware, async (req, res) => {
@@ -21,6 +21,18 @@ router.get("/", authMiddleware, async (req, res) => {
     }
     catch (err) {
         res.status(500).json({ error: "Failed to fetch admins" });
+    }
+});
+// GET the currently logged-in admin's own info (including preferences)
+router.get("/me", authMiddleware, async (req, res) => {
+    try {
+        const admin = await Admin.findById(req.user.id, { password: 0 });
+        if (!admin)
+            return res.status(404).json({ error: "Admin not found" });
+        res.json(admin);
+    }
+    catch (err) {
+        res.status(500).json({ error: "Failed to fetch admin info" });
     }
 });
 // POST migrate existing admins to active status (run once)
@@ -49,7 +61,7 @@ router.post("/invite", authMiddleware, async (req, res) => {
             }
             // If pending, resend the invite with a fresh token
             if (existing.status === "pending") {
-                const token = JwtService_1.JwtService.generateToken({ email }, "1h");
+                const token = jwtService_1.JwtService.generateToken({ email }, "1h");
                 existing.invitationToken = token;
                 await existing.save();
                 const inviteLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}&type=invite`;
@@ -58,7 +70,7 @@ router.post("/invite", authMiddleware, async (req, res) => {
             }
         }
         // New admin
-        const token = JwtService_1.JwtService.generateToken({ email }, "1h");
+        const token = jwtService_1.JwtService.generateToken({ email }, "1h");
         const admin = new Admin({
             username, email, role: "admin",
             invitationToken: token, status: "pending"
@@ -81,7 +93,7 @@ router.post("/accept-invite", async (req, res) => {
             return res.status(400).json({ error: "Token and new password are required" });
         }
         try {
-            JwtService_1.JwtService.verifyToken(token);
+            jwtService_1.JwtService.verifyToken(token);
         }
         catch (err) {
             return res.status(400).json({ error: "Invalid or expired token" });
@@ -138,6 +150,27 @@ router.patch("/change-password", authMiddleware, async (req, res) => {
     catch (err) {
         console.error("CHANGE PASSWORD ERROR:", err);
         res.status(500).json({ error: "Failed to change password" });
+    }
+});
+// PATCH update notification preferences for the logged-in admin
+router.patch("/preferences", authMiddleware, async (req, res) => {
+    try {
+        const { emailNotifications, donationAlerts, userReportAlerts } = req.body;
+        const admin = await Admin.findById(req.user.id);
+        if (!admin)
+            return res.status(404).json({ error: "Admin not found" });
+        if (emailNotifications !== undefined)
+            admin.emailNotifications = emailNotifications;
+        if (donationAlerts !== undefined)
+            admin.donationAlerts = donationAlerts;
+        if (userReportAlerts !== undefined)
+            admin.userReportAlerts = userReportAlerts;
+        await admin.save();
+        res.json({ success: true });
+    }
+    catch (err) {
+        console.error("UPDATE PREFERENCES ERROR:", err);
+        res.status(500).json({ error: "Failed to update preferences" });
     }
 });
 module.exports = router;
