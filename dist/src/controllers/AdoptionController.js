@@ -11,7 +11,7 @@ const getAllPosts = async (_req, res) => {
         const posts = await AdoptionPost_1.default.find().sort({ createdAt: -1 }).populate("userId", "name phone avatar organisation");
         res.json(posts);
     }
-    catch {
+    catch (error) {
         res.status(500).json({ error: "Server error" });
     }
 };
@@ -26,7 +26,7 @@ const getPostById = async (req, res) => {
         }
         res.json(post);
     }
-    catch {
+    catch (error) {
         res.status(500).json({ error: "Server error" });
     }
 };
@@ -34,7 +34,8 @@ exports.getPostById = getPostById;
 // POST /api/posts
 const createPost = async (req, res) => {
     try {
-        const post = await AdoptionPost_1.default.create({ ...req.body, userId: req.user.userId });
+        const typeofReq = req; // Cast to 'any' to cleanly read their req.user.id structure
+        const post = await AdoptionPost_1.default.create({ ...req.body, userId: typeofReq.user.id });
         res.status(201).json(post);
     }
     catch (err) {
@@ -45,12 +46,13 @@ exports.createPost = createPost;
 // PUT /api/posts/:postId
 const updatePost = async (req, res) => {
     try {
+        const typeofReq = req;
         const post = await AdoptionPost_1.default.findById(req.params.postId);
         if (!post) {
             res.status(404).json({ error: "Post not found" });
             return;
         }
-        if (post.userId.toString() !== req.user.userId) {
+        if (post.userId.toString() !== typeofReq.user.id) {
             res.status(403).json({ error: "Not authorised" });
             return;
         }
@@ -58,7 +60,7 @@ const updatePost = async (req, res) => {
         const updated = await AdoptionPost_1.default.findByIdAndUpdate(req.params.postId, req.body, { new: true, runValidators: true });
         res.json(updated);
     }
-    catch {
+    catch (error) {
         res.status(500).json({ error: "Server error" });
     }
 };
@@ -66,13 +68,14 @@ exports.updatePost = updatePost;
 // DELETE /api/posts/:postId
 const deletePost = async (req, res) => {
     try {
+        const typeofReq = req;
         const post = await AdoptionPost_1.default.findById(req.params.postId);
         if (!post) {
             res.status(404).json({ error: "Post not found" });
             return;
         }
-        const isOwner = post.userId.toString() === req.user.userId;
-        const isAdmin = req.user.role === "admin";
+        const isOwner = post.userId.toString() === typeofReq.user.id;
+        const isAdmin = typeofReq.user.role === "admin";
         if (!isOwner && !isAdmin) {
             res.status(403).json({ error: "Not authorised" });
             return;
@@ -80,7 +83,7 @@ const deletePost = async (req, res) => {
         await post.deleteOne();
         res.json({ message: "Post deleted" });
     }
-    catch {
+    catch (error) {
         res.status(500).json({ error: "Server error" });
     }
 };
@@ -88,12 +91,13 @@ exports.deletePost = deletePost;
 // GET /api/posts/my
 const getMyPosts = async (req, res) => {
     try {
-        const posts = await AdoptionPost_1.default.find({ userId: req.user.userId }).sort({ createdAt: -1 });
+        const typeofReq = req;
+        const posts = await AdoptionPost_1.default.find({ userId: typeofReq.user.id }).sort({ createdAt: -1 });
         res.json(posts);
     }
-    catch {
+    catch (error) {
         res.status(500).json({ error: "Server error" });
     }
 };
 exports.getMyPosts = getMyPosts;
-//# sourceMappingURL=AdoptionController.js.map
+//# sourceMappingURL=adoptionController.js.map

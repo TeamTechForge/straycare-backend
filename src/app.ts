@@ -32,7 +32,7 @@ const moderationRoutes = require("./routes/moderationRoutes");
 const adminNotificationsRoutes = require("./routes/adminNotificationsRoutes");
 const adminManagementRoutes = require("./routes/adminRoutes");
 const searchRoutes = require("./routes/searchRoutes");
-const adoptionRoutes = require("./routes/AdoptionRoutes");
+const adoptionRoutes = require("./routes/adoptionRoutes");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();

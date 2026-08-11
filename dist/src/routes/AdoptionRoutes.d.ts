@@ -1,2 +1,2 @@
 export {};
-//# sourceMappingURL=AdoptionRoutes.d.ts.map
+//# sourceMappingURL=adoptionRoutes.d.ts.map
