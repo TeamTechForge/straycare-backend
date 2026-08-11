@@ -5,6 +5,13 @@ interface IConversationLastMessage {
   text?: string;
   sender?: mongoose.Types.ObjectId;
   type?: "text" | "image" | "location";
+  isEncrypted?: boolean;
+  encryptedText?: {
+    ciphertext: string;
+    iv: string;
+    authTag: string;
+    version: number;
+  };
   createdAt?: Date;
 }
 
@@ -38,6 +45,13 @@ const conversationSchema = new mongoose.Schema(
     // Denormalized snapshot of the last message for fast list rendering.
     lastMessage: {
       text: { type: String, default: "" },
+      isEncrypted: { type: Boolean, default: false },
+      encryptedText: {
+        ciphertext: { type: String },
+        iv: { type: String },
+        authTag: { type: String },
+        version: { type: Number },
+      },
       sender: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       type: { type: String, enum: ["text", "image", "location"], default: "text" },
       createdAt: { type: Date },

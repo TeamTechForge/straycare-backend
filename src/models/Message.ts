@@ -18,6 +18,25 @@ interface IMessage extends mongoose.Document {
   readBy: mongoose.Types.ObjectId[];
   deletedFor: mongoose.Types.ObjectId[];
   isDeletedForEveryone: boolean;
+  isEncrypted: boolean;
+  encryptedText?: {
+    ciphertext: string;
+    iv: string;
+    authTag: string;
+    version: number;
+  };
+  encryptedImageUrl?: {
+    ciphertext: string;
+    iv: string;
+    authTag: string;
+    version: number;
+  };
+  encryptedLocation?: {
+    ciphertext: string;
+    iv: string;
+    authTag: string;
+    version: number;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -62,6 +81,26 @@ const messageSchema = new mongoose.Schema(
 
     deletedFor: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     isDeletedForEveryone: { type: Boolean, default: false },
+    
+    isEncrypted: { type: Boolean, default: false },
+    encryptedText: {
+      ciphertext: { type: String },
+      iv: { type: String },
+      authTag: { type: String },
+      version: { type: Number },
+    },
+    encryptedImageUrl: {
+      ciphertext: { type: String },
+      iv: { type: String },
+      authTag: { type: String },
+      version: { type: Number },
+    },
+    encryptedLocation: {
+      ciphertext: { type: String },
+      iv: { type: String },
+      authTag: { type: String },
+      version: { type: Number },
+    },
   },
   { timestamps: true }
 );

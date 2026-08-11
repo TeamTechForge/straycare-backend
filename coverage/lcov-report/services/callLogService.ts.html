@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">27.77% </span>
+                <span class="strong">11.11% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>15/54</span>
+                <span class='fraction'>6/54</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">15.38% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>2/13</span>
+                <span class='fraction'>0/13</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">50% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>5/10</span>
+                <span class='fraction'>0/10</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">27.77% </span>
+                <span class="strong">11.11% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>15/54</span>
+                <span class='fraction'>6/54</span>
             </div>
         
             
@@ -355,7 +355,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -363,18 +363,10 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -391,15 +383,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -408,8 +391,25 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -533,8 +533,8 @@ class CallLogService {
   /**
    * Get history for a specific user
    */
-  public async getHistory(userId: string): Promise&lt;ICallLogDTO[]&gt; {
-    const logs = await CallLog.find({
+  public <span class="fstat-no" title="function not covered" >async </span>getHistory(userId: string): Promise&lt;ICallLogDTO[]&gt; {
+    const logs = <span class="cstat-no" title="statement not covered" >await CallLog.find({</span>
       $or: [{ caller: userId }, { receiver: userId }]
     })
     .sort({ createdAt: -1 })
@@ -542,10 +542,10 @@ class CallLogService {
     .populate("receiver", "name profileImage")
     .lean();
 &nbsp;
-    return logs.map((log: any) =&gt; {
-      const isIncoming = log.receiver._id.toString() === userId;
+<span class="cstat-no" title="statement not covered" >    return logs.map(<span class="fstat-no" title="function not covered" >(l</span>og: any) =&gt; {</span>
+      const isIncoming = <span class="cstat-no" title="statement not covered" >log.receiver._id.toString() === userId;</span>
       
-      return {
+<span class="cstat-no" title="statement not covered" >      return {</span>
         _id: log._id.toString(),
         caller: {
           userId: log.caller._id.toString(),
@@ -569,16 +569,16 @@ class CallLogService {
     });
   }
 &nbsp;
-  public async deleteLog(logId: string, userId: string): Promise&lt;boolean&gt; {
-    const result = await CallLog.deleteOne({
+  public <span class="fstat-no" title="function not covered" >async </span>deleteLog(logId: string, userId: string): Promise&lt;boolean&gt; {
+    const result = <span class="cstat-no" title="statement not covered" >await CallLog.deleteOne({</span>
       _id: logId,
       $or: [{ caller: userId }, { receiver: userId }]
     });
-    return result.deletedCount === 1;
+<span class="cstat-no" title="statement not covered" >    return result.deletedCount === 1;</span>
   }
 &nbsp;
-  public async clearHistory(userId: string): Promise&lt;void&gt; {
-    await CallLog.deleteMany({
+  public <span class="fstat-no" title="function not covered" >async </span>clearHistory(userId: string): Promise&lt;void&gt; {
+<span class="cstat-no" title="statement not covered" >    await CallLog.deleteMany({</span>
       $or: [{ caller: userId }, { receiver: userId }]
     });
   }
@@ -586,9 +586,9 @@ class CallLogService {
   /**
    * Mark all missed calls as seen for a user
    */
-  public async markSeen(userId: string): Promise&lt;void&gt; {
-    try {
-      await CallLog.updateMany(
+  public <span class="fstat-no" title="function not covered" >async </span>markSeen(userId: string): Promise&lt;void&gt; {
+<span class="cstat-no" title="statement not covered" >    try {</span>
+<span class="cstat-no" title="statement not covered" >      await CallLog.updateMany(</span>
         { receiver: new mongoose.Types.ObjectId(userId), status: CallStatus.MISSED, isSeen: { $ne: true } },
         { $set: { isSeen: true } }
       );
@@ -607,7 +607,7 @@ export default new CallLogService();
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-08T06:15:10.220Z
+                at 2026-08-11T12:11:00.953Z
             </div>
         <script src="../prettify.js"></script>
         <script>

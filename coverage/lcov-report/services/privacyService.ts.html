@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">17.39% </span>
+                <span class="strong">5.79% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>12/69</span>
+                <span class='fraction'>4/69</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">17.18% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>11/64</span>
+                <span class='fraction'>0/64</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">14.28% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>1/7</span>
+                <span class='fraction'>0/7</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">21.56% </span>
+                <span class="strong">7.84% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>11/51</span>
+                <span class='fraction'>4/51</span>
             </div>
         
             
@@ -222,22 +222,22 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">11x</span>
-<span class="cline-any cline-yes">11x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">11x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">11x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">11x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">11x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">11x</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -345,23 +345,23 @@ class PrivacyService {
 <span class="cstat-no" title="statement not covered" >    return false;</span>
   }
 &nbsp;
-  public async canMessage(senderId: string, recipientId: string): Promise&lt;{ allowed: boolean; reason?: string }&gt; {
-    const recipient = await User.findById(recipientId).select("messagingPrivacy blockedUsers").lean();
-    const sender = await User.findById(senderId).select("blockedUsers").lean();
+  public <span class="fstat-no" title="function not covered" >async </span>canMessage(senderId: string, recipientId: string): Promise&lt;{ allowed: boolean; reason?: string }&gt; {
+    const recipient = <span class="cstat-no" title="statement not covered" >await User.findById(recipientId).select("messagingPrivacy blockedUsers").lean();</span>
+    const sender = <span class="cstat-no" title="statement not covered" >await User.findById(senderId).select("blockedUsers").lean();</span>
 &nbsp;
-    <span class="missing-if-branch" title="if path not taken" >I</span>if (!recipient || !sender) <span class="cstat-no" title="statement not covered" >return { allowed: false, reason: "User not found" };</span>
+<span class="cstat-no" title="statement not covered" >    if (!recipient || !sender) <span class="cstat-no" title="statement not covered" >return { allowed: false, reason: "User not found" };</span></span>
 &nbsp;
-    <span class="missing-if-branch" title="if path not taken" >I</span>if (sender.blockedUsers &amp;&amp; sender.blockedUsers.map(<span class="fstat-no" title="function not covered" >(i</span>d: any) =&gt; <span class="cstat-no" title="statement not covered" >id.toString())</span>.includes(recipientId.toString())) {
+<span class="cstat-no" title="statement not covered" >    if (sender.blockedUsers &amp;&amp; sender.blockedUsers.map(<span class="fstat-no" title="function not covered" >(i</span>d: any) =&gt; <span class="cstat-no" title="statement not covered" >id.toString())</span>.includes(recipientId.toString())) {</span>
 <span class="cstat-no" title="statement not covered" >      return { allowed: false, reason: "You have blocked this user" };</span>
     }
     
-    <span class="missing-if-branch" title="if path not taken" >I</span>if (recipient.blockedUsers &amp;&amp; recipient.blockedUsers.map(<span class="fstat-no" title="function not covered" >(i</span>d: any) =&gt; <span class="cstat-no" title="statement not covered" >id.toString())</span>.includes(senderId.toString())) {
+<span class="cstat-no" title="statement not covered" >    if (recipient.blockedUsers &amp;&amp; recipient.blockedUsers.map(<span class="fstat-no" title="function not covered" >(i</span>d: any) =&gt; <span class="cstat-no" title="statement not covered" >id.toString())</span>.includes(senderId.toString())) {</span>
 <span class="cstat-no" title="statement not covered" >      return { allowed: false, reason: "You have been blocked by this user" };</span>
     }
 &nbsp;
-    const privacy = recipient.messagingPrivacy || <span class="branch-1 cbranch-no" title="branch not covered" >"everyone";</span>
+    const privacy = <span class="cstat-no" title="statement not covered" >recipient.messagingPrivacy || "everyone";</span>
 &nbsp;
-    <span class="missing-if-branch" title="else path not taken" >E</span>if (privacy === "everyone") return { allowed: true };
+<span class="cstat-no" title="statement not covered" >    if (privacy === "everyone") <span class="cstat-no" title="statement not covered" >return { allowed: true };</span></span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    if (privacy === "contacts") {</span>
       const existing = <span class="cstat-no" title="statement not covered" >await Conversation.findOne({</span>
@@ -442,7 +442,7 @@ export default new PrivacyService();
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-08T06:15:10.220Z
+                at 2026-08-11T12:11:00.953Z
             </div>
         <script src="../prettify.js"></script>
         <script>
