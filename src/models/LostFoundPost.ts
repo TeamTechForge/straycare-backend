@@ -19,7 +19,7 @@ export interface ILostFoundPost extends Document {
   updatedAt: Date;
 }
 
-const LostFoundPostSchema: Schema = new Schema<ILostFoundPost>(
+const LostFoundPostSchema = new Schema<ILostFoundPost>(
   {
     userId: {
       type: Schema.Types.ObjectId,
@@ -85,11 +85,12 @@ const LostFoundPostSchema: Schema = new Schema<ILostFoundPost>(
       default: 0,
     },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
 LostFoundPostSchema.index({ status: 1, createdAt: -1 });
 
-export default mongoose.model<ILostFoundPost>("LostFoundPost", LostFoundPostSchema);
+export default mongoose.model<ILostFoundPost>(
+  "LostFoundPost",
+  LostFoundPostSchema
+);
