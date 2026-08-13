@@ -4,7 +4,6 @@ src/config/serviceAccountKey.json
 src/config/*.json
 src/firebase-service.json
 uploads/
-<<<<<<< HEAD
 
 # Build output
 dist/
@@ -23,7 +22,3 @@ yarn-error.log*
 # OS Files
 .DS_Store
 Thumbs.db
-=======
-dist/
-coverage/
->>>>>>> aa1696ea3af0bfd95e4bf17251dce234727661f4
