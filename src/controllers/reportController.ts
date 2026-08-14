@@ -1,7 +1,7 @@
 import { catchAsync } from "../utils/catchAsync";
 import type { NextFunction } from "express";
-import { NotificationService } from "../services/NotificationService";
-const StrayReport = require("../models/strayreport");
+import { NotificationService } from "../services/notificationService";
+const StrayReport = require("../models/StrayReport");
 
 import type { Request, Response } from "express";
 
@@ -269,7 +269,7 @@ exports.createReport = catchAsync(async (req: Request, res: Response, next: Next
       let rescueRequest = null;
       if (req.body.preventAutoMatch !== true) {
         try {
-          const { RescueService } = require("../services/RescueService");
+          const { RescueService } = require("../services/rescueService");
           const User = require("../models/User");
           
           const reporterUser =
@@ -277,11 +277,12 @@ exports.createReport = catchAsync(async (req: Request, res: Response, next: Next
               ? await User.findById(req.user.id)
               : null;
           
-          console.log(`[STRAY] Attempting automatic rescuer matching for report ${newReport.caseId}`);
+          console.log(`[STRAY] Attempting automatic rescuer matching within 5km for report ${newReport.caseId}`);
           const nearestResult = await RescueService.findNearestRescuer({
             latitude: newReport.location.lat,
             longitude: newReport.location.lng,
             caseId: newReport.caseId,
+            maxDistanceKm: 5,
           });
 
         if (nearestResult) {
@@ -291,11 +292,11 @@ exports.createReport = catchAsync(async (req: Request, res: Response, next: Next
             userId: newReport.reporterUserId || "anonymous",
             caseId: newReport.caseId,
             animalType: newReport.animalType,
-            description: newReport.description || "Stray animal needs help",
-            photos: newReport.photos || [],
-            reporterName: reporterUser?.name || "Anonymous Reporter",
-            reporterPhone: "",
-            reporterAvatar: "",
+            description: newReport.notes || newReport.description || req.body.notes || req.body.description || "Stray animal needs help",
+            photos: (newReport.photos && newReport.photos.length > 0) ? newReport.photos : (req.body.photos || []),
+            reporterName: newReport.anonymous ? "Anonymous Reporter" : (reporterUser?.name || req.body.reporterName || "Reporter"),
+            reporterPhone: newReport.anonymous ? "" : (reporterUser?.phone || req.body.reporterPhone || ""),
+            reporterAvatar: newReport.anonymous ? "" : (reporterUser?.profileImage || reporterUser?.avatar || req.body.reporterAvatar || ""),
             reporterLocation: {
               latitude: newReport.location.lat,
               longitude: newReport.location.lng,
@@ -308,7 +309,7 @@ exports.createReport = catchAsync(async (req: Request, res: Response, next: Next
             },
             distanceKm,
             etaMinutes,
-            summary: newReport.description || "Automatic rescue assignment",
+            summary: newReport.notes || newReport.description || "Automatic rescue assignment",
           };
 
           rescueRequest = await RescueService.createRescueRequest(requestPayload, nearestResult.rescuer);
@@ -363,6 +364,28 @@ exports.getReportByCaseId = catchAsync(async (req: Request, res: Response, next:
       } catch (err) {
         console.warn(`[STRAY] Could not populate reporter for case ${report.caseId}:`, err);
       }
+    }
+
+    // Populate assigned rescuer user ID if active rescue request exists
+    try {
+      const RescueRequest = require("../models/RescueRequest");
+      const Rescuer = require("../models/Rescuer");
+
+      const activeRequest = await RescueRequest.findOne({
+        caseId: req.params.caseId,
+        status: { $in: ["accepted", "under rescue", "Under Rescue", "completed", "treated", "ready for adoption"] },
+      });
+
+      if (activeRequest && activeRequest.rescuerId) {
+        let rescuerUserId = String(activeRequest.rescuerId);
+        const rescuerDoc = await Rescuer.findById(activeRequest.rescuerId);
+        if (rescuerDoc && rescuerDoc.userId) {
+          rescuerUserId = String(rescuerDoc.userId);
+        }
+        report._doc.assignedRescuerUserId = rescuerUserId;
+      }
+    } catch (err) {
+      console.warn(`[STRAY] Could not populate assigned rescuer for case ${report.caseId}:`, err);
     }
 
     let permissions = { canAccept: false, canUpdate: false };
@@ -471,6 +494,7 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
 
     // 🔒 Check if case is assigned to a rescuer — only assigned rescuer can manage/update status
     const Rescuer = require("../models/Rescuer");
+    const RescueRequest = require("../models/RescueRequest");
 
     // A role alone is not sufficient: the caller must be the rescuer who
     // accepted this specific case. Pending requests do not grant ownership.
@@ -486,17 +510,30 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
       return;
     }
 
-    if (!report.assignedRescuerId) {
+    const activeRequest = await RescueRequest.findOne({
+      caseId,
+      status: { $in: ["accepted", "under rescue", "Under Rescue", "completed", "treated", "ready for adoption"] },
+    });
+
+    if (!activeRequest) {
       res.status(403).json({
-        message: "Forbidden. This case has not been accepted by an assigned rescuer.",
+        message: "Forbidden. A rescuer must accept this case before updating its status.",
       });
       return;
     }
 
     const rescuerDoc = await Rescuer.findOne({ userId });
-    if (!rescuerDoc || String(report.assignedRescuerId) !== String(rescuerDoc._id)) {
+    const rescuerDocId = rescuerDoc ? String(rescuerDoc._id) : "";
+    const currentUserIdStr = String(userId);
+    const assignedRescuerIdStr = String(activeRequest.rescuerId);
+
+    const isAssignedRescuer =
+      assignedRescuerIdStr === currentUserIdStr ||
+      (rescuerDocId && assignedRescuerIdStr === rescuerDocId);
+
+    if (!isAssignedRescuer) {
       res.status(403).json({
-        message: "Only the assigned rescuer can change the status of this case.",
+        message: "Forbidden. Only the accepted rescuer assigned to this case can change its status.",
       });
       return;
     }

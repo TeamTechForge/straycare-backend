@@ -6,17 +6,17 @@ const VolunteerProfile = require("../models/VolunteerProfile");
 const VetProfile = require("../models/VetProfile");
 const NGOProfile = require("../models/NGOProfile");
 const ForumPost = require("../models/ForumPost");
-const StrayReport = require("../models/strayreport");
+const StrayReport = require("../models/StrayReport");
 const RescueHistory = require("../models/RescueHistory");
 const RescueRequest = require("../models/RescueRequest");
 const UserReport = require("../models/UserReport");
 
 import type { Request, Response } from "express";
 import mongoose from "mongoose";
-import { ProfileStatsService } from "../services/ProfileStatsService";
-import { NotificationService } from "../services/NotificationService";
+import { ProfileStatsService } from "../services/profileStatsService";
+import { NotificationService } from "../services/notificationService";
 
-import PrivacyService from "../services/PrivacyService";
+import PrivacyService from "../services/privacyService";
 
 // Fetch another user's public profile data (safe, sanitised)
 exports.getPublicProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -241,18 +241,37 @@ exports.searchUsers = catchAsync(async (req: Request, res: Response, next: NextF
       return;
     }
 
+    // 1. Find NGOs matching the orgName query
+    const matchingNgos = await NGOProfile.find({ orgName: { $regex: query, $options: "i" } }).select("userId orgName").lean();
+    const ngoUserIds = matchingNgos.map((n: any) => n.userId);
+    const ngoOrgNameMap = new Map(matchingNgos.map((n: any) => [n.userId.toString(), n.orgName]));
+
     const users: any[] = await User.find({
       _id: { $ne: currentUserId },
-      $and: [
+      $or: [
+        // Standard user search (exclude NGOs so we don't search NGO owner names)
         {
-          $or: [
-            { name: { $regex: query, $options: "i" } },
-            { email: { $regex: query, $options: "i" } },
-          ],
+          $and: [
+            { role: { $ne: "ngo" } },
+            {
+              $or: [
+                { name: { $regex: query, $options: "i" } },
+                { email: { $regex: query, $options: "i" } },
+              ],
+            },
+            {
+              $or: [
+                { role: { $nin: ["ngo", "vet"] } },
+                { isApproved: true }
+              ]
+            }
+          ]
         },
+        // Match NGOs by the IDs we found in NGOProfile
         {
-          $or: [
-            { role: { $nin: ["ngo", "vet"] } },
+          $and: [
+            { role: "ngo" },
+            { _id: { $in: ngoUserIds } },
             { isApproved: true }
           ]
         }
@@ -266,6 +285,11 @@ exports.searchUsers = catchAsync(async (req: Request, res: Response, next: NextF
     const processedUsers = await Promise.all(users.map(async (u) => {
       if (!u.profileImage) {
         u.profileImage = u.avatar || "";
+      }
+      
+      // Override name if it's an NGO
+      if (u.role === "ngo" && ngoOrgNameMap.has(u._id.toString())) {
+        u.name = ngoOrgNameMap.get(u._id.toString());
       }
       
       const messagePermission = await PrivacyService.canMessage(currentUserId, u._id.toString());

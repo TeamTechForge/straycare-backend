@@ -6,6 +6,7 @@ interface IVolunteerProfile extends mongoose.Document {
   bio: string;
   profileImage: string;
   serviceArea?: string;
+  accountStatus?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,6 +22,7 @@ const VolunteerProfileSchema = new mongoose.Schema(
     location: { type: String, default: "" },
     bio: { type: String, default: "" },
     profileImage: { type: String, default: "" },
+    accountStatus: { type: String, default: null },
   },
   { timestamps: true }
 );

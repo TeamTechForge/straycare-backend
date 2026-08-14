@@ -18,6 +18,7 @@ interface IUser extends mongoose.Document {
   callingPrivacy: "everyone" | "contacts" | "relatedOnly" | "none";
   profileImage: string;
   pushToken?: string;
+  accountStatus?: string;
   organizationName?: string; // Added dynamically in getMe
   blockedUsers?: mongoose.Types.ObjectId[];
   createdAt: Date;
@@ -116,6 +117,10 @@ const userSchema = new mongoose.Schema(
     pushToken: {
       type: String,
     },
+    accountStatus: {
+      type: String,
+      default: null,
+    },
 
     blockedUsers: [
       {
@@ -129,4 +134,5 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model<IUser>("User", userSchema);
+const User = mongoose.models.User || mongoose.model<IUser>("User", userSchema);
+export = User;

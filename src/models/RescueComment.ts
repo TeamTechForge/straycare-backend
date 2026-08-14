@@ -20,6 +20,7 @@ const rescueCommentSchema = new mongoose.Schema(
   {
     // Which rescue case this comment belongs to
     rescueRequestId: { type: String, required: true, index: true },
+    caseId: { type: String, default: "", index: true },
 
     // Who wrote this comment
     userId: { type: String, default: "guest-user" },

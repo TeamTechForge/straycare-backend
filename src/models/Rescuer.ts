@@ -31,4 +31,4 @@ const rescuerSchema = new mongoose.Schema({
 });
 
 // Export so other files can use Rescuer.find(), Rescuer.create(), etc.
-module.exports = mongoose.model<IRescuer>("Rescuer", rescuerSchema);
+module.exports = mongoose.models.Rescuer || mongoose.model<IRescuer>("Rescuer", rescuerSchema);

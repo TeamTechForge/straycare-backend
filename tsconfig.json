@@ -18,8 +18,8 @@
     "allowJs": true,
     "moduleResolution": "node16",
     "typeRoots": ["./node_modules/@types", "./src/types"],
-    "types": ["express", "multer"]
+    "isolatedModules": true
   },
   "include": ["server.ts", "src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "scratch", "uploads"]
+  "exclude": ["node_modules", "dist", "scratch", "uploads", "tests", "coverage"]
 }

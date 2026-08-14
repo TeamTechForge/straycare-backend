@@ -3,7 +3,7 @@ const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const Admin = require("../models/Admin");
 const bcrypt = require("bcryptjs");
-import { JwtService } from "../services/JwtService";
+import { JwtService } from "../services/jwtService";
 const { sendAdminInviteEmail } = require("../utils/emailService");
 
 import type { Request, Response } from "express";
@@ -24,6 +24,17 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
     res.json(admins);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch admins" });
+  }
+});
+
+// GET the currently logged-in admin's own info (including preferences)
+router.get("/me", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const admin = await Admin.findById((req as any).user.id, { password: 0 });
+    if (!admin) return res.status(404).json({ error: "Admin not found" });
+    res.json(admin);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch admin info" });
   }
 });
 
@@ -145,6 +156,26 @@ router.patch("/change-password", authMiddleware, async (req: Request, res: Respo
   } catch (err) {
     console.error("CHANGE PASSWORD ERROR:", err);
     res.status(500).json({ error: "Failed to change password" });
+  }
+});
+
+// PATCH update notification preferences for the logged-in admin
+router.patch("/preferences", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { emailNotifications, donationAlerts, userReportAlerts } = req.body;
+
+    const admin = await Admin.findById((req as any).user.id);
+    if (!admin) return res.status(404).json({ error: "Admin not found" });
+
+    if (emailNotifications !== undefined) admin.emailNotifications = emailNotifications;
+    if (donationAlerts !== undefined) admin.donationAlerts = donationAlerts;
+    if (userReportAlerts !== undefined) admin.userReportAlerts = userReportAlerts;
+
+    await admin.save();
+    res.json({ success: true });
+  } catch (err) {
+    console.error("UPDATE PREFERENCES ERROR:", err);
+    res.status(500).json({ error: "Failed to update preferences" });
   }
 });
 

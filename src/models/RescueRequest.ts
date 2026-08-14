@@ -92,4 +92,4 @@ const rescueRequestSchema = new mongoose.Schema({
 });
 
 // Export so rescueController.js can create and query requests
-module.exports = mongoose.model<IRescueRequest>("RescueRequest", rescueRequestSchema);
+module.exports = mongoose.models.RescueRequest || mongoose.model<IRescueRequest>("RescueRequest", rescueRequestSchema);

@@ -44,6 +44,11 @@ if (!process.env.MONGO_URI) {
   console.warn("[STARTUP] ⚠️  MONGO_URI is not set in Backend/.env — will fall back to in-memory MongoDB.");
 }
 
+if (!process.env.MESSAGE_ENCRYPTION_KEY || Buffer.from(process.env.MESSAGE_ENCRYPTION_KEY, "hex").length !== 32) {
+  console.error("[STARTUP] ❌ MESSAGE_ENCRYPTION_KEY is missing or invalid. It must be a 64-character hex string (32 bytes) in .env. Server will not start.");
+  process.exit(1);
+}
+
 // ─── 3. Port helper functions ─────────────────────────────────────────────────
 
 /**

@@ -171,7 +171,7 @@ const updateGeneralProfile = catchAsync(async (req: Request, res: Response, next
   const profile = await GeneralUserProfile.findOneAndUpdate(
     { userId },
     { location, bio, profileImage },
-    { new: true, runValidators: true }
+    { new: true, runValidators: true, upsert: true }
   );
 
   if (!profile) {
@@ -193,7 +193,7 @@ const updateVolunteerProfile = catchAsync(async (req: Request, res: Response, ne
   const profile = await VolunteerProfile.findOneAndUpdate(
     { userId },
     { location, bio, profileImage },
-    { new: true, runValidators: true }
+    { new: true, runValidators: true, upsert: true }
   );
 
   if (!profile) {
@@ -215,7 +215,7 @@ const updateNGOProfile = catchAsync(async (req: Request, res: Response, next: Ne
   const profile = await NGOProfile.findOneAndUpdate(
     { userId },
     { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret },
-    { new: true, runValidators: true }
+    { new: true, runValidators: true, upsert: true }
   );
 
   if (!profile) {
@@ -235,7 +235,7 @@ const updateVetProfile = catchAsync(async (req: Request, res: Response, next: Ne
   const profile = await VetProfile.findOneAndUpdate(
     { userId },
     { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret },
-    { new: true, runValidators: true }
+    { new: true, runValidators: true, upsert: true }
   );
 
   if (!profile) {
