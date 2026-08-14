@@ -20,7 +20,9 @@ export class ProfileStatsService {
   private static readonly strategies: Record<string, ProfileStrategy> = {
     general_user: async (userId: string) => {
       const generalProfile: any = await GeneralUserProfile.findOne({ userId }).lean() || {};
-      const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
+      const reportCount = await StrayReport.countDocuments({
+        $or: [{ reporterUserId: userId }, { userId: userId }]
+      });
       return {
         profileData: {
           location: generalProfile.location || "",
@@ -35,7 +37,9 @@ export class ProfileStatsService {
       const rescuer = await Rescuer.findOne({ userId });
       const rescuerIdQuery = rescuer ? rescuer._id : userId;
 
-      const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
+      const reportCount = await StrayReport.countDocuments({
+        $or: [{ reporterUserId: userId }, { userId: userId }]
+      });
       const totalRescues = await RescueHistory.countDocuments({ 
         $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
       });
@@ -68,7 +72,9 @@ export class ProfileStatsService {
       const rescuer = await Rescuer.findOne({ userId });
       const rescuerIdQuery = rescuer ? rescuer._id : userId;
 
-      const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
+      const reportCount = await StrayReport.countDocuments({
+        $or: [{ reporterUserId: userId }, { userId: userId }]
+      });
       const totalRescues = await RescueHistory.countDocuments({ 
         $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
       });
@@ -104,7 +110,9 @@ export class ProfileStatsService {
       const rescuer = await Rescuer.findOne({ userId });
       const rescuerIdQuery = rescuer ? rescuer._id : userId;
 
-      const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
+      const reportCount = await StrayReport.countDocuments({
+        $or: [{ reporterUserId: userId }, { userId: userId }]
+      });
       const totalRescues = await RescueHistory.countDocuments({ 
         $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
       });
