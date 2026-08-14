@@ -448,7 +448,22 @@ exports.acceptReportFromMap = catchAsync(async (req: Request, res: Response): Pr
 
   const request = await RescueRequest.create({ rescuerId: rescuer._id, userId: report.reporterUserId || "", status: "accepted", caseId: report.caseId, animalType: report.animalType, description: report.notes || "Rescue case accepted from map", photos: report.photos || [], rescuerName: rescuer.name, summary: `Accepted by ${rescuer.name} from rescue map` });
   if (!report.anonymous && report.reporterUserId) {
-    await NotificationService.sendNotification(report.reporterUserId, "Rescue Request Accepted", `${user.name} accepted your case. Rescue is under way.`, "success", String(request._id), report.caseId);
+    await NotificationService.sendNotification(
+      report.reporterUserId,
+      `Case ${report.caseId} Accepted`,
+      `Your ${report.animalType || "animal"} rescue case ${report.caseId} was accepted by ${user.name}. Rescue is under way.`,
+      "success",
+      String(request._id),
+      report.caseId,
+      {
+        event: "rescue_accepted",
+        status: "Under Rescue",
+        animalType: report.animalType || "animal",
+        assignedRescuerName: user.name,
+        action: "view_case",
+        categoryId: "case_update",
+      }
+    );
   }
   res.status(201).json({ requestId: String(request._id) });
 });
@@ -561,8 +576,8 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
     // 🔔 Notify reporter of status update (if not anonymous)
     if (!report.anonymous && report.reporterUserId) {
       const statusMessages: { [key: string]: string } = {
-        Treated: `${user.name} updated the case: Animal is under treatment.`,
-        "Ready for Adoption": `${user.name} updated the case: Rescue completed—ready for adoption.`,
+        Treated: `Case ${report.caseId}: the ${report.animalType || "animal"} is now receiving treatment. Updated by ${user.name}.`,
+        "Ready for Adoption": `Case ${report.caseId}: the ${report.animalType || "animal"} is now ready for adoption. Updated by ${user.name}.`,
       };
 
       const notificationMessage = statusMessages[status] || `Status updated to ${status}`;
@@ -571,11 +586,21 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
         // Save in-app notification
         await NotificationService.sendNotification(
           report.reporterUserId,
-          "Case Status Update",
+          status === "Treated"
+            ? `Treatment Started • ${report.caseId}`
+            : `Ready for Adoption • ${report.caseId}`,
           notificationMessage,
           "success",
           "",
-          report.caseId
+          report.caseId,
+          {
+            event: "case_status_updated",
+            status,
+            animalType: report.animalType || "animal",
+            assignedRescuerName: user.name,
+            action: "view_case",
+            categoryId: "case_update",
+          }
         );
         console.log(`[STRAY] Notification sent to reporter for case ${report.caseId}`);
       } catch (err: any) {

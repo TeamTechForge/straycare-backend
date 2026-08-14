@@ -377,6 +377,11 @@ exports.savePushToken = catchAsync(async (req: Request, res: Response, next: Nex
     return;
   }
 
+  if (!/^(ExponentPushToken|ExpoPushToken)\[[^\]]+\]$/.test(pushToken)) {
+    res.status(400).json({ message: "A valid Expo push token is required" });
+    return;
+  }
+
   try {
     const user = await User.findByIdAndUpdate(
       userId,
