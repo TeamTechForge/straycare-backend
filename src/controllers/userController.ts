@@ -162,7 +162,9 @@ exports.getUserReports = catchAsync(async (req: Request, res: Response, next: Ne
       }
     }
 
-    const query: any = { reporterUserId: userId };
+    const query: any = {
+      $or: [{ reporterUserId: userId }, { userId: userId }]
+    };
     if (!isSelf) {
       query.anonymous = false;
     }
