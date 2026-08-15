@@ -11,6 +11,18 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+const escapeHtml = (value: string): string =>
+  value.replace(/[&<>'"]/g, (character) => {
+    const entities: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "'": "&#39;",
+      '"': "&quot;",
+    };
+    return entities[character];
+  });
+
 // Password reset email
 const sendPasswordResetEmail = async (toEmail: string, resetLink: string): Promise<void> => {
   const mailOptions = {
@@ -102,4 +114,74 @@ const sendPasswordResetCodeEmail = async (toEmail: string, code: string): Promis
   await transporter.sendMail(mailOptions);
 };
 
-module.exports = { sendPasswordResetEmail, sendAdminInviteEmail, sendPasswordResetCodeEmail };
+const sendSupportTicketReplyEmail = async (
+  toEmail: string,
+  recipientName: string,
+  subject: string,
+  reply: string,
+  status: string
+): Promise<void> => {
+  const safeName = escapeHtml(recipientName || "StrayCare user");
+  const safeSubject = escapeHtml(subject);
+  const safeReply = escapeHtml(reply).replace(/\n/g, "<br />");
+  const safeStatus = escapeHtml(status);
+
+  await transporter.sendMail({
+    from: `"StrayCare Support" <${process.env.EMAIL_USER}>`,
+    to: toEmail,
+    subject: `StrayCare Support Reply: ${subject}`,
+    text: `Hello ${recipientName || "StrayCare user"},\n\nOur support team replied to your ticket "${subject}".\n\n${reply}\n\nStatus: ${status}\n\nStrayCare Support`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #412828;">
+        <h2 style="color: #F5A623;">StrayCare Support</h2>
+        <p>Hello ${safeName},</p>
+        <p>Our support team replied to your ticket:</p>
+        <div style="background: #FFF9E6; border-left: 4px solid #F5A623; padding: 14px 16px; margin: 18px 0;">
+          <strong>${safeSubject}</strong>
+          <p style="margin: 10px 0 0; line-height: 1.6;">${safeReply}</p>
+        </div>
+        <p><strong>Status:</strong> ${safeStatus}</p>
+        <p style="color: #888; font-size: 13px; margin-top: 24px;">You received this email because you submitted a support request through StrayCare.</p>
+      </div>
+    `,
+  });
+};
+
+const sendOrganizationVerificationEmail = async (
+  toEmail: string,
+  organizationName: string,
+  status: "Verified" | "Rejected"
+): Promise<void> => {
+  const safeName = escapeHtml(organizationName || "Organization representative");
+  const isVerified = status === "Verified";
+  const resultHeading = isVerified ? "Verification approved" : "Verification not approved";
+  const resultMessage = isVerified
+    ? "Your organization profile has been verified. You can now access the organization features available in StrayCare."
+    : "We could not verify your organization using the submitted information. Please review your profile and verification documents before contacting StrayCare support or submitting updated information.";
+
+  await transporter.sendMail({
+    from: `"StrayCare Verification" <${process.env.EMAIL_USER}>`,
+    to: toEmail,
+    subject: `StrayCare Organization ${status}`,
+    text: `Hello ${organizationName || "Organization representative"},\n\n${resultHeading}.\n\n${resultMessage}\n\nStrayCare Team`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #412828;">
+        <h2 style="color: #F5A623;">StrayCare Organization Verification</h2>
+        <p>Hello ${safeName},</p>
+        <div style="background: ${isVerified ? "#F0FDF4" : "#FFF7ED"}; border-left: 4px solid ${isVerified ? "#16A34A" : "#EA580C"}; padding: 14px 16px; margin: 18px 0;">
+          <strong>${resultHeading}</strong>
+          <p style="margin: 8px 0 0; line-height: 1.6;">${resultMessage}</p>
+        </div>
+        <p style="color: #888; font-size: 13px;">This email was sent after an administrator reviewed your organization verification documents.</p>
+      </div>
+    `,
+  });
+};
+
+module.exports = {
+  sendPasswordResetEmail,
+  sendAdminInviteEmail,
+  sendPasswordResetCodeEmail,
+  sendSupportTicketReplyEmail,
+  sendOrganizationVerificationEmail,
+};

@@ -1,5 +1,6 @@
 const express = require("express");
 const mongoose = require("mongoose");
+const { sendOrganizationVerificationEmail } = require("../utils/emailService");
 const router = express.Router();
 
 import type { Request, Response } from "express";
@@ -185,6 +186,10 @@ router.get("/:id/documents", async (req: Request, res: Response) => {
 router.patch("/:id/status", async (req: Request, res: Response) => {
   try {
     const { status } = req.body;
+    if (!['Verified', 'Rejected'].includes(status)) {
+      return res.status(400).json({ error: "Status must be Verified or Rejected" });
+    }
+
     const db = mongoose.connection.client.db("straycare");
     const collections = ["ngoprofiles", "vetprofiles"];
     let updated: any = null;
@@ -195,8 +200,9 @@ router.patch("/:id/status", async (req: Request, res: Response) => {
         { $set: { status } },
         { returnDocument: "after" }
       );
-      if (result && result.value) {
-        updated = result.value;
+      const updatedDocument = result?.value ?? result;
+      if (updatedDocument) {
+        updated = updatedDocument;
         
         // BUG FIX: Ensure the main User document's `isApproved` flag stays in sync
         const isApproved = status === "Verified";
@@ -210,7 +216,30 @@ router.patch("/:id/status", async (req: Request, res: Response) => {
     }
 
     if (!updated) return res.status(404).json({ error: "User not found" });
-    res.json({ success: true, user: updated });
+
+    let emailSent = false;
+    const account = await db.collection("users").findOne({ _id: updated.userId });
+    if (account?.email) {
+      try {
+        await sendOrganizationVerificationEmail(
+          account.email,
+          updated.orgName || updated.clinicName || account.name,
+          status
+        );
+        emailSent = true;
+      } catch (emailError) {
+        console.error("Organization verification email failed:", emailError);
+      }
+    }
+
+    res.json({
+      success: true,
+      user: updated,
+      emailSent,
+      message: emailSent
+        ? `Organization ${status.toLowerCase()} and confirmation email sent`
+        : `Organization ${status.toLowerCase()}, but the confirmation email could not be sent`,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

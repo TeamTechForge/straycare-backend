@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 const SupportTicket = require("../models/SupportTicket");
+const { sendSupportTicketReplyEmail } = require("../utils/emailService");
 
 exports.createSupportTicket = async (req: Request | any, res: Response): Promise<void> => {
   try {
@@ -65,18 +66,58 @@ exports.updateSupportTicket = async (req: Request | any, res: Response): Promise
       return;
     }
 
-    const update: any = {};
-    if (status) update.status = status;
-    if (adminReply !== undefined) update.adminReply = adminReply;
-
-    const ticket = await SupportTicket.findByIdAndUpdate(id, update, { new: true });
+    const ticket = await SupportTicket.findById(id).populate("userId", "name email");
 
     if (!ticket) {
       res.status(404).json({ error: "Ticket not found" });
       return;
     }
 
-    res.json({ message: "Ticket updated successfully", ticket });
+    const normalizedReply =
+      typeof adminReply === "string" ? adminReply.trim() : undefined;
+    const shouldEmailReply =
+      normalizedReply !== undefined &&
+      normalizedReply.length > 0 &&
+      normalizedReply !== ticket.adminReply;
+
+    if (status) ticket.status = status;
+    if (normalizedReply !== undefined) ticket.adminReply = normalizedReply;
+    await ticket.save();
+
+    if (shouldEmailReply) {
+      const recipient = ticket.userId as any;
+      if (!recipient?.email) {
+        res.status(422).json({
+          error: "Ticket was updated, but the sender does not have an email address.",
+          ticket,
+        });
+        return;
+      }
+
+      try {
+        await sendSupportTicketReplyEmail(
+          recipient.email,
+          recipient.name || "StrayCare user",
+          ticket.subject,
+          normalizedReply,
+          ticket.status
+        );
+      } catch (emailError) {
+        console.error("Support reply email failed:", emailError);
+        res.status(502).json({
+          error: "Ticket was updated, but the reply email could not be sent.",
+          ticket,
+        });
+        return;
+      }
+    }
+
+    res.json({
+      message: shouldEmailReply
+        ? "Ticket updated and reply email sent successfully"
+        : "Ticket updated successfully",
+      ticket,
+    });
   } catch (error) {
     console.error("Error updating support ticket:", error);
     res.status(500).json({ error: "Failed to update ticket" });
