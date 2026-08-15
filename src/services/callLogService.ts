@@ -9,7 +9,7 @@ class CallLogService {
   /**
    * Create a new call log with RINGING status
    */
-  public async createLog(callerId: string, receiverId: string, status: CallStatus = CallStatus.RINGING): Promise<void> {
+  public async createLog(callerId: string, receiverId: string, status: CallStatus = CallStatus.RINGING, callerOverride?: string, receiverOverride?: string): Promise<void> {
     try {
       await CallLog.create({
         caller: callerId,
@@ -17,6 +17,8 @@ class CallLogService {
         status: status,
         startedAt: new Date(),
         isSeen: false,
+        callerNameOverride: callerOverride,
+        receiverNameOverride: receiverOverride,
       });
       logger.info(`[CallLogService] Created ${status} call log for caller: ${callerId}, receiver: ${receiverId}`);
     } catch (error) {
@@ -130,13 +132,13 @@ class CallLogService {
         _id: log._id.toString(),
         caller: {
           userId: callerId,
-          name: log.caller?.name || "Deleted User",
-          profileImage: log.caller?.profileImage || "",
+          name: log.callerNameOverride || log.caller?.name || "Deleted User",
+          profileImage: log.callerNameOverride ? "https://ui-avatars.com/api/?name=Case+Chat&background=FEB94B&color=fff" : (log.caller?.profileImage || ""),
         },
         receiver: {
           userId: receiverId,
-          name: log.receiver?.name || "Deleted User",
-          profileImage: log.receiver?.profileImage || "",
+          name: log.receiverNameOverride || log.receiver?.name || "Deleted User",
+          profileImage: log.receiverNameOverride ? "https://ui-avatars.com/api/?name=Case+Chat&background=FEB94B&color=fff" : (log.receiver?.profileImage || ""),
         },
         status: log.status,
         direction: isIncoming ? CallDirection.INCOMING : CallDirection.OUTGOING,

@@ -20,7 +20,9 @@ export class ProfileStatsService {
   private static readonly strategies: Record<string, ProfileStrategy> = {
     general_user: async (userId: string) => {
       const generalProfile: any = await GeneralUserProfile.findOne({ userId }).lean() || {};
-      const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
+      const reportCount = await StrayReport.countDocuments({
+        $or: [{ reporterUserId: userId }, { userId: userId }]
+      });
       return {
         profileData: {
           location: generalProfile.location || "",
@@ -35,7 +37,9 @@ export class ProfileStatsService {
       const rescuer = await Rescuer.findOne({ userId });
       const rescuerIdQuery = rescuer ? rescuer._id : userId;
 
-      const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
+      const reportCount = await StrayReport.countDocuments({
+        $or: [{ reporterUserId: userId }, { userId: userId }]
+      });
       const totalRescues = await RescueHistory.countDocuments({ 
         $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
       });
@@ -68,7 +72,9 @@ export class ProfileStatsService {
       const rescuer = await Rescuer.findOne({ userId });
       const rescuerIdQuery = rescuer ? rescuer._id : userId;
 
-      const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
+      const reportCount = await StrayReport.countDocuments({
+        $or: [{ reporterUserId: userId }, { userId: userId }]
+      });
       const totalRescues = await RescueHistory.countDocuments({ 
         $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
       });
@@ -77,7 +83,12 @@ export class ProfileStatsService {
         status: { $in: ["accepted", "under_rescue", "Under Rescue"] } 
       });
 
-      const donations = await Donation.find({ organizationId: userId, status: "SUCCESS" }).lean();
+      const organizationIds = [userId];
+      if (vetProfile._id) organizationIds.push(vetProfile._id.toString());
+      const donations = await Donation.find({
+        organizationId: { $in: organizationIds },
+        status: "SUCCESS"
+      }).lean();
       const totalDonations = donations.reduce((sum: number, doc: any) => sum + (doc.amount || 0), 0);
 
       return {
@@ -104,7 +115,9 @@ export class ProfileStatsService {
       const rescuer = await Rescuer.findOne({ userId });
       const rescuerIdQuery = rescuer ? rescuer._id : userId;
 
-      const reportCount = await StrayReport.countDocuments({ reporterUserId: userId });
+      const reportCount = await StrayReport.countDocuments({
+        $or: [{ reporterUserId: userId }, { userId: userId }]
+      });
       const totalRescues = await RescueHistory.countDocuments({ 
         $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
       });
@@ -113,7 +126,12 @@ export class ProfileStatsService {
         status: { $in: ["accepted", "under_rescue", "Under Rescue"] } 
       });
 
-      const donations = await Donation.find({ organizationId: userId, status: "SUCCESS" }).lean();
+      const organizationIds = [userId];
+      if (ngoProfile._id) organizationIds.push(ngoProfile._id.toString());
+      const donations = await Donation.find({
+        organizationId: { $in: organizationIds },
+        status: "SUCCESS"
+      }).lean();
       const totalDonations = donations.reduce((sum: number, doc: any) => sum + (doc.amount || 0), 0);
 
       return {

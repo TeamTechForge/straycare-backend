@@ -128,11 +128,26 @@ const enrichCaseRecordWithReporterAndStray = async (formatted: any, caseIdOrId: 
     const User = require("../models/User");
     const StrayReport = require("../models/StrayReport");
 
-    const stray = await StrayReport.findOne({
-      $or: [{ caseId: caseIdOrId }, { caseId: formatted.caseId }]
-    });
+    const mongoose = require("mongoose");
+    const isObjectId = (id: string) => mongoose.Types.ObjectId.isValid(id);
+    
+    const queryConditions: any[] = [];
+    if (caseIdOrId) {
+      queryConditions.push({ caseId: caseIdOrId });
+      if (isObjectId(caseIdOrId)) queryConditions.push({ _id: caseIdOrId });
+    }
+    if (formatted.caseId) {
+      queryConditions.push({ caseId: formatted.caseId });
+      if (isObjectId(formatted.caseId)) queryConditions.push({ _id: formatted.caseId });
+    }
+
+    let stray = null;
+    if (queryConditions.length > 0) {
+      stray = await StrayReport.findOne({ $or: queryConditions });
+    }
 
     if (stray) {
+      if (stray.caseId) formatted.caseId = stray.caseId;
       if (stray.status) formatted.status = stray.status;
       if (stray.animalType) formatted.animalType = stray.animalType;
       if (stray.notes || stray.description) {
@@ -397,6 +412,21 @@ exports.cancelRescueRequest = catchAsync(async (req: Request, res: Response, nex
     await request.save();
 
     console.log(`[RESCUE] Request ${id} cancelled by reporter (DB _id: ${request._id})`);
+
+    // Notify the rescuer immediately via Socket.IO so they don't wait for the next poll.
+    // The rescuer's screen joins the room using the request's _id as the rescueId.
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        const requestRoomId = String(request._id);
+        io.of("/rescue").to(requestRoomId).emit("rescue_cancelled", {
+          requestId: requestRoomId,
+        });
+        console.log(`[RESCUE] Emitted rescue_cancelled to room ${requestRoomId}`);
+      }
+    } catch (socketErr: any) {
+      console.warn("[RESCUE] Failed to emit rescue_cancelled:", socketErr.message || socketErr);
+    }
 
     res.json({ success: true, request });
   });;
@@ -663,32 +693,50 @@ exports.respondToRescueRequest = catchAsync(async (req: Request, res: Response, 
 
     if (action === "accept") {
       // 1. Update StrayReport status to "Under Rescue"
+      let acceptedReport: any = null;
       try {
         const StrayReport = require("../models/StrayReport");
-        const report = await StrayReport.findOne({ caseId: request.caseId });
-        if (report) {
-          report.status = "Under Rescue";
-          if (!report.timeline) report.timeline = [];
-          report.timeline.push({
+        acceptedReport = await StrayReport.findOne({ caseId: request.caseId });
+        if (acceptedReport) {
+          acceptedReport.status = "Under Rescue";
+          if (!acceptedReport.timeline) acceptedReport.timeline = [];
+          acceptedReport.timeline.push({
             status: "Under Rescue",
             message: `Case accepted by rescuer: ${request.rescuerName || "Rescuer"}`,
             timestamp: new Date(),
           });
-          await report.save();
+          await acceptedReport.save();
           console.log(`[RESCUE] StrayReport ${request.caseId} updated status to 'Under Rescue'`);
         }
       } catch (err: any) {
         console.error("[RESCUE] Failed to update StrayReport status on accept:", err.message || err);
       }
 
-      if (request.userId && mongoose.Types.ObjectId.isValid(request.userId)) {
+      if (
+        acceptedReport &&
+        !acceptedReport.anonymous &&
+        request.userId &&
+        mongoose.Types.ObjectId.isValid(request.userId)
+      ) {
         try {
           const rescuer = await Rescuer.findById(request.rescuerId);
+          const rescuerName = rescuer?.name || request.rescuerName || "A rescuer";
+          const animalType = acceptedReport.animalType || request.animalType || "animal";
           await NotificationService.sendNotification(
             String(request.userId),
-            "Rescue Request Accepted",
-            `${rescuer.name} has accepted your rescue request and is on their way!`,
-            "success"
+            `Case ${request.caseId} Accepted`,
+            `Your ${animalType} rescue case ${request.caseId} was accepted by ${rescuerName}. Rescue is under way.`,
+            "success",
+            String(request._id),
+            request.caseId || "",
+            {
+              event: "rescue_accepted",
+              status: "Under Rescue",
+              animalType,
+              assignedRescuerName: rescuerName,
+              action: "view_case",
+              categoryId: "case_update",
+            }
           );
         } catch (err: any) {
           console.error("[RESCUE] Failed to create notification for reporter:", err.message);
@@ -929,15 +977,23 @@ exports.acceptFromMap = catchAsync(async (req: Request, res: Response, next: Nex
     console.log(`[RESCUE] Case ${caseId} accepted from map by rescuer ${rescuer.name} (${rescuer._id})`);
 
     // Notify the reporter
-    if (report.reporterUserId && mongoose.Types.ObjectId.isValid(report.reporterUserId)) {
+    if (!report.anonymous && report.reporterUserId && mongoose.Types.ObjectId.isValid(report.reporterUserId)) {
       try {
         await NotificationService.sendNotification(
           String(report.reporterUserId),
-          "Rescue Request Accepted",
-          `${rescuer.name} has accepted your rescue case and is on their way!`,
+          `Case ${caseId} Accepted`,
+          `Your ${report.animalType || "animal"} rescue case ${caseId} was accepted by ${rescuer.name}. Rescue is under way.`,
           "success",
           String(request._id),
-          caseId
+          caseId,
+          {
+            event: "rescue_accepted",
+            status: "Under Rescue",
+            animalType: report.animalType || "animal",
+            assignedRescuerName: rescuer.name,
+            action: "view_case",
+            categoryId: "case_update",
+          }
         );
       } catch (err: any) {
         console.error("[RESCUE] Failed to notify reporter:", err.message);

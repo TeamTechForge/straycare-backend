@@ -18,6 +18,7 @@ interface IConversationLastMessage {
 interface IRelatedEntity {
   kind?: string;
   item?: mongoose.Types.ObjectId;
+  referenceId?: string;
 }
 
 interface IConversation extends mongoose.Document {
@@ -27,6 +28,7 @@ interface IConversation extends mongoose.Document {
   conversationType: "direct" | "rescue" | "adoption" | "community" | "vet_consult" | "lost_found";
   relatedEntity: IRelatedEntity;
   deletedFor: mongoose.Types.ObjectId[];
+  clearedAt: Map<string, Date>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -78,6 +80,7 @@ const conversationSchema = new mongoose.Schema(
     relatedEntity: {
       kind: { type: String },           // model name, e.g. "RescueRequest"
       item: { type: mongoose.Schema.Types.ObjectId }, // the document _id
+      referenceId: { type: String },    // human-readable ID, e.g. "STRAY-1234"
     },
     deletedFor: [
       {
@@ -85,6 +88,11 @@ const conversationSchema = new mongoose.Schema(
         ref: "User",
       },
     ],
+    clearedAt: {
+      type: Map,
+      of: Date,
+      default: {},
+    },
   },
   { timestamps: true }
 );

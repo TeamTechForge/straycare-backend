@@ -85,7 +85,7 @@ const LostFoundPostSchema = new Schema<ILostFoundPost>(
       default: 0,
     },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "animalposts" }
 );
 
 LostFoundPostSchema.index({ status: 1, createdAt: -1 });

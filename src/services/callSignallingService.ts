@@ -51,7 +51,7 @@ class CallSignallingService {
       const activeCall = await callLogService.findActiveCall(calleeId);
       if (activeCall) {
         logger.info(`[CallSignalling] User ${calleeId} is BUSY`);
-        callLogService.createLog(caller.userId, calleeId, CallStatus.BUSY).catch(logger.error);
+        callLogService.createLog(caller.userId, calleeId, CallStatus.BUSY, payload.callerNameOverride, payload.receiverNameOverride).catch(logger.error);
         io.of("/call").to(`user:${caller.userId}`).emit(CallEvents.BUSY, payload);
         return;
       }
@@ -73,6 +73,12 @@ class CallSignallingService {
 
     logger.info(`[CallSignalling] ${caller.userId} is calling ${calleeId}`);
     
+    // Mask caller identity if this is a Case Chat, to prevent anonymous reporters from leaking their real names
+    if (payload.receiverNameOverride && payload.receiverNameOverride.includes("Case Chat")) {
+      payload.callerNameOverride = "Case Chat";
+      payload.caller.name = "Case Chat";
+    }
+
     // We emit to the callee's room (using 'user:${calleeId}' room created on connection)
     io.of("/call").to(`user:${calleeId}`).emit(CallEvents.INCOMING, payload);
 
@@ -94,7 +100,7 @@ class CallSignallingService {
     }, 30000));
 
     // Asynchronously create Call Log
-    callLogService.createLog(caller.userId, calleeId).catch(err => 
+    callLogService.createLog(caller.userId, calleeId, CallStatus.RINGING, payload.callerNameOverride, payload.receiverNameOverride).catch(err => 
       logger.error(`[CallSignalling] Failed to create call log`, err)
     );
   }

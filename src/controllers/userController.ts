@@ -162,7 +162,9 @@ exports.getUserReports = catchAsync(async (req: Request, res: Response, next: Ne
       }
     }
 
-    const query: any = { reporterUserId: userId };
+    const query: any = {
+      $or: [{ reporterUserId: userId }, { userId: userId }]
+    };
     if (!isSelf) {
       query.anonymous = false;
     }
@@ -374,6 +376,11 @@ exports.savePushToken = catchAsync(async (req: Request, res: Response, next: Nex
 
   if (!pushToken) {
     res.status(400).json({ message: "pushToken is required" });
+    return;
+  }
+
+  if (!/^(ExponentPushToken|ExpoPushToken)\[[^\]]+\]$/.test(pushToken)) {
+    res.status(400).json({ message: "A valid Expo push token is required" });
     return;
   }
 
