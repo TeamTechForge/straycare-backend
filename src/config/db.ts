@@ -52,7 +52,7 @@ const startMemoryServer = async (): Promise<void> => {
     });
     const memoryURI = mongod.getUri();
     Logger.info(`In-memory MongoDB Server started at: ${memoryURI}`, { service: "Database" });
-    
+
     // Override the environment variable so other components (like GridFS) use the correct URI
     process.env.MONGO_URI = memoryURI;
 
