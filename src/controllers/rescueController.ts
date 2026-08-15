@@ -492,45 +492,66 @@ exports.listUserRescues = catchAsync(async (req: Request, res: Response, next: N
       return;
     }
 
-    // "Under Rescue" active cases: must be assigned to this rescuer AND accepted
+    // Active rescue requests assigned to this rescuer
     const activeQuery = {
       $or: rescuerConditions,
-      status: { $in: [RescueStatus.ACCEPTED, "accepted", "under rescue", "Under Rescue"] },
+      status: { $in: [RescueStatus.ACCEPTED, "accepted", "under rescue", "Under Rescue", "in progress", "treated", "Treated"] },
     };
 
-    // Completed rescue cases: assigned to this rescuer AND completed
+    // Completed rescue cases assigned to this rescuer (completed, ready for adoption, etc.)
     const completedQuery = {
       $or: rescuerConditions,
-      status: { $in: [RescueStatus.COMPLETED, "completed", "Completed"] },
+      status: { $in: [RescueStatus.COMPLETED, "completed", "Completed", "ready for adoption", "Ready for Adoption", "closed"] },
     };
 
-    const [active, completed] = await Promise.all([
+    const [activeRequests, completedRequests, completedHistory] = await Promise.all([
       RescueRequest.find(activeQuery).sort({ createdAt: -1 }),
+      RescueRequest.find(completedQuery).sort({ updatedAt: -1, createdAt: -1 }),
       RescueHistory.find(completedQuery).sort({ completedAt: -1, createdAt: -1 }),
     ]);
 
     const enrichedActive = await Promise.all(
-      active.map(async (request: any) => {
+      activeRequests.map(async (request: any) => {
         const enriched = await enrichCaseRecordWithReporterAndStray(request.toObject ? request.toObject() : request);
         return formatCaseRecord({ request: enriched, rescuer: enriched.rescuer || null });
       })
     );
 
-    const enrichedCompleted = await Promise.all(
-      completed.map(async (history: any) => {
+    const enrichedCompletedRequests = await Promise.all(
+      completedRequests.map(async (request: any) => {
+        const enriched = await enrichCaseRecordWithReporterAndStray(request.toObject ? request.toObject() : request);
+        return formatCaseRecord({ request: enriched, rescuer: enriched.rescuer || null });
+      })
+    );
+
+    const enrichedCompletedHistory = await Promise.all(
+      completedHistory.map(async (history: any) => {
         const enriched = await enrichCaseRecordWithReporterAndStray(history.toObject ? history.toObject() : history);
         return formatCaseRecord({ request: enriched, history: enriched });
       })
     );
 
-    const all = [...enrichedActive, ...enrichedCompleted].sort((left: any, right: any) => {
-      const leftTime = new Date(left.completedAt || left.createdAt).getTime();
-      const rightTime = new Date(right.completedAt || right.createdAt).getTime();
+    // Combine and deduplicate by caseId / rescueRequestId
+    const seenIds = new Set<string>();
+    const allEnriched = [...enrichedActive, ...enrichedCompletedRequests, ...enrichedCompletedHistory];
+    const deduplicated: any[] = [];
+
+    for (const item of allEnriched) {
+      const key = String(item.caseId || item.rescueRequestId || item._id);
+      if (!seenIds.has(key)) {
+        seenIds.add(key);
+        deduplicated.push(item);
+      }
+    }
+
+    deduplicated.sort((left: any, right: any) => {
+      const leftTime = new Date(left.completedAt || left.updatedAt || left.createdAt).getTime();
+      const rightTime = new Date(right.completedAt || right.updatedAt || right.createdAt).getTime();
       return rightTime - leftTime;
     });
 
-    Logger.info(`Found ${all.length} assigned rescues for user ID: ${userId}`, { service: "RescueController" });
-    res.json(all);
+    Logger.info(`Found ${deduplicated.length} assigned rescues for user ID: ${userId}`, { service: "RescueController" });
+    res.json(deduplicated);
   });;
 
 exports.getRescueById = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
