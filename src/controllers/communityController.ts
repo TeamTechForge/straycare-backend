@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import CommunityPost from "../models/communityPost";
 import CommunityReport from "../models/CommunityReport";
 import CommunityLike from "../models/CommunityLike";
+import CommunityComment from "../models/CommunityComment";
 import User from "../models/User";
 const Notification = require("../models/Notification");
 const GeneralUserProfile = require("../models/GeneralUserProfile");
@@ -58,8 +59,9 @@ const serializePost = async (post: any, currentUserId?: string) => {
     const authorId = plain.authorUserId ? String(plain.authorUserId) : null;
     const author = await getAuthorDetails(plain.authorUserId);
 
-    const [likeCount, isLiked] = await Promise.all([
+    const [likeCount, commentCount, isLiked] = await Promise.all([
         CommunityLike.countDocuments({ postId: plain._id }),
+        CommunityComment.countDocuments({ postId: plain._id }),
         currentUserId
             ? CommunityLike.exists({ postId: plain._id, userId: currentUserId })
             : Promise.resolve(null),
@@ -73,11 +75,107 @@ const serializePost = async (post: any, currentUserId?: string) => {
         profileImage: author?.profileImage || "",
         date: plain.submittedAt || plain.createdAt,
         likeCount,
-        commentCount: 0,
+        commentCount,
         isLiked: Boolean(isLiked),
         isSaved: false,
         isOwner: Boolean(currentUserId && authorId === currentUserId),
     };
+};
+
+const serializeComment = async (comment: any) => {
+    const plain = typeof comment.toObject === "function" ? comment.toObject() : comment;
+    const commenter = await getAuthorDetails(plain.userId);
+
+    return {
+        _id: String(plain._id),
+        postId: String(plain.postId),
+        userId: String(plain.userId),
+        username: commenter?.username || "Community User",
+        profileImage: commenter?.profileImage || "",
+        content: plain.content,
+        createdAt: plain.createdAt,
+        updatedAt: plain.updatedAt,
+    };
+};
+
+export const getCommunityComments = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const postId = req.params.id;
+        if (typeof postId !== "string" || !mongoose.Types.ObjectId.isValid(postId)) {
+            res.status(400).json({ success: false, message: "Invalid post ID" });
+            return;
+        }
+        if (!(await CommunityPost.exists({ _id: postId }))) {
+            res.status(404).json({ success: false, message: "Post not found" });
+            return;
+        }
+
+        const comments = await CommunityComment.find({ postId }).sort({ createdAt: 1 });
+        res.status(200).json({
+            success: true,
+            data: await Promise.all(comments.map(serializeComment)),
+            commentCount: comments.length,
+        });
+    } catch (error) {
+        console.error("Get community comments error:", error);
+        res.status(500).json({ success: false, message: "Failed to fetch comments" });
+    }
+};
+
+export const createCommunityComment = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const context = await getValidatedPostAndUser(req, res);
+        if (!context) return;
+
+        const content = typeof req.body.content === "string" ? req.body.content.trim() : "";
+        if (!content) {
+            res.status(400).json({ success: false, message: "Comment content is required" });
+            return;
+        }
+        if (content.length > 1000) {
+            res.status(400).json({ success: false, message: "Comment cannot exceed 1000 characters" });
+            return;
+        }
+
+        const { postId, userId, post, user } = context;
+        const comment = await CommunityComment.create({ postId, userId, content });
+        const ownerId = post.authorUserId ? String(post.authorUserId) : null;
+
+        if (ownerId && ownerId !== userId) {
+            const preview = content.length > 60 ? `${content.slice(0, 60)}…` : content;
+            try {
+                await Notification.updateOne(
+                    { type: "post_comment", commentId: comment._id },
+                    {
+                        $setOnInsert: {
+                            userId: ownerId,
+                            actorUserId: userId,
+                            type: "post_comment",
+                            postId,
+                            commentId: comment._id,
+                            title: "New post comment",
+                            message: `${user.name} commented on your post: ${preview}`,
+                            event: "post_comment",
+                            read: false,
+                        },
+                    },
+                    { upsert: true }
+                );
+            } catch (notificationError) {
+                console.error("Create comment notification error:", notificationError);
+            }
+        }
+
+        const commentCount = await CommunityComment.countDocuments({ postId });
+        res.status(201).json({
+            success: true,
+            data: await serializeComment(comment),
+            commentCount,
+        });
+    } catch (error) {
+        console.error("Create community comment error:", error);
+        res.status(500).json({ success: false, message: "Failed to create comment" });
+    }
 };
 
 const getValidatedPostAndUser = async (req: Request, res: Response) => {

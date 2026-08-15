@@ -8,6 +8,8 @@ import {
     updateCommunityReportStatus,
     likeCommunityPost,
     unlikeCommunityPost,
+    getCommunityComments,
+    createCommunityComment,
 } from "../controllers/communityController";
 
 const { verifyToken, optionalToken } = require("../middleware/authMiddleware");
@@ -25,6 +27,8 @@ router.post("/create", verifyToken, upload.any(), createCommunityPost);     // P
 router.get("/", optionalToken, getAllCommunityPosts);            // GET    /api/community
 router.post("/:id/like", verifyToken, likeCommunityPost);        // POST   /api/community/:id/like
 router.delete("/:id/like", verifyToken, unlikeCommunityPost);    // DELETE /api/community/:id/like
+router.get("/:id/comments", optionalToken, getCommunityComments); // GET    /api/community/:id/comments
+router.post("/:id/comments", verifyToken, createCommunityComment); // POST  /api/community/:id/comments
 router.get("/:id", optionalToken, getCommunityPostById);         // GET    /api/community/:id
 router.post("/:id/report", verifyToken, reportCommunityPost);  // POST   /api/community/:id/report
 router.patch("/:id/report", verifyToken, reportCommunityPost); // PATCH  /api/community/:id/report

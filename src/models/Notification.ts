@@ -4,9 +4,10 @@ interface INotification extends mongoose.Document {
   userId: mongoose.Types.ObjectId;
   title: string;
   message: string;
-  type: "info" | "success" | "warning" | "error" | "welcome" | "post_like";
+  type: "info" | "success" | "warning" | "error" | "welcome" | "post_like" | "post_comment";
   actorUserId?: mongoose.Types.ObjectId;
   postId?: mongoose.Types.ObjectId;
+  commentId?: mongoose.Types.ObjectId;
   read: boolean;
   rescueRequestId?: string;
   caseId?: string;
@@ -31,7 +32,7 @@ const notificationSchema = new mongoose.Schema(
     message: { type: String, required: true },
     type: {
       type: String,
-      enum: ["info", "success", "warning", "error", "welcome", "post_like"],
+      enum: ["info", "success", "warning", "error", "welcome", "post_like", "post_comment"],
       default: "info",
     },
     read: { type: Boolean, default: false },
@@ -44,6 +45,7 @@ const notificationSchema = new mongoose.Schema(
     action: { type: String, default: "" },
     actorUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     postId: { type: mongoose.Schema.Types.ObjectId, ref: "CommunityPost" },
+    commentId: { type: mongoose.Schema.Types.ObjectId, ref: "CommunityComment" },
   },
   { timestamps: true }
 );
@@ -53,6 +55,14 @@ notificationSchema.index(
   {
     unique: true,
     partialFilterExpression: { type: "post_like" },
+  }
+);
+
+notificationSchema.index(
+  { type: 1, commentId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { type: "post_comment" },
   }
 );
 
