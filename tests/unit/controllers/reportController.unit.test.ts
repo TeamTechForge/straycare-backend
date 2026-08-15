@@ -157,12 +157,58 @@ describe("Report controller reporting workflow", () => {
 
       expect(NotificationService.sendNotification).not.toHaveBeenCalled();
     });
+
+    it.each(["volunteer", "ngo", "vet"])("allows an eligible %s to accept an unassigned case", async (role) => {
+      req.user = { id: `${role}-user` };
+      req.params = { caseId: "SC-123" };
+      User.findById.mockReturnValue(selectResult({ name: "Nimal", role }));
+      Rescuer.findOne.mockResolvedValue({ _id: `${role}-rescuer`, name: "Nimal" });
+      StrayReport.findOneAndUpdate.mockResolvedValue(acceptedReport);
+      RescueRequest.create.mockResolvedValue({ _id: `${role}-request` });
+
+      await acceptReportFromMap(req, res);
+
+      expect(StrayReport.findOneAndUpdate).toHaveBeenCalled();
+      expect(RescueRequest.create).toHaveBeenCalledWith(expect.objectContaining({ rescuerId: `${role}-rescuer` }));
+      expect(res.status).toHaveBeenCalledWith(201);
+    });
+
+    it("creates a linked rescuer record for an eligible older account", async () => {
+      req.user = { id: "vet-user" };
+      req.params = { caseId: "SC-123" };
+      User.findById.mockReturnValue(selectResult({ name: "Dr. Nimal", role: "vet" }));
+      Rescuer.findOne.mockResolvedValue(null);
+      Rescuer.create.mockResolvedValue({ _id: "new-rescuer", name: "Dr. Nimal" });
+      StrayReport.findOneAndUpdate.mockResolvedValue(acceptedReport);
+      RescueRequest.create.mockResolvedValue({ _id: "request-1" });
+
+      await acceptReportFromMap(req, res);
+
+      expect(Rescuer.create).toHaveBeenCalledWith(expect.objectContaining({
+        userId: "vet-user",
+        name: "Dr. Nimal",
+      }));
+      expect(res.status).toHaveBeenCalledWith(201);
+    });
+
+    it("rejects users who do not have a rescue role", async () => {
+      req.user = { id: "reporter-user" };
+      req.params = { caseId: "SC-123" };
+      User.findById.mockReturnValue(selectResult({ name: "Asha", role: "general_user" }));
+
+      await acceptReportFromMap(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(StrayReport.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(RescueRequest.create).not.toHaveBeenCalled();
+    });
   });
 
   describe("updateCaseStatus", () => {
-    const assignedRequest = { rescuerId: "rescuer-1" };
+    const assignedRequest: any = { rescuerId: "rescuer-1", save: jest.fn().mockResolvedValue(undefined) };
 
     const setupAssignedRescuer = () => {
+      assignedRequest.status = "accepted";
       req.user = { id: "rescuer-user" };
       req.params = { caseId: "SC-123" };
       User.findById.mockImplementation((id: string) =>
@@ -211,7 +257,42 @@ describe("Report controller reporting workflow", () => {
 
       expect(report.status).toBe("Ready for Adoption");
       expect(report.save).toHaveBeenCalledTimes(1);
+      expect(assignedRequest.status).toBe("completed");
+      expect(assignedRequest.save).toHaveBeenCalledTimes(1);
       expect(NotificationService.sendNotification).not.toHaveBeenCalled();
+    });
+
+    it("keeps Ready for Adoption public, completes the assignment, and notifies the reporter", async () => {
+      setupAssignedRescuer();
+      req.body = { status: "Ready for Adoption" };
+      req.params = { caseId: "SC-125" };
+      const report = {
+        caseId: "SC-125", animalType: "dog", status: "Treated", anonymous: false,
+        reporterUserId: "reporter-1", timeline: [], save: jest.fn().mockResolvedValue(undefined),
+      };
+      StrayReport.findOne.mockResolvedValue(report);
+
+      await updateCaseStatus(req, res, next);
+
+      expect(report.status).toBe("Ready for Adoption");
+      expect(report.timeline).toEqual([
+        expect.objectContaining({ status: "Ready for Adoption", rescuerName: "Nimal" }),
+      ]);
+      expect(assignedRequest.status).toBe("completed");
+      expect(assignedRequest.save).toHaveBeenCalledTimes(1);
+      expect(NotificationService.sendNotification).toHaveBeenCalledWith(
+        "reporter-1",
+        "Ready for Adoption • SC-125",
+        expect.stringContaining("SC-125: the dog is now ready for adoption"),
+        "success",
+        "",
+        "SC-125",
+        expect.objectContaining({
+          event: "case_status_updated",
+          status: "Ready for Adoption",
+          action: "view_case",
+        })
+      );
     });
 
     it("rejects invalid status transitions before saving or notifying", async () => {
