@@ -9,6 +9,8 @@ export interface ICallParticipantDTO {
 export interface ICallStartDTO {
   caller: ICallParticipantDTO;
   calleeId: string;
+  callerNameOverride?: string;
+  receiverNameOverride?: string;
 }
 
 export interface ICallOfferDTO {
