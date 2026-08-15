@@ -1,20 +1,25 @@
 import { Request, Response } from "express";
+
 import CommunityPost from "../models/communityPost";
+import CommunityReport from "../models/CommunityReport";
 
 // ─────────────────────────────────────────────
 // POST /api/community/create
 // Create a new community post
 // ─────────────────────────────────────────────
+
 export const createCommunityPost = async (
     req: Request,
     res: Response
 ): Promise<void> => {
     try {
         // Cloudinary URL can be sent from the frontend.
-        // If you are still using multer, req.file can also be supported.
+        // If multer is being used, req.file is also supported.
         const imageUrl =
             req.body.imageUrl ||
-            (req.file ? `/uploads/${req.file.filename}` : null);
+            (req.file
+                ? `/uploads/${req.file.filename}`
+                : null);
 
         const {
             title,
@@ -28,7 +33,8 @@ export const createCommunityPost = async (
         if (!title || !category || !content) {
             res.status(400).json({
                 success: false,
-                message: "Title, category and content are required",
+                message:
+                    "Title, category and content are required",
             });
             return;
         }
@@ -51,7 +57,10 @@ export const createCommunityPost = async (
             data: savedPost,
         });
     } catch (error) {
-        console.error("Create community post error:", error);
+        console.error(
+            "Create community post error:",
+            error
+        );
 
         res.status(500).json({
             success: false,
@@ -67,21 +76,26 @@ export const createCommunityPost = async (
 // GET /api/community
 // Get all community posts
 // ─────────────────────────────────────────────
+
 export const getAllCommunityPosts = async (
     _req: Request,
     res: Response
 ): Promise<void> => {
     try {
-        const posts = await CommunityPost.find().sort({
-            submittedAt: -1,
-        });
+        const posts =
+            await CommunityPost.find().sort({
+                submittedAt: -1,
+            });
 
         res.status(200).json({
             success: true,
             data: posts,
         });
     } catch (error) {
-        console.error("Get community posts error:", error);
+        console.error(
+            "Get community posts error:",
+            error
+        );
 
         res.status(500).json({
             success: false,
@@ -97,6 +111,7 @@ export const getAllCommunityPosts = async (
 // GET /api/community/:id
 // Get one community post
 // ─────────────────────────────────────────────
+
 export const getCommunityPostById = async (
     req: Request,
     res: Response
@@ -104,7 +119,8 @@ export const getCommunityPostById = async (
     try {
         const { id } = req.params;
 
-        const post = await CommunityPost.findById(id);
+        const post =
+            await CommunityPost.findById(id);
 
         if (!post) {
             res.status(404).json({
@@ -119,7 +135,10 @@ export const getCommunityPostById = async (
             data: post,
         });
     } catch (error) {
-        console.error("Get community post error:", error);
+        console.error(
+            "Get community post error:",
+            error
+        );
 
         res.status(500).json({
             success: false,
@@ -134,16 +153,88 @@ export const getCommunityPostById = async (
 // ─────────────────────────────────────────────
 // POST /api/community/:id/report
 // Report a community post
+//
+// Requires verifyToken middleware.
+//
+// User sends:
+// {
+//     "reason": "Spam or irrelevant"
+// }
+//
+// Backend gets:
+// postId        -> req.params.id
+// reporter ID   -> req.user.id
+// reason        -> req.body.reason
 // ─────────────────────────────────────────────
+
 export const reportCommunityPost = async (
     req: Request,
     res: Response
 ): Promise<void> => {
     try {
-        const { id } = req.params;
+        const { id: postId } = req.params;
+
         const { reason } = req.body;
 
-        const post = await CommunityPost.findById(id);
+        // verifyToken middleware creates:
+        //
+        // req.user = {
+        //     id: decoded.id,
+        //     role: decoded.role
+        // }
+        //
+        // Therefore, NEVER trust a userId sent
+        // from the frontend for reporting.
+        const reporterUserId =
+            req.user?.id;
+
+        // ─────────────────────────────────────
+        // 1. CHECK AUTHENTICATION
+        // ─────────────────────────────────────
+
+        if (!reporterUserId) {
+            res.status(401).json({
+                success: false,
+                message:
+                    "Authentication required to report a post",
+            });
+            return;
+        }
+
+        // ─────────────────────────────────────
+        // 2. VALIDATE REPORT REASON
+        // ─────────────────────────────────────
+
+        if (
+            !reason ||
+            typeof reason !== "string" ||
+            reason.trim().length === 0
+        ) {
+            res.status(400).json({
+                success: false,
+                message:
+                    "Report reason is required",
+            });
+            return;
+        }
+
+        if (reason.trim().length > 300) {
+            res.status(400).json({
+                success: false,
+                message:
+                    "Report reason cannot exceed 300 characters",
+            });
+            return;
+        }
+
+        // ─────────────────────────────────────
+        // 3. CHECK THAT POST EXISTS
+        // ─────────────────────────────────────
+
+        const post =
+            await CommunityPost.findById(
+                postId
+            );
 
         if (!post) {
             res.status(404).json({
@@ -153,24 +244,90 @@ export const reportCommunityPost = async (
             return;
         }
 
-        // Make sure reports exists before pushing
-        if (!Array.isArray(post.reports)) {
-            post.reports = [];
+        // ─────────────────────────────────────
+        // 4. CHECK FOR DUPLICATE REPORT
+        // ─────────────────────────────────────
+        //
+        // Same user should not be able to
+        // report the same post repeatedly.
+
+        const existingReport =
+            await CommunityReport.findOne({
+                postId,
+                reporterUserId,
+            });
+
+        if (existingReport) {
+            res.status(409).json({
+                success: false,
+                message:
+                    "You have already reported this post",
+            });
+            return;
         }
 
-        post.reports.push({
-            reason: reason || "No reason provided",
-            reportedAt: new Date(),
-        });
+        // ─────────────────────────────────────
+        // 5. CREATE REPORT
+        // ─────────────────────────────────────
 
-        await post.save();
+        const report =
+            await CommunityReport.create({
+                postId,
+                reporterUserId,
 
-        res.status(200).json({
+                reason: reason.trim(),
+
+                // Admin will review this later
+                status: "pending",
+            });
+
+        // ─────────────────────────────────────
+        // 6. RETURN SUCCESS RESPONSE
+        // ─────────────────────────────────────
+
+        res.status(201).json({
             success: true,
-            message: "Post reported successfully",
+
+            message:
+                "Post reported successfully",
+
+            data: {
+                // MongoDB automatically creates
+                // the unique report ID.
+                reportId: report._id,
+
+                postId:
+                    report.postId,
+
+                reporterUserId:
+                    report.reporterUserId,
+
+                reason:
+                    report.reason,
+
+                status:
+                    report.status,
+
+                createdAt:
+                    report.createdAt,
+            },
         });
-    } catch (error) {
-        console.error("Report community post error:", error);
+    } catch (error: any) {
+        // Extra protection for the unique
+        // postId + reporterUserId database index.
+        if (error?.code === 11000) {
+            res.status(409).json({
+                success: false,
+                message:
+                    "You have already reported this post",
+            });
+            return;
+        }
+
+        console.error(
+            "Report community post error:",
+            error
+        );
 
         res.status(500).json({
             success: false,
