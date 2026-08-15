@@ -10,6 +10,15 @@ export interface ICommunityReport extends Document {
 
     reason: string;
 
+    postSnapshot: {
+        title: string;
+        content: string;
+        category: string;
+        imageUrl: string | null;
+        authorName: string;
+        submittedAt: Date;
+    };
+
     status:
     | "pending"
     | "dismissed"
@@ -47,6 +56,39 @@ const communityReportSchema =
                 required: true,
                 trim: true,
                 maxlength: 300,
+            },
+
+            // Keep the evidence an admin needs even if the original post is
+            // later edited or deleted. The image remains in external storage;
+            // only its URL is duplicated here.
+            postSnapshot: {
+                title: {
+                    type: String,
+                    required: true,
+                    trim: true,
+                },
+                content: {
+                    type: String,
+                    required: true,
+                },
+                category: {
+                    type: String,
+                    required: true,
+                    trim: true,
+                },
+                imageUrl: {
+                    type: String,
+                    default: null,
+                },
+                authorName: {
+                    type: String,
+                    required: true,
+                    trim: true,
+                },
+                submittedAt: {
+                    type: Date,
+                    required: true,
+                },
             },
 
             // Admin review status

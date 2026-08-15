@@ -1,8 +1,20 @@
 import { Request, Response } from "express";
 
-import CommunityPost from "../models/communityPost";
+import CommunityPost from "../models/CommunityPost";
 import CommunityReport from "../models/CommunityReport";
 const { uploadFileToCloudinary } = require("../utils/cloudinaryUpload");
+
+interface UploadedFile {
+    buffer: Buffer;
+    originalname: string;
+    mimetype: string;
+    filename?: string;
+}
+
+type UploadRequest = Request & {
+    file?: UploadedFile;
+    files?: UploadedFile[] | Record<string, UploadedFile[]>;
+};
 
 // ─────────────────────────────────────────────
 // POST /api/community/create
@@ -14,14 +26,28 @@ export const createCommunityPost = async (
     res: Response
 ): Promise<void> => {
     try {
-        let imageUrl = req.body.imageUrl || null;
+        let imageUrl: string | null =
+            req.body.imageUrl ||
+            req.body.image ||
+            null;
 
-        if (req.file) {
+        const uploadRequest = req as UploadRequest;
+        const file =
+            uploadRequest.file ||
+            (uploadRequest.files && Array.isArray(uploadRequest.files) && uploadRequest.files.length > 0
+                ? uploadRequest.files[0]
+                : null);
+
+        if (file) {
             try {
-                imageUrl = await uploadFileToCloudinary(req.file);
+                imageUrl = await uploadFileToCloudinary(file);
             } catch (fileErr) {
-                console.error("File upload error:", fileErr);
-                imageUrl = req.file.filename ? `/uploads/${req.file.filename}` : null;
+                console.error("Cloudinary upload error:", fileErr);
+                res.status(502).json({
+                    success: false,
+                    message: "The post image could not be uploaded. Please try again.",
+                });
+                return;
             }
         }
 
@@ -281,6 +307,17 @@ export const reportCommunityPost = async (
 
                 reason: reason.trim(),
 
+                // Store a moderation snapshot so the reported evidence is
+                // still available if the community post changes or is removed.
+                postSnapshot: {
+                    title: post.title,
+                    content: post.content,
+                    category: post.category,
+                    imageUrl: post.imageUrl,
+                    authorName: post.authorName,
+                    submittedAt: post.submittedAt,
+                },
+
                 // Admin will review this later
                 status: "pending",
             });
@@ -308,6 +345,9 @@ export const reportCommunityPost = async (
 
                 reason:
                     report.reason,
+
+                postSnapshot:
+                    report.postSnapshot,
 
                 status:
                     report.status,
@@ -342,3 +382,99 @@ export const reportCommunityPost = async (
         });
     }
 };
+
+// ─────────────────────────────────────────────
+// GET /api/community/admin/reports
+// Admin endpoint: Get all community post reports with populated post details
+// ─────────────────────────────────────────────
+
+export const getCommunityReports = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    try {
+        const { status } = req.query;
+
+        const filter: any = {};
+        if (status && typeof status === "string") {
+            filter.status = status;
+        }
+
+        const reports = await CommunityReport.find(filter)
+            .populate("postId")
+            .populate("reporterUserId", "name email username role")
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({
+            success: true,
+            data: reports,
+        });
+    } catch (error) {
+        console.error("Get community reports error:", error);
+        res.status(500).json({
+            success: false,
+            message:
+                error instanceof Error
+                    ? error.message
+                    : "Failed to fetch community reports",
+        });
+    }
+};
+
+// ─────────────────────────────────────────────
+// PATCH /api/community/admin/reports/:reportId
+// Admin endpoint: Update community report review status
+// ─────────────────────────────────────────────
+
+export const updateCommunityReportStatus = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    try {
+        const { reportId } = req.params;
+        const { status } = req.body;
+        const reviewerId = req.user?.id;
+
+        if (!status || !["pending", "dismissed", "action_taken"].includes(status)) {
+            res.status(400).json({
+                success: false,
+                message: "Valid status ('pending', 'dismissed', 'action_taken') is required",
+            });
+            return;
+        }
+
+        const report = await CommunityReport.findByIdAndUpdate(
+            reportId,
+            {
+                status,
+                reviewedBy: reviewerId || null,
+                reviewedAt: new Date(),
+            },
+            { new: true }
+        ).populate("postId");
+
+        if (!report) {
+            res.status(404).json({
+                success: false,
+                message: "Community report not found",
+            });
+            return;
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Report status updated to ${status}`,
+            data: report,
+        });
+    } catch (error) {
+        console.error("Update community report error:", error);
+        res.status(500).json({
+            success: false,
+            message:
+                error instanceof Error
+                    ? error.message
+                    : "Failed to update community report",
+        });
+    }
+};
+// End of Community Controller
