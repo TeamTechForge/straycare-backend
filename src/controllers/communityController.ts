@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 
-import CommunityPost from "../models/CommunityPost";
+import CommunityPost from "../models/communityPost";
 import CommunityReport from "../models/CommunityReport";
 const { uploadFileToCloudinary } = require("../utils/cloudinaryUpload");
 
