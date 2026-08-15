@@ -6,7 +6,7 @@ createPost,
 updatePost,
 deletePost,
 getMyPosts
-} from "../controllers/adoptionController"; 
+} from "../controllers/AdoptionController";  
 // @ts-ignore - Tells TypeScript to bypass checking this mixed-syntax export
 import authMiddleware from "../middleware/authMiddleware"; 
 

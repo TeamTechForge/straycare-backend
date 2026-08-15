@@ -354,3 +354,83 @@ exports.deletePost = catchAsync(async (req: Request, res: Response, next: NextFu
   console.log(`[FORUM] Post ${postId} deleted by user ${userId}`);
   res.json({ message: "Post deleted successfully" });
 });
+
+// DELETE a comment in a thread — only the author who posted that comment can delete it
+exports.deleteComment = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const rescueIdStr = String(req.params.rescueId);
+  const commentIdStr = String(req.params.commentId);
+  let userId = req.user ? req.user.id : null;
+
+  if (!userId && req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+    try {
+      const jwt = require("jsonwebtoken");
+      const decoded = jwt.verify(req.headers.authorization.split(" ")[1], process.env.JWT_SECRET as string) as any;
+      if (decoded && decoded.id) {
+        userId = decoded.id;
+      }
+    } catch (err) {}
+  }
+
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized. Please log in to delete comments." });
+    return;
+  }
+
+  const thread = await Forum.findOne({ rescueId: rescueIdStr });
+  if (!thread) {
+    res.status(404).json({ error: "Thread not found" });
+    return;
+  }
+
+  // Locate the comment by index or by subdocument _id
+  let commentIndex = -1;
+
+  // 1. Try parsing formatted ID: ${rescueId}-${index}
+  if (commentIdStr.includes("-")) {
+    const parts = commentIdStr.split("-");
+    const idx = parseInt(parts[parts.length - 1], 10);
+    if (!isNaN(idx) && idx >= 0 && idx < thread.comments.length) {
+      commentIndex = idx;
+    }
+  }
+
+  // 2. Try parsing numeric index directly
+  if (commentIndex === -1 && !isNaN(Number(commentIdStr))) {
+    const idx = Number(commentIdStr);
+    if (idx >= 0 && idx < thread.comments.length) {
+      commentIndex = idx;
+    }
+  }
+
+  // 3. Try finding by subdocument _id
+  if (commentIndex === -1) {
+    commentIndex = thread.comments.findIndex(
+      (c: any) => c._id && String(c._id) === commentIdStr
+    );
+  }
+
+  if (commentIndex === -1) {
+    res.status(404).json({ error: "Comment not found" });
+    return;
+  }
+
+  const targetComment = thread.comments[commentIndex];
+
+  // Enforce ownership: only the user who posted the comment can delete it
+  if (!targetComment.userId || String(targetComment.userId) !== String(userId)) {
+    res.status(403).json({ error: "You can only delete your own comments" });
+    return;
+  }
+
+  // Remove comment from thread
+  thread.comments.splice(commentIndex, 1);
+  await thread.save();
+
+  // Update total comment count on the forum post
+  await ForumPost.findByIdAndUpdate(rescueIdStr, {
+    commentCount: thread.comments.length,
+  });
+
+  console.log(`[FORUM] Comment ${commentIdStr} in thread ${rescueIdStr} deleted by user ${userId}`);
+  res.json({ message: "Comment deleted successfully" });
+});
