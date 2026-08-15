@@ -3,7 +3,9 @@ import mongoose from "mongoose";
 
 import CommunityPost from "../models/communityPost";
 import CommunityReport from "../models/CommunityReport";
+import CommunityLike from "../models/CommunityLike";
 import User from "../models/User";
+const Notification = require("../models/Notification");
 const GeneralUserProfile = require("../models/GeneralUserProfile");
 const VolunteerProfile = require("../models/VolunteerProfile");
 const VetProfile = require("../models/VetProfile");
@@ -56,6 +58,13 @@ const serializePost = async (post: any, currentUserId?: string) => {
     const authorId = plain.authorUserId ? String(plain.authorUserId) : null;
     const author = await getAuthorDetails(plain.authorUserId);
 
+    const [likeCount, isLiked] = await Promise.all([
+        CommunityLike.countDocuments({ postId: plain._id }),
+        currentUserId
+            ? CommunityLike.exists({ postId: plain._id, userId: currentUserId })
+            : Promise.resolve(null),
+    ]);
+
     return {
         ...plain,
         authorUserId: authorId,
@@ -63,12 +72,105 @@ const serializePost = async (post: any, currentUserId?: string) => {
         username: author?.username || plain.authorName || "Community User",
         profileImage: author?.profileImage || "",
         date: plain.submittedAt || plain.createdAt,
-        likeCount: 0,
+        likeCount,
         commentCount: 0,
-        isLiked: false,
+        isLiked: Boolean(isLiked),
         isSaved: false,
         isOwner: Boolean(currentUserId && authorId === currentUserId),
     };
+};
+
+const getValidatedPostAndUser = async (req: Request, res: Response) => {
+    const postId = req.params.id;
+    const userId = req.user?.id;
+
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+        res.status(401).json({ success: false, message: "Authentication required" });
+        return null;
+    }
+    if (typeof postId !== "string" || !mongoose.Types.ObjectId.isValid(postId)) {
+        res.status(400).json({ success: false, message: "Invalid post ID" });
+        return null;
+    }
+
+    const [post, user] = await Promise.all([
+        CommunityPost.findById(postId),
+        User.findById(userId).select("name"),
+    ]);
+    if (!user) {
+        res.status(401).json({ success: false, message: "Authenticated user not found" });
+        return null;
+    }
+    if (!post) {
+        res.status(404).json({ success: false, message: "Post not found" });
+        return null;
+    }
+
+    return { postId, userId, post, user };
+};
+
+export const likeCommunityPost = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const context = await getValidatedPostAndUser(req, res);
+        if (!context) return;
+
+        const { postId, userId, post, user } = context;
+        let created = false;
+        try {
+            await CommunityLike.create({ postId, userId });
+            created = true;
+        } catch (error: any) {
+            if (error?.code !== 11000) throw error;
+        }
+
+        const ownerId = post.authorUserId ? String(post.authorUserId) : null;
+        if (created && ownerId && ownerId !== userId) {
+            await Notification.updateOne(
+                { userId: ownerId, actorUserId: userId, type: "post_like", postId },
+                {
+                    $setOnInsert: {
+                        userId: ownerId,
+                        actorUserId: userId,
+                        type: "post_like",
+                        postId,
+                        title: "New post like",
+                        message: `${user.name} liked your post.`,
+                        event: "post_like",
+                        read: false,
+                    },
+                },
+                { upsert: true }
+            );
+        }
+
+        const likeCount = await CommunityLike.countDocuments({ postId });
+        res.status(created ? 201 : 200).json({
+            success: true,
+            data: { postId, isLiked: true, likeCount },
+        });
+    } catch (error) {
+        console.error("Like community post error:", error);
+        res.status(500).json({ success: false, message: "Failed to like community post" });
+    }
+};
+
+export const unlikeCommunityPost = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const context = await getValidatedPostAndUser(req, res);
+        if (!context) return;
+
+        const { postId, userId } = context;
+        await CommunityLike.deleteOne({ postId, userId });
+        const likeCount = await CommunityLike.countDocuments({ postId });
+
+        res.status(200).json({
+            success: true,
+            data: { postId, isLiked: false, likeCount },
+        });
+    } catch (error) {
+        console.error("Unlike community post error:", error);
+        res.status(500).json({ success: false, message: "Failed to unlike community post" });
+    }
 };
 
 // ─────────────────────────────────────────────

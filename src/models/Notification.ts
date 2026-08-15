@@ -4,7 +4,9 @@ interface INotification extends mongoose.Document {
   userId: mongoose.Types.ObjectId;
   title: string;
   message: string;
-  type: "info" | "success" | "warning" | "error" | "welcome";
+  type: "info" | "success" | "warning" | "error" | "welcome" | "post_like";
+  actorUserId?: mongoose.Types.ObjectId;
+  postId?: mongoose.Types.ObjectId;
   read: boolean;
   rescueRequestId?: string;
   caseId?: string;
@@ -29,7 +31,7 @@ const notificationSchema = new mongoose.Schema(
     message: { type: String, required: true },
     type: {
       type: String,
-      enum: ["info", "success", "warning", "error", "welcome"],
+      enum: ["info", "success", "warning", "error", "welcome", "post_like"],
       default: "info",
     },
     read: { type: Boolean, default: false },
@@ -40,8 +42,18 @@ const notificationSchema = new mongoose.Schema(
     animalType: { type: String, default: "" },
     assignedRescuerName: { type: String, default: "" },
     action: { type: String, default: "" },
+    actorUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    postId: { type: mongoose.Schema.Types.ObjectId, ref: "CommunityPost" },
   },
   { timestamps: true }
+);
+
+notificationSchema.index(
+  { userId: 1, actorUserId: 1, type: 1, postId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { type: "post_like" },
+  }
 );
 
 module.exports = mongoose.model<INotification>("Notification", notificationSchema);

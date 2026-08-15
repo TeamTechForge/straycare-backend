@@ -6,6 +6,8 @@ import {
     reportCommunityPost,
     getCommunityReports,
     updateCommunityReportStatus,
+    likeCommunityPost,
+    unlikeCommunityPost,
 } from "../controllers/communityController";
 
 const { verifyToken, optionalToken } = require("../middleware/authMiddleware");
@@ -21,6 +23,8 @@ router.patch("/admin/reports/:reportId", verifyToken, updateCommunityReportStatu
 router.post("/", verifyToken, upload.any(), createCommunityPost);           // POST   /api/community
 router.post("/create", verifyToken, upload.any(), createCommunityPost);     // POST   /api/community/create
 router.get("/", optionalToken, getAllCommunityPosts);            // GET    /api/community
+router.post("/:id/like", verifyToken, likeCommunityPost);        // POST   /api/community/:id/like
+router.delete("/:id/like", verifyToken, unlikeCommunityPost);    // DELETE /api/community/:id/like
 router.get("/:id", optionalToken, getCommunityPostById);         // GET    /api/community/:id
 router.post("/:id/report", verifyToken, reportCommunityPost);  // POST   /api/community/:id/report
 router.patch("/:id/report", verifyToken, reportCommunityPost); // PATCH  /api/community/:id/report
