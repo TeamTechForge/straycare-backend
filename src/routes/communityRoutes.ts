@@ -7,11 +7,12 @@ import {
 } from "../controllers/communityController";
 
 const { verifyToken } = require("../middleware/authMiddleware");
+const { upload } = require("../config/gridfs");
 
 const router = Router();
 
-router.post("/", createCommunityPost);           // POST   /api/community
-router.post("/create", createCommunityPost);     // POST   /api/community/create
+router.post("/", upload.single("image"), createCommunityPost);           // POST   /api/community
+router.post("/create", upload.single("image"), createCommunityPost);     // POST   /api/community/create
 router.get("/", getAllCommunityPosts);            // GET    /api/community
 router.get("/:id", getCommunityPostById);         // GET    /api/community/:id
 router.post("/:id/report", verifyToken, reportCommunityPost);  // POST   /api/community/:id/report

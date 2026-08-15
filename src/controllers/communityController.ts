@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 
 import CommunityPost from "../models/communityPost";
 import CommunityReport from "../models/CommunityReport";
+const { uploadFileToCloudinary } = require("../utils/cloudinaryUpload");
 
 // ─────────────────────────────────────────────
 // POST /api/community/create
@@ -13,13 +14,16 @@ export const createCommunityPost = async (
     res: Response
 ): Promise<void> => {
     try {
-        // Cloudinary URL can be sent from the frontend.
-        // If multer is being used, req.file is also supported.
-        const imageUrl =
-            req.body.imageUrl ||
-            (req.file
-                ? `/uploads/${req.file.filename}`
-                : null);
+        let imageUrl = req.body.imageUrl || null;
+
+        if (req.file) {
+            try {
+                imageUrl = await uploadFileToCloudinary(req.file);
+            } catch (fileErr) {
+                console.error("File upload error:", fileErr);
+                imageUrl = req.file.filename ? `/uploads/${req.file.filename}` : null;
+            }
+        }
 
         const {
             title,
