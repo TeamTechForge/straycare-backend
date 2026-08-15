@@ -77,6 +77,26 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   "Ready for Adoption": [],
 };
 
+const RESCUER_ROLES = ["volunteer", "ngo", "vet", "rescuer"];
+
+const findOrCreateRescuer = async (userId: string, user: any) => {
+  const Rescuer = require("../models/Rescuer");
+  const existingRescuer = await Rescuer.findOne({ userId });
+  if (existingRescuer) return existingRescuer;
+
+  // Older accounts can pre-date the profile setup hook that creates this
+  // record. Create the assignment record on first acceptance so all eligible
+  // volunteer, NGO, and vet accounts can rescue a map case.
+  return Rescuer.create({
+    userId,
+    name: user.name || "Rescuer",
+    phone: user.phone || "",
+    avatar: user.profileImage || "",
+    isAvailable: true,
+    location: { latitude: 6.9271, longitude: 79.8612 },
+  });
+};
+
 const toSafeTimeline = (timeline: any[] = []) =>
   timeline.map((entry) => ({
     status: entry.status,
@@ -393,11 +413,11 @@ exports.getReportByCaseId = catchAsync(async (req: Request, res: Response, next:
       const User = require("../models/User");
       const Rescuer = require("../models/Rescuer");
       const currentUser = await User.findById(req.user.id).select("role");
-      const canRescue = ["volunteer", "ngo", "vet", "rescuer"].includes(currentUser?.role);
+      const canRescue = RESCUER_ROLES.includes(currentUser?.role);
       if (canRescue) {
         const rescuer = await Rescuer.findOne({ userId: req.user.id }).select("_id");
         permissions = {
-          canAccept: Boolean(rescuer && report.status === "Needs Help" && !report.assignedRescuerId),
+          canAccept: Boolean(report.status === "Needs Help" && !report.assignedRescuerId),
           canUpdate: Boolean(rescuer && report.assignedRescuerId && String(report.assignedRescuerId) === String(rescuer._id)),
         };
       }
@@ -430,14 +450,14 @@ exports.getAllReports = catchAsync(async (req: Request, res: Response, next: Nex
 // Accepting from the map belongs to the report workflow and does not alter
 // the existing rescue-controller flow.
 exports.acceptReportFromMap = catchAsync(async (req: Request, res: Response): Promise<void> => {
-  const Rescuer = require("../models/Rescuer");
   const RescueRequest = require("../models/RescueRequest");
   const User = require("../models/User");
-  const user = await User.findById(req.user?.id).select("name role");
-  const rescuer = user && ["volunteer", "ngo", "vet", "rescuer"].includes(user.role)
-    ? await Rescuer.findOne({ userId: req.user?.id })
-    : null;
-  if (!rescuer) { res.status(403).json({ message: "Only registered rescuers can accept a case." }); return; }
+  const user = await User.findById(req.user?.id).select("name role phone profileImage");
+  if (!user || !RESCUER_ROLES.includes(user.role)) {
+    res.status(403).json({ message: "Only volunteers, NGOs, and vets can accept a case." });
+    return;
+  }
+  const rescuer = await findOrCreateRescuer(String(req.user?.id), user);
 
   const report = await StrayReport.findOneAndUpdate(
     { caseId: req.params.caseId, status: "Needs Help", $or: [{ assignedRescuerId: { $exists: false } }, { assignedRescuerId: null }] },
@@ -448,7 +468,22 @@ exports.acceptReportFromMap = catchAsync(async (req: Request, res: Response): Pr
 
   const request = await RescueRequest.create({ rescuerId: rescuer._id, userId: report.reporterUserId || "", status: "accepted", caseId: report.caseId, animalType: report.animalType, description: report.notes || "Rescue case accepted from map", photos: report.photos || [], rescuerName: rescuer.name, summary: `Accepted by ${rescuer.name} from rescue map` });
   if (!report.anonymous && report.reporterUserId) {
-    await NotificationService.sendNotification(report.reporterUserId, "Rescue Request Accepted", `${user.name} accepted your case. Rescue is under way.`, "success", String(request._id), report.caseId);
+    await NotificationService.sendNotification(
+      report.reporterUserId,
+      `Case ${report.caseId} Accepted`,
+      `Your ${report.animalType || "animal"} rescue case ${report.caseId} was accepted by ${user.name}. Rescue is under way.`,
+      "success",
+      String(request._id),
+      report.caseId,
+      {
+        event: "rescue_accepted",
+        status: "Under Rescue",
+        animalType: report.animalType || "animal",
+        assignedRescuerName: user.name,
+        action: "view_case",
+        categoryId: "case_update",
+      }
+    );
   }
   res.status(201).json({ requestId: String(request._id) });
 });
@@ -558,11 +593,19 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
 
     await report.save();
 
+    // Reaching adoption readiness finishes the rescuer's assignment, but the
+    // public StrayReport deliberately remains "Ready for Adoption" so it is
+    // still discoverable on the map by potential adopters.
+    if (status === "Ready for Adoption") {
+      activeRequest.status = "completed";
+      await activeRequest.save();
+    }
+
     // 🔔 Notify reporter of status update (if not anonymous)
     if (!report.anonymous && report.reporterUserId) {
       const statusMessages: { [key: string]: string } = {
-        Treated: `${user.name} updated the case: Animal is under treatment.`,
-        "Ready for Adoption": `${user.name} updated the case: Rescue completed—ready for adoption.`,
+        Treated: `Case ${report.caseId}: the ${report.animalType || "animal"} is now receiving treatment. Updated by ${user.name}.`,
+        "Ready for Adoption": `Case ${report.caseId}: the ${report.animalType || "animal"} is now ready for adoption. Updated by ${user.name}.`,
       };
 
       const notificationMessage = statusMessages[status] || `Status updated to ${status}`;
@@ -571,11 +614,21 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
         // Save in-app notification
         await NotificationService.sendNotification(
           report.reporterUserId,
-          "Case Status Update",
+          status === "Treated"
+            ? `Treatment Started • ${report.caseId}`
+            : `Ready for Adoption • ${report.caseId}`,
           notificationMessage,
           "success",
           "",
-          report.caseId
+          report.caseId,
+          {
+            event: "case_status_updated",
+            status,
+            animalType: report.animalType || "animal",
+            assignedRescuerName: user.name,
+            action: "view_case",
+            categoryId: "case_update",
+          }
         );
         console.log(`[STRAY] Notification sent to reporter for case ${report.caseId}`);
       } catch (err: any) {

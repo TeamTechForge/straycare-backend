@@ -5,13 +5,23 @@ const Notification = require("../models/Notification");
 const User = require("../models/User");
 
 // Helper function to send push notifications via Expo Push Service
+const EXPO_PUSH_TOKEN_PATTERN = /^(ExponentPushToken|ExpoPushToken)\[[^\]]+\]$/;
+
+type PushSendResult = "sent" | "invalid-token" | "failed";
+
 const sendPushNotification = async (
   pushToken: string,
   title: string,
   message: string,
   data?: Record<string, any>
-): Promise<void> => {
+): Promise<PushSendResult> => {
+  if (!EXPO_PUSH_TOKEN_PATTERN.test(pushToken)) {
+    Logger.warn("Skipping invalid Expo push token", { service: "NotificationService" });
+    return "invalid-token";
+  }
+
   try {
+    const { categoryId, ...notificationData } = data || {};
     const response = await fetch("https://exp.host/--/api/v2/push/send", {
       method: "POST",
       headers: {
@@ -26,15 +36,34 @@ const sendPushNotification = async (
         channelId: "rescue-alerts",
         title,
         body: message,
-        data: data || {},
+        ...(typeof categoryId === "string" && categoryId ? { categoryId } : {}),
+        data: notificationData,
       }),
     });
 
     if (!response.ok) {
       console.error("[PUSH] Expo push service error:", response.status);
+      return "failed";
     }
+
+    type ExpoPushTicket = { status?: string; details?: { error?: string } };
+    const payload = await response.json() as {
+      data?: ExpoPushTicket | ExpoPushTicket[];
+    };
+    const ticket = Array.isArray(payload.data) ? payload.data[0] : payload.data;
+    const errorCode = ticket?.details?.error;
+
+    if (ticket?.status === "error") {
+      Logger.warn(`Expo rejected push notification: ${errorCode || "unknown error"}`, {
+        service: "NotificationService",
+      });
+      return errorCode === "DeviceNotRegistered" ? "invalid-token" : "failed";
+    }
+
+    return ticket?.status === "ok" ? "sent" : "failed";
   } catch (error) {
     console.error("[PUSH] Failed to send push notification:", error);
+    return "failed";
   }
 };
 
@@ -55,7 +84,8 @@ export class NotificationService {
     message: string, 
     type: "info" | "success" | "warning" | "error" | "welcome" = "info",
     rescueRequestId: string = "",
-    caseId: string = ""
+    caseId: string = "",
+    pushData: Record<string, any> = {}
   ): Promise<void> {
     if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
       Logger.warn(`Invalid or missing userId: ${userId}`, { service: "NotificationService" });
@@ -70,6 +100,11 @@ export class NotificationService {
         type,
         rescueRequestId,
         caseId,
+        event: typeof pushData.event === "string" ? pushData.event : "",
+        status: typeof pushData.status === "string" ? pushData.status : "",
+        animalType: typeof pushData.animalType === "string" ? pushData.animalType : "",
+        assignedRescuerName: typeof pushData.assignedRescuerName === "string" ? pushData.assignedRescuerName : "",
+        action: typeof pushData.action === "string" ? pushData.action : "",
       });
       Logger.info(`Created '${type}' notification for user ${userId}: ${title}`, { service: "NotificationService" });
 
@@ -77,8 +112,19 @@ export class NotificationService {
       try {
         const user = await User.findById(userId);
         if (user && user.pushToken) {
-          await sendPushNotification(user.pushToken, title, message, { rescueRequestId, caseId });
-          Logger.info(`Sent Expo push notification to user ${userId}`, { service: "NotificationService" });
+          const result = await sendPushNotification(user.pushToken, title, message, {
+            type,
+            rescueRequestId,
+            caseId,
+            ...pushData,
+          });
+
+          if (result === "invalid-token") {
+            await User.findByIdAndUpdate(userId, { $unset: { pushToken: 1 } });
+            Logger.warn(`Removed invalid Expo push token for user ${userId}`, { service: "NotificationService" });
+          } else if (result === "sent") {
+            Logger.info(`Sent Expo push notification to user ${userId}`, { service: "NotificationService" });
+          }
         }
       } catch (pushErr: any) {
         Logger.error("Failed to send push notification:", pushErr);

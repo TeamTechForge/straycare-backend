@@ -21,7 +21,7 @@ const {
   autocompletePlaces,
   getPlaceDetails,
 } = require("../controllers/placesController");
-const { verifyToken } = require("../middleware/authMiddleware");
+const { verifyToken, optionalToken } = require("../middleware/authMiddleware");
 
 const { uploadFileToCloudinary } = require("../utils/cloudinaryUpload");
 
@@ -67,8 +67,8 @@ router.post(
 router.post("/reports", verifyToken, createReport);
 router.post("/report/:caseId/accept", verifyToken, acceptReportFromMap);
 
-// Fetch a single report by its caseId.Returns full details including photos, notes, timeline, and location.
-router.get("/report/:caseId", verifyToken, getReportByCaseId);
+// Fetch a single report by its caseId. Returns full details including photos, notes, timeline, and location.
+router.get("/report/:caseId", optionalToken, getReportByCaseId);
 
 
 // Fetch all reports.Used by the map screen to display markers.
