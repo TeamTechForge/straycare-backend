@@ -128,11 +128,26 @@ const enrichCaseRecordWithReporterAndStray = async (formatted: any, caseIdOrId: 
     const User = require("../models/User");
     const StrayReport = require("../models/StrayReport");
 
-    const stray = await StrayReport.findOne({
-      $or: [{ caseId: caseIdOrId }, { caseId: formatted.caseId }]
-    });
+    const mongoose = require("mongoose");
+    const isObjectId = (id: string) => mongoose.Types.ObjectId.isValid(id);
+    
+    const queryConditions: any[] = [];
+    if (caseIdOrId) {
+      queryConditions.push({ caseId: caseIdOrId });
+      if (isObjectId(caseIdOrId)) queryConditions.push({ _id: caseIdOrId });
+    }
+    if (formatted.caseId) {
+      queryConditions.push({ caseId: formatted.caseId });
+      if (isObjectId(formatted.caseId)) queryConditions.push({ _id: formatted.caseId });
+    }
+
+    let stray = null;
+    if (queryConditions.length > 0) {
+      stray = await StrayReport.findOne({ $or: queryConditions });
+    }
 
     if (stray) {
+      if (stray.caseId) formatted.caseId = stray.caseId;
       if (stray.status) formatted.status = stray.status;
       if (stray.animalType) formatted.animalType = stray.animalType;
       if (stray.notes || stray.description) {
