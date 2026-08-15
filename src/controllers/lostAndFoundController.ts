@@ -63,7 +63,7 @@ export class LostFoundService {
     }
 
     return LostFoundPost.find(query)
-      .populate("userId", "name phone avatar email")
+      .populate("userId", "name phone avatar profileImage email")
       .sort({ createdAt: -1 });
   }
 
@@ -74,7 +74,7 @@ export class LostFoundService {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return null;
     }
-    return LostFoundPost.findById(id).populate("userId", "name phone avatar email");
+    return LostFoundPost.findById(id).populate("userId", "name phone avatar profileImage email");
   }
 
   /**
@@ -95,7 +95,7 @@ export class LostFoundService {
 
     const post = new LostFoundPost(postData);
     const savedPost = await post.save();
-    return savedPost.populate("userId", "name phone avatar email");
+    return savedPost.populate("userId", "name phone avatar profileImage email");
   }
 
   /**
@@ -138,7 +138,7 @@ export class LostFoundService {
 
     Object.assign(post, updateData);
     await post.save();
-    await post.populate("userId", "name phone avatar email");
+    await post.populate("userId", "name phone avatar profileImage email");
 
     return { post, status: "SUCCESS" };
   }
@@ -189,7 +189,7 @@ export class LostFoundService {
 
     post.reportCount = (post.reportCount || 0) + 1;
     await post.save();
-    return post.populate("userId", "name phone avatar email");
+    return post.populate("userId", "name phone avatar profileImage email");
   }
 }
 
