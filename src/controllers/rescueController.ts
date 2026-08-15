@@ -398,6 +398,21 @@ exports.cancelRescueRequest = catchAsync(async (req: Request, res: Response, nex
 
     console.log(`[RESCUE] Request ${id} cancelled by reporter (DB _id: ${request._id})`);
 
+    // Notify the rescuer immediately via Socket.IO so they don't wait for the next poll.
+    // The rescuer's screen joins the room using the request's _id as the rescueId.
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        const requestRoomId = String(request._id);
+        io.of("/rescue").to(requestRoomId).emit("rescue_cancelled", {
+          requestId: requestRoomId,
+        });
+        console.log(`[RESCUE] Emitted rescue_cancelled to room ${requestRoomId}`);
+      }
+    } catch (socketErr: any) {
+      console.warn("[RESCUE] Failed to emit rescue_cancelled:", socketErr.message || socketErr);
+    }
+
     res.json({ success: true, request });
   });;
 
