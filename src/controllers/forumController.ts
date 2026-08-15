@@ -3,10 +3,47 @@ import type { NextFunction } from "express";
 const Forum = require("../models/Forum");
 const ForumPost = require("../models/ForumPost");
 const User = require("../models/User");
+const mongoose = require("mongoose");
 
 import type { Request, Response } from "express";
 
 import { AppError } from "../utils/appError";
+
+// Helper to retrieve user profile photo and role
+const getUserInfo = async (userId: string) => {
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    return { avatar: "", role: "", name: "" };
+  }
+  try {
+    const GeneralUserProfile = require("../models/GeneralUserProfile");
+    const VolunteerProfile = require("../models/VolunteerProfile");
+    const VetProfile = require("../models/VetProfile");
+    const NGOProfile = require("../models/NGOProfile");
+
+    const u = await User.findById(userId).select("profileImage avatar role name").lean();
+    if (!u) return { avatar: "", role: "", name: "" };
+
+    let avatar = u.profileImage || u.avatar || "";
+    if (!avatar) {
+      if (u.role === "general_user") {
+        const p = await GeneralUserProfile.findOne({ userId }).select("profileImage").lean();
+        if (p?.profileImage) avatar = p.profileImage;
+      } else if (u.role === "volunteer") {
+        const p = await VolunteerProfile.findOne({ userId }).select("profileImage").lean();
+        if (p?.profileImage) avatar = p.profileImage;
+      } else if (u.role === "vet") {
+        const p = await VetProfile.findOne({ userId }).select("profileImage").lean();
+        if (p?.profileImage) avatar = p.profileImage;
+      } else if (u.role === "ngo") {
+        const p = await NGOProfile.findOne({ userId }).select("profileImage").lean();
+        if (p?.profileImage) avatar = p.profileImage;
+      }
+    }
+    return { avatar: avatar || "", role: u.role || "", name: u.name || "" };
+  } catch (err) {
+    return { avatar: "", role: "", name: "" };
+  }
+};
 
 // GET all posts
 exports.listPosts = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -48,20 +85,36 @@ exports.listPosts = catchAsync(async (req: Request, res: Response, next: NextFun
     const query = blockedIds.length > 0 ? { userId: { $nin: blockedIds } } : {};
     const posts = await ForumPost.find(query).sort({ createdAt: -1 });
 
-    // format response
-    const response = posts.map((post: any) => ({
-      id: String(post._id),
-      title: post.title,
-      tag: post.tag,
-      author: post.author,
-      likes: post.likes,
-      // check if this user already liked
-      likedByMe: userId ? post.likedByUsers.includes(userId) : false,
-      isMine: post.userId && userId ? String(post.userId) === String(userId) : false,
-      commentCount: post.commentCount || 0,
-      createdAt: post.createdAt,
-      imageUrl: post.imageUrl || "",
-    }));
+    // format response with author avatars
+    const response = await Promise.all(
+      posts.map(async (post: any) => {
+        let authorAvatar = "";
+        let authorName = post.author;
+
+        if (!post.anonymous && post.userId) {
+          const info = await getUserInfo(String(post.userId));
+          authorAvatar = info.avatar;
+          if (!authorName || authorName === "You" || authorName === "User") {
+            authorName = info.name || authorName;
+          }
+        }
+
+        return {
+          id: String(post._id),
+          title: post.title,
+          tag: post.tag,
+          author: authorName,
+          authorAvatar: post.anonymous ? "" : authorAvatar,
+          likes: post.likes,
+          // check if this user already liked
+          likedByMe: userId ? post.likedByUsers.includes(userId) : false,
+          isMine: post.userId && userId ? String(post.userId) === String(userId) : false,
+          commentCount: post.commentCount || 0,
+          createdAt: post.createdAt,
+          imageUrl: post.imageUrl || "",
+        };
+      })
+    );
 
     res.json(response);
 });
@@ -195,17 +248,18 @@ exports.getThread = catchAsync(async (req: Request, res: Response, next: NextFun
       thread = await Forum.create({ rescueId, comments: [] });
     }
 
-    const mongoose = require("mongoose");
     const commentsFormatted = await Promise.all(
       thread.comments.map(async (comment: any, index: number) => {
         let commenterName = comment.userName || "";
-        if (!commenterName && comment.userId && comment.userId !== "guest" && comment.userId !== "forum-guest") {
-          try {
-            if (mongoose.Types.ObjectId.isValid(comment.userId)) {
-              const u = await User.findById(comment.userId).select("name").lean();
-              if (u && u.name) commenterName = u.name;
-            }
-          } catch (e) {}
+        let commenterAvatar = "";
+        let commenterRole = "";
+
+        if (comment.userId && comment.userId !== "guest" && comment.userId !== "forum-guest") {
+          const info = await getUserInfo(String(comment.userId));
+          if (!commenterName && info.name) commenterName = info.name;
+          commenterAvatar = info.avatar || "";
+          if (info.role === "vet") commenterRole = "Vet";
+          else if (info.role === "ngo") commenterRole = "NGO";
         }
         if (!commenterName) commenterName = "User";
 
@@ -213,6 +267,8 @@ exports.getThread = catchAsync(async (req: Request, res: Response, next: NextFun
           id: `${thread.rescueId}-${index}`,
           userId: comment.userId || "guest",
           userName: commenterName,
+          userAvatar: commenterAvatar,
+          role: commenterRole,
           isMine: tokenUserId && comment.userId ? String(comment.userId) === String(tokenUserId) : false,
           text: comment.text,
           timestamp: comment.timestamp,
@@ -252,14 +308,9 @@ exports.addComment = catchAsync(async (req: Request, res: Response, next: NextFu
       } catch (err) {}
     }
 
-    const mongoose = require("mongoose");
     if (!commenterName && commenterId && commenterId !== "guest" && commenterId !== "forum-guest") {
-      try {
-        if (mongoose.Types.ObjectId.isValid(commenterId)) {
-          const u = await User.findById(commenterId).select("name").lean();
-          if (u && u.name) commenterName = u.name;
-        }
-      } catch (e) {}
+      const info = await getUserInfo(String(commenterId));
+      if (info.name) commenterName = info.name;
     }
     if (!commenterName) commenterName = "User";
 
@@ -309,14 +360,32 @@ exports.addComment = catchAsync(async (req: Request, res: Response, next: NextFu
       }
     }
 
-    const commentsFormatted = thread.comments.map((comment: any, index: number) => ({
-      id: `${thread.rescueId}-${index}`,
-      userId: comment.userId || "guest",
-      userName: comment.userName || commenterName,
-      isMine: String(comment.userId) === String(commenterId),
-      text: comment.text,
-      timestamp: comment.timestamp,
-    }));
+    const commentsFormatted = await Promise.all(
+      thread.comments.map(async (comment: any, index: number) => {
+        let cName = comment.userName || "";
+        let cAvatar = "";
+        let cRole = "";
+        if (comment.userId && comment.userId !== "guest" && comment.userId !== "forum-guest") {
+          const info = await getUserInfo(String(comment.userId));
+          if (!cName && info.name) cName = info.name;
+          cAvatar = info.avatar || "";
+          if (info.role === "vet") cRole = "Vet";
+          else if (info.role === "ngo") cRole = "NGO";
+        }
+        if (!cName) cName = "User";
+
+        return {
+          id: `${thread.rescueId}-${index}`,
+          userId: comment.userId || "guest",
+          userName: cName,
+          userAvatar: cAvatar,
+          role: cRole,
+          isMine: String(comment.userId) === String(commenterId),
+          text: comment.text,
+          timestamp: comment.timestamp,
+        };
+      })
+    );
 
     res.json({
       message: "Comment added",
