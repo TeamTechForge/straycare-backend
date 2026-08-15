@@ -1,7 +1,13 @@
 import { Request, Response } from "express";
+import mongoose from "mongoose";
 
 import CommunityPost from "../models/communityPost";
 import CommunityReport from "../models/CommunityReport";
+import User from "../models/User";
+const GeneralUserProfile = require("../models/GeneralUserProfile");
+const VolunteerProfile = require("../models/VolunteerProfile");
+const VetProfile = require("../models/VetProfile");
+const NGOProfile = require("../models/NGOProfile");
 const { uploadFileToCloudinary } = require("../utils/cloudinaryUpload");
 
 interface UploadedFile {
@@ -16,6 +22,55 @@ type UploadRequest = Request & {
     files?: UploadedFile[] | Record<string, UploadedFile[]>;
 };
 
+const profileModels: Record<string, any> = {
+    general_user: GeneralUserProfile,
+    volunteer: VolunteerProfile,
+    vet: VetProfile,
+    ngo: NGOProfile,
+};
+
+const getAuthorDetails = async (authorUserId?: unknown) => {
+    if (!authorUserId || !mongoose.Types.ObjectId.isValid(String(authorUserId))) {
+        return null;
+    }
+
+    const user: any = await User.findById(authorUserId)
+        .select("name profileImage avatar role")
+        .lean();
+    if (!user) return null;
+
+    let profileImage = user.profileImage || user.avatar || "";
+    const ProfileModel = profileModels[user.role];
+    if (ProfileModel) {
+        const profile: any = await ProfileModel.findOne({ userId: user._id })
+            .select("profileImage")
+            .lean();
+        profileImage = profile?.profileImage || profileImage;
+    }
+
+    return { username: user.name, profileImage };
+};
+
+const serializePost = async (post: any, currentUserId?: string) => {
+    const plain = typeof post.toObject === "function" ? post.toObject() : post;
+    const authorId = plain.authorUserId ? String(plain.authorUserId) : null;
+    const author = await getAuthorDetails(plain.authorUserId);
+
+    return {
+        ...plain,
+        authorUserId: authorId,
+        authorId,
+        username: author?.username || plain.authorName || "Community User",
+        profileImage: author?.profileImage || "",
+        date: plain.submittedAt || plain.createdAt,
+        likeCount: 0,
+        commentCount: 0,
+        isLiked: false,
+        isSaved: false,
+        isOwner: Boolean(currentUserId && authorId === currentUserId),
+    };
+};
+
 // ─────────────────────────────────────────────
 // POST /api/community/create
 // Create a new community post
@@ -26,6 +81,18 @@ export const createCommunityPost = async (
     res: Response
 ): Promise<void> => {
     try {
+        const authorUserId = req.user?.id;
+        if (!authorUserId || !mongoose.Types.ObjectId.isValid(authorUserId)) {
+            res.status(401).json({ success: false, message: "Authentication required to create a post" });
+            return;
+        }
+
+        const author = await User.findById(authorUserId).select("_id");
+        if (!author) {
+            res.status(401).json({ success: false, message: "Authenticated user not found" });
+            return;
+        }
+
         let imageUrl: string | null =
             req.body.imageUrl ||
             req.body.image ||
@@ -55,12 +122,14 @@ export const createCommunityPost = async (
             title,
             category,
             content,
-            authorName,
-            submittedAt,
         } = req.body;
 
+        const trimmedTitle = typeof title === "string" ? title.trim() : "";
+        const trimmedCategory = typeof category === "string" ? category.trim() : "";
+        const trimmedContent = typeof content === "string" ? content.trim() : "";
+
         // Basic validation
-        if (!title || !category || !content) {
+        if (!trimmedTitle || !trimmedCategory || !trimmedContent) {
             res.status(400).json({
                 success: false,
                 message:
@@ -70,21 +139,19 @@ export const createCommunityPost = async (
         }
 
         const post = new CommunityPost({
-            title,
-            category,
-            content,
+            authorUserId,
+            title: trimmedTitle,
+            category: trimmedCategory,
+            content: trimmedContent,
             imageUrl,
-            authorName,
-            submittedAt: submittedAt
-                ? new Date(submittedAt)
-                : new Date(),
+            submittedAt: new Date(),
         });
 
         const savedPost = await post.save();
 
         res.status(201).json({
             success: true,
-            data: savedPost,
+            data: await serializePost(savedPost, authorUserId),
         });
     } catch (error) {
         console.error(
@@ -108,7 +175,7 @@ export const createCommunityPost = async (
 // ─────────────────────────────────────────────
 
 export const getAllCommunityPosts = async (
-    _req: Request,
+    req: Request,
     res: Response
 ): Promise<void> => {
     try {
@@ -117,9 +184,11 @@ export const getAllCommunityPosts = async (
                 submittedAt: -1,
             });
 
+        const data = await Promise.all(posts.map((post) => serializePost(post, req.user?.id)));
+
         res.status(200).json({
             success: true,
-            data: posts,
+            data,
         });
     } catch (error) {
         console.error(
@@ -147,7 +216,12 @@ export const getCommunityPostById = async (
     res: Response
 ): Promise<void> => {
     try {
-        const { id } = req.params;
+        const id = req.params.id;
+
+        if (typeof id !== "string" || !mongoose.Types.ObjectId.isValid(id)) {
+            res.status(400).json({ success: false, message: "Invalid post ID" });
+            return;
+        }
 
         const post =
             await CommunityPost.findById(id);
@@ -162,7 +236,7 @@ export const getCommunityPostById = async (
 
         res.status(200).json({
             success: true,
-            data: post,
+            data: await serializePost(post, req.user?.id),
         });
     } catch (error) {
         console.error(

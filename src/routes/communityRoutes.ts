@@ -8,7 +8,7 @@ import {
     updateCommunityReportStatus,
 } from "../controllers/communityController";
 
-const { verifyToken } = require("../middleware/authMiddleware");
+const { verifyToken, optionalToken } = require("../middleware/authMiddleware");
 const { upload } = require("../config/gridfs");
 
 const router = Router();
@@ -18,10 +18,10 @@ router.get("/admin/reports", verifyToken, getCommunityReports);         // GET  
 router.get("/reports", verifyToken, getCommunityReports);               // GET   /api/community/reports
 router.patch("/admin/reports/:reportId", verifyToken, updateCommunityReportStatus); // PATCH /api/community/admin/reports/:reportId
 
-router.post("/", upload.any(), createCommunityPost);           // POST   /api/community
-router.post("/create", upload.any(), createCommunityPost);     // POST   /api/community/create
-router.get("/", getAllCommunityPosts);            // GET    /api/community
-router.get("/:id", getCommunityPostById);         // GET    /api/community/:id
+router.post("/", verifyToken, upload.any(), createCommunityPost);           // POST   /api/community
+router.post("/create", verifyToken, upload.any(), createCommunityPost);     // POST   /api/community/create
+router.get("/", optionalToken, getAllCommunityPosts);            // GET    /api/community
+router.get("/:id", optionalToken, getCommunityPostById);         // GET    /api/community/:id
 router.post("/:id/report", verifyToken, reportCommunityPost);  // POST   /api/community/:id/report
 router.patch("/:id/report", verifyToken, reportCommunityPost); // PATCH  /api/community/:id/report
 
