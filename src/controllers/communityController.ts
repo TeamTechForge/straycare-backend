@@ -172,7 +172,7 @@ export const reportCommunityPost = async (
     res: Response
 ): Promise<void> => {
     try {
-        const { id: postId } = req.params;
+        const postId = req.params.id as string;
 
         const { reason } = req.body;
 

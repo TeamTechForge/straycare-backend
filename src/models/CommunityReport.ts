@@ -4,9 +4,9 @@ import mongoose, {
 } from "mongoose";
 
 export interface ICommunityReport extends Document {
-    postId: mongoose.Types.ObjectId;
+    postId: mongoose.Types.ObjectId | string;
 
-    reporterUserId: mongoose.Types.ObjectId;
+    reporterUserId: mongoose.Types.ObjectId | string;
 
     reason: string;
 
@@ -15,7 +15,7 @@ export interface ICommunityReport extends Document {
     | "dismissed"
     | "action_taken";
 
-    reviewedBy?: mongoose.Types.ObjectId | null;
+    reviewedBy?: mongoose.Types.ObjectId | string | null;
 
     reviewedAt?: Date | null;
 

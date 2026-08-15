@@ -6,7 +6,7 @@ import {
     reportCommunityPost,
 } from "../controllers/communityController";
 
-const verifyToken = require("../middleware/authMiddleware");
+const { verifyToken } = require("../middleware/authMiddleware");
 
 const router = Router();
 
@@ -17,4 +17,5 @@ router.get("/:id", getCommunityPostById);         // GET    /api/community/:id
 router.post("/:id/report", verifyToken, reportCommunityPost);  // POST   /api/community/:id/report
 router.patch("/:id/report", verifyToken, reportCommunityPost); // PATCH  /api/community/:id/report
 
+module.exports = router;
 export default router;
