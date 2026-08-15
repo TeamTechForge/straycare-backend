@@ -102,4 +102,34 @@ const sendPasswordResetCodeEmail = async (toEmail: string, code: string): Promis
   await transporter.sendMail(mailOptions);
 };
 
-module.exports = { sendPasswordResetEmail, sendAdminInviteEmail, sendPasswordResetCodeEmail };
+// Admin 6-Digit Code Password reset email
+const sendAdminPasswordResetCodeEmail = async (toEmail: string, code: string): Promise<void> => {
+  const mailOptions = {
+    from: `"StrayCare Admin" <${process.env.EMAIL_USER}>`,
+    to: toEmail,
+    subject: "StrayCare Admin - Your Password Reset Code",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #F5A623;">StrayCare Admin Dashboard</h2>
+        <p>You requested a password reset for your admin account.</p>
+        <p>Enter the following 6-digit code in the admin dashboard to reset your password. This code expires in <strong>15 minutes</strong>.</p>
+        <div style="
+          display: inline-block;
+          padding: 12px 24px;
+          background: #fde7c7;
+          color: #333;
+          font-size: 24px;
+          letter-spacing: 4px;
+          border-radius: 8px;
+          font-weight: bold;
+          margin: 20px 0;
+        ">${code}</div>
+        <p style="color: #888; font-size: 13px;">If you didn't request this, ignore this email. Your password won't change.</p>
+      </div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
+module.exports = { sendPasswordResetEmail, sendAdminInviteEmail, sendPasswordResetCodeEmail, sendAdminPasswordResetCodeEmail };
