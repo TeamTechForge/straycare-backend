@@ -5,6 +5,7 @@ const Rescuer = require("../models/Rescuer");
 const VolunteerProfile = require("../models/VolunteerProfile");
 const NGOProfile = require("../models/NGOProfile");
 const VetProfile = require("../models/VetProfile");
+const { sendOrganizationVerificationEmail } = require("../utils/emailService");
 
 export const getAllUsers = async (req: Request, res: Response) => {
   try {
@@ -180,7 +181,11 @@ export const getUserDocuments = async (req: Request, res: Response) => {
 export const updateUserStatus = async (req: Request, res: Response) => {
   try {
     const { status } = req.body;
-    
+
+    if (!["Verified", "Rejected"].includes(status)) {
+      return res.status(400).json({ error: "Status must be Verified or Rejected" });
+    }
+
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -208,8 +213,30 @@ export const updateUserStatus = async (req: Request, res: Response) => {
         { _id: updated.userId },
         { $set: { isApproved } }
       );
-      
-      res.json({ success: true, user: updated });
+
+      let emailSent = false;
+      const account = await User.findById(updated.userId).lean();
+      if (account?.email) {
+        try {
+          await sendOrganizationVerificationEmail(
+            account.email,
+            updated.orgName || updated.clinicName || account.name,
+            status
+          );
+          emailSent = true;
+        } catch (emailError) {
+          console.error("Organization verification email failed:", emailError);
+        }
+      }
+
+      res.json({
+        success: true,
+        user: updated,
+        emailSent,
+        message: emailSent
+          ? `Organization ${status.toLowerCase()} and confirmation email sent`
+          : `Organization ${status.toLowerCase()}, but the confirmation email could not be sent`,
+      });
     } else {
       res.status(404).json({ error: "User not found" });
     }
