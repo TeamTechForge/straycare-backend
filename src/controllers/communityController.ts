@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import mongoose from "mongoose";
 
-import CommunityPost from "../models/communityPost";
+import CommunityPost from "../models/CommunityPost";
 import CommunityReport from "../models/CommunityReport";
 import CommunityLike from "../models/CommunityLike";
 import CommunityComment from "../models/CommunityComment";
