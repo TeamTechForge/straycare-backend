@@ -44,7 +44,9 @@ describe("Rescue terminal outcome controller actions", () => {
     const request = {
       _id: requestId,
       rescueRequestId: "RR-123",
-      rescuerId,
+      // Find-rescuer requests created by older clients store the account ID
+      // instead of the Rescuer profile ID.
+      rescuerId: userId,
       status: "accepted",
       caseId: "SC-123",
       animalType: "Dog",
@@ -94,7 +96,7 @@ describe("Rescue terminal outcome controller actions", () => {
     const request = {
       _id: requestId,
       rescueRequestId: "RR-456",
-      rescuerId,
+      rescuerId: userId,
       status: "accepted",
       caseId: "SC-456",
       animalType: "Cat",

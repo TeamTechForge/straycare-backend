@@ -912,7 +912,14 @@ exports.updateRescueDetails = catchAsync(async (req: Request, res: Response, nex
   const activeDoc = request || history;
   if (activeDoc && activeDoc.rescuerId && req.user) {
     const rescuerDoc = await Rescuer.findOne({ userId: req.user.id });
-    if (!rescuerDoc || String(activeDoc.rescuerId) !== String(rescuerDoc._id)) {
+    // Older rescue requests created through the find-rescuer flow can hold the
+    // account user ID here, while map accepts store the Rescuer profile ID.
+    const assignedRescuerId = String(activeDoc.rescuerId._id || activeDoc.rescuerId);
+    const isAssignedRescuer = Boolean(
+      rescuerDoc &&
+      (assignedRescuerId === String(rescuerDoc._id) || assignedRescuerId === String(req.user.id))
+    );
+    if (!isAssignedRescuer) {
       res.status(403).json({ error: "Forbidden. Only the assigned rescuer can update or manage this case." });
       return;
     }
