@@ -14,6 +14,8 @@ interface IVetProfile extends mongoose.Document {
   accountStatus?: string;
   merchantId: string;
   merchantSecret: string;
+  payHereAppId?: string;
+  payHereAppSecret?: string;
   specialization?: string;
   animalsTreated?: number;
   emergencyAvailability?: boolean;
@@ -45,6 +47,8 @@ const VetProfileSchema = new mongoose.Schema(
     accountStatus: { type: String },
     merchantId: { type: String, default: "" },
     merchantSecret: { type: String, default: "" },
+    payHereAppId: { type: String, default: "", select: false },
+    payHereAppSecret: { type: String, default: "", select: false },
   },
   { timestamps: true }
 );

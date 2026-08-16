@@ -44,6 +44,9 @@ export class DonationController {
 
     let merchant_id = process.env.PAYHERE_MERCHANT_ID;
     let merchant_secret = process.env.PAYHERE_MERCHANT_SECRET;
+    let recurringManagementReady = !req.body.organizationId && Boolean(
+      process.env.PAYHERE_APP_ID && process.env.PAYHERE_APP_SECRET
+    );
 
     if (req.body.organizationId) {
       try {
@@ -54,6 +57,7 @@ export class DonationController {
           // Trim to ensure no trailing/leading hidden characters break the hash match
           merchant_id = org.merchantId.trim();
           merchant_secret = org.merchantSecret.trim();
+          recurringManagementReady = Boolean(org.payHereAppId?.trim() && org.payHereAppSecret?.trim());
           console.log("USING ORG MERCHANT ID:", merchant_id);
         } else {
           console.log("NO MERCHANT ID FOUND FOR ORG, USING FALLBACK");
@@ -88,6 +92,13 @@ export class DonationController {
 
     if (isRecurring && payment_method === "AMEX") {
       res.status(400).json({ error: "Recurring donations support Visa or Mastercard only" });
+      return;
+    }
+
+    if (isRecurring && !recurringManagementReady) {
+      res.status(400).json({
+        error: "This organization has not completed recurring donation setup",
+      });
       return;
     }
 
@@ -354,6 +365,110 @@ export class DonationController {
       return;
     }
     res.json(recurring);
+  });
+
+  public getRecurringDonations = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const recurringDonations = await RecurringDonation.find({ donorId: req.user?.id })
+      .select("orderId subscriptionId status statusMessage installmentsPaid plan recurrence amount currency organization createdAt")
+      .sort({ createdAt: -1 });
+
+    res.json(recurringDonations);
+  });
+
+  public cancelRecurringDonation = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const recurringId = String(req.params.recurringId);
+    if (!mongoose.Types.ObjectId.isValid(recurringId)) {
+      res.status(400).json({ error: "Invalid recurring donation ID" });
+      return;
+    }
+
+    const recurring = await RecurringDonation.findOne({
+      _id: recurringId,
+      donorId: req.user?.id,
+    });
+
+    if (!recurring) {
+      res.status(404).json({ error: "Recurring donation not found" });
+      return;
+    }
+
+    if (recurring.status === "CANCELLED") {
+      res.status(409).json({ error: "This recurring donation is already cancelled" });
+      return;
+    }
+
+    if (recurring.status !== "ACTIVE" || !recurring.subscriptionId) {
+      res.status(409).json({ error: "Only an active PayHere subscription can be cancelled" });
+      return;
+    }
+
+    let appId = process.env.PAYHERE_APP_ID?.trim();
+    let appSecret = process.env.PAYHERE_APP_SECRET?.trim();
+
+    if (recurring.organizationId) {
+      const db = mongoose.connection.db;
+      if (!db || !ObjectId.isValid(recurring.organizationId)) {
+        res.status(500).json({ error: "Receiving organization could not be resolved" });
+        return;
+      }
+
+      const organization: any = await db.collection("vetprofiles").findOne(
+        { _id: new ObjectId(recurring.organizationId) },
+        { projection: { payHereAppId: 1, payHereAppSecret: 1 } }
+      ) || await db.collection("ngoprofiles").findOne(
+        { _id: new ObjectId(recurring.organizationId) },
+        { projection: { payHereAppId: 1, payHereAppSecret: 1 } }
+      );
+      appId = organization?.payHereAppId?.trim();
+      appSecret = organization?.payHereAppSecret?.trim();
+    }
+
+    if (!appId || !appSecret) {
+      res.status(503).json({ error: "This organization has not configured recurring cancellation" });
+      return;
+    }
+
+    const basicAuthorization = Buffer.from(`${appId}:${appSecret}`).toString("base64");
+    const tokenResponse = await fetch("https://sandbox.payhere.lk/merchant/v1/oauth/token", {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${basicAuthorization}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ grant_type: "client_credentials" }).toString(),
+    });
+    const tokenData: any = await tokenResponse.json();
+
+    if (!tokenResponse.ok || !tokenData.access_token) {
+      res.status(502).json({ error: "PayHere authentication failed. Please try again later." });
+      return;
+    }
+
+    const cancelResponse = await fetch("https://sandbox.payhere.lk/merchant/v1/subscription/cancel", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ subscription_id: recurring.subscriptionId }),
+    });
+    const cancelData: any = await cancelResponse.json();
+
+    if (!cancelResponse.ok || cancelData.status !== 1) {
+      res.status(502).json({
+        error: cancelData.msg || "PayHere could not cancel this subscription",
+      });
+      return;
+    }
+
+    recurring.status = "CANCELLED";
+    recurring.statusMessage = cancelData.msg || "Subscription cancelled by donor";
+    await recurring.save();
+
+    res.json({
+      message: "Recurring donation cancelled successfully",
+      recurringDonation: recurring,
+    });
   });
 
   public getHistory = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
