@@ -128,11 +128,26 @@ const enrichCaseRecordWithReporterAndStray = async (formatted: any, caseIdOrId: 
     const User = require("../models/User");
     const StrayReport = require("../models/StrayReport");
 
-    const stray = await StrayReport.findOne({
-      $or: [{ caseId: caseIdOrId }, { caseId: formatted.caseId }]
-    });
+    const mongoose = require("mongoose");
+    const isObjectId = (id: string) => mongoose.Types.ObjectId.isValid(id);
+    
+    const queryConditions: any[] = [];
+    if (caseIdOrId) {
+      queryConditions.push({ caseId: caseIdOrId });
+      if (isObjectId(caseIdOrId)) queryConditions.push({ _id: caseIdOrId });
+    }
+    if (formatted.caseId) {
+      queryConditions.push({ caseId: formatted.caseId });
+      if (isObjectId(formatted.caseId)) queryConditions.push({ _id: formatted.caseId });
+    }
+
+    let stray = null;
+    if (queryConditions.length > 0) {
+      stray = await StrayReport.findOne({ $or: queryConditions });
+    }
 
     if (stray) {
+      if (stray.caseId) formatted.caseId = stray.caseId;
       if (stray.status) formatted.status = stray.status;
       if (stray.animalType) formatted.animalType = stray.animalType;
       if (stray.notes || stray.description) {
@@ -398,6 +413,41 @@ exports.cancelRescueRequest = catchAsync(async (req: Request, res: Response, nex
 
     console.log(`[RESCUE] Request ${id} cancelled by reporter (DB _id: ${request._id})`);
 
+    // Remove notification for the rescuer so it disappears immediately from their notifications
+    try {
+      const Notification = require("../models/Notification");
+      const conditions: any[] = [
+        { rescueRequestId: String(request._id) },
+      ];
+      if (request.caseId) {
+        conditions.push({ caseId: request.caseId });
+        conditions.push({ rescueRequestId: request.caseId });
+      }
+      if (id) {
+        conditions.push({ rescueRequestId: id });
+        conditions.push({ caseId: id });
+      }
+      const deleteResult = await Notification.deleteMany({ $or: conditions });
+      console.log(`[RESCUE] Deleted ${deleteResult.deletedCount} notifications for cancelled request ${id}`);
+    } catch (notifErr: any) {
+      console.warn("[RESCUE] Failed to delete notifications for cancelled request:", notifErr.message || notifErr);
+    }
+
+    // Notify the rescuer immediately via Socket.IO so they don't wait for the next poll.
+    // The rescuer's screen joins the room using the request's _id as the rescueId.
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        const requestRoomId = String(request._id);
+        io.of("/rescue").to(requestRoomId).emit("rescue_cancelled", {
+          requestId: requestRoomId,
+        });
+        console.log(`[RESCUE] Emitted rescue_cancelled to room ${requestRoomId}`);
+      }
+    } catch (socketErr: any) {
+      console.warn("[RESCUE] Failed to emit rescue_cancelled:", socketErr.message || socketErr);
+    }
+
     res.json({ success: true, request });
   });;
 
@@ -462,32 +512,52 @@ exports.listUserRescues = catchAsync(async (req: Request, res: Response, next: N
       return;
     }
 
-    // "Under Rescue" active cases: must be assigned to this rescuer AND accepted
+    // Active rescue requests assigned to this rescuer
     const activeQuery = {
       $or: rescuerConditions,
-      status: { $in: [RescueStatus.ACCEPTED, "accepted", "under rescue", "Under Rescue"] },
+      status: { $in: [RescueStatus.ACCEPTED, "accepted", "under rescue", "Under Rescue", "in progress", "treated", "Treated"] },
     };
 
-    // Terminal rescue cases: assigned to this rescuer and completed or failed.
+    // Terminal rescue cases assigned to this rescuer.
     const completedQuery = {
       $or: rescuerConditions,
-      status: { $in: [RescueStatus.COMPLETED, RescueStatus.FAILED, "completed", "Completed", "failed", "Failed"] },
+      status: {
+        $in: [
+          RescueStatus.COMPLETED,
+          RescueStatus.FAILED,
+          "completed",
+          "Completed",
+          "failed",
+          "Failed",
+          "ready for adoption",
+          "Ready for Adoption",
+          "closed",
+        ],
+      },
     };
 
-    const [active, completed] = await Promise.all([
+    const [activeRequests, completedRequests, completedHistory] = await Promise.all([
       RescueRequest.find(activeQuery).sort({ createdAt: -1 }),
+      RescueRequest.find(completedQuery).sort({ updatedAt: -1, createdAt: -1 }),
       RescueHistory.find(completedQuery).sort({ completedAt: -1, createdAt: -1 }),
     ]);
 
     const enrichedActive = await Promise.all(
-      active.map(async (request: any) => {
+      activeRequests.map(async (request: any) => {
         const enriched = await enrichCaseRecordWithReporterAndStray(request.toObject ? request.toObject() : request);
         return formatCaseRecord({ request: enriched, rescuer: enriched.rescuer || null });
       })
     );
 
-    const enrichedCompleted = await Promise.all(
-      completed.map(async (history: any) => {
+    const enrichedCompletedRequests = await Promise.all(
+      completedRequests.map(async (request: any) => {
+        const enriched = await enrichCaseRecordWithReporterAndStray(request.toObject ? request.toObject() : request);
+        return formatCaseRecord({ request: enriched, rescuer: enriched.rescuer || null });
+      })
+    );
+
+    const enrichedCompletedHistory = await Promise.all(
+      completedHistory.map(async (history: any) => {
         const enriched = await enrichCaseRecordWithReporterAndStray(history.toObject ? history.toObject() : history);
         // A history entry's terminal outcome takes precedence over the public case status.
         enriched.status = history.status;
@@ -495,14 +565,27 @@ exports.listUserRescues = catchAsync(async (req: Request, res: Response, next: N
       })
     );
 
-    const all = [...enrichedActive, ...enrichedCompleted].sort((left: any, right: any) => {
-      const leftTime = new Date(left.completedAt || left.createdAt).getTime();
-      const rightTime = new Date(right.completedAt || right.createdAt).getTime();
+    // Combine and deduplicate by caseId / rescueRequestId
+    const seenIds = new Set<string>();
+    const allEnriched = [...enrichedActive, ...enrichedCompletedRequests, ...enrichedCompletedHistory];
+    const deduplicated: any[] = [];
+
+    for (const item of allEnriched) {
+      const key = String(item.caseId || item.rescueRequestId || item._id);
+      if (!seenIds.has(key)) {
+        seenIds.add(key);
+        deduplicated.push(item);
+      }
+    }
+
+    deduplicated.sort((left: any, right: any) => {
+      const leftTime = new Date(left.completedAt || left.updatedAt || left.createdAt).getTime();
+      const rightTime = new Date(right.completedAt || right.updatedAt || right.createdAt).getTime();
       return rightTime - leftTime;
     });
 
-    Logger.info(`Found ${all.length} assigned rescues for user ID: ${userId}`, { service: "RescueController" });
-    res.json(all);
+    Logger.info(`Found ${deduplicated.length} assigned rescues for user ID: ${userId}`, { service: "RescueController" });
+    res.json(deduplicated);
   });;
 
 exports.getRescueById = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {

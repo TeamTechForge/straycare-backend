@@ -17,6 +17,13 @@ router.post("/save", authMiddleware, donationController.saveDonation);
 // PayHere notify callback
 router.post("/notify", donationController.notifyPayhere);
 
+// Check a recurring donation after returning from PayHere. Ownership is enforced.
+router.get("/recurring/:orderId/status", authMiddleware, donationController.getRecurringStatus);
+
+// List and cancel subscriptions owned by the logged-in donor.
+router.get("/recurring", authMiddleware, donationController.getRecurringDonations);
+router.post("/recurring/:recurringId/cancel", authMiddleware, donationController.cancelRecurringDonation);
+
 // Get donation history (mobile app) — donor's own donations
 router.get("/history", authMiddleware, donationController.getHistory);
 

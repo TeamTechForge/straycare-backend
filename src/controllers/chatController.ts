@@ -79,6 +79,13 @@ const getConversations = catchAsync(async (req: Request, res: Response, next: Ne
         }
         delete conv.lastMessage.encryptedText;
       }
+      
+      // If the last message was sent before the user cleared the chat, hide it
+      if (conv.clearedAt && conv.clearedAt[userId] && conv.lastMessage?.createdAt) {
+        if (new Date(conv.lastMessage.createdAt) < new Date(conv.clearedAt[userId])) {
+          conv.lastMessage.text = "";
+        }
+      }
     }
 
     console.log(`[chatController] ✅ Found ${conversations.length} conversations for User: ${userId}`);
@@ -91,7 +98,7 @@ const getConversations = catchAsync(async (req: Request, res: Response, next: Ne
 const getOrCreateConversation = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     const { participantId, conversationType, relatedEntity } = req.body;
-    console.log(`[chatController] 🔍 getOrCreateConversation. User: ${userId}, Participant: ${participantId}`);
+    console.log(`[chatController] 🔍 getOrCreateConversation. User: ${userId}, Participant: ${participantId}, Type: ${conversationType}, Entity: ${JSON.stringify(relatedEntity)}`);
 
     if (!participantId) {
       res.status(400).json({ message: "participantId is required" });
@@ -106,17 +113,40 @@ const getOrCreateConversation = catchAsync(async (req: Request, res: Response, n
     // Evaluate permissions without failing the request (so the UI can render gracefully)
     const privacyResult = await PrivacyService.canMessage(userId, participantId);
     
-    // Check for existing conversation between these two users
-    let conversation: any = await Conversation.findOne({
-      participants: { $all: [userId, participantId], $size: 2 },
-    })
+    // Build query to find existing conversation
+    let query: any = { participants: { $all: [userId, participantId], $size: 2 } };
+    
+    // If a specific conversation type is requested, match it. 
+    // Otherwise default to finding a direct conversation.
+    if (conversationType && conversationType !== "direct") {
+      query.conversationType = conversationType;
+      if (relatedEntity && relatedEntity.item) {
+        query["relatedEntity.item"] = relatedEntity.item;
+      }
+    } else {
+      query.conversationType = { $in: ["direct", null, undefined] };
+    }
+
+    // Check for existing conversation between these two users matching the type
+    let conversation: any = await Conversation.findOne(query)
       .populate("participants", "name email role profileCompleted profileImage avatar")
       .lean();
 
     if (conversation) {
-      // Reactivate conversation if it was soft-deleted by user
+      // Reactivate conversation if it was soft-deleted by user, and update relatedEntity if needed
+      const updates: any = {};
       if (conversation.deletedFor && conversation.deletedFor.includes(userId)) {
-        await Conversation.findByIdAndUpdate(conversation._id, { $pull: { deletedFor: userId } });
+        updates.$pull = { deletedFor: userId };
+      }
+      
+      // If the frontend passed a newer relatedEntity (like a nice caseId string), save it
+      if (relatedEntity && (relatedEntity.referenceId || (relatedEntity.kind && relatedEntity.kind.includes("_")))) {
+        updates.$set = { relatedEntity };
+        conversation.relatedEntity = relatedEntity;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await Conversation.findByIdAndUpdate(conversation._id, updates);
       }
       // Self-healing check and inject shelter name for NGOs
       const NGOProfile = require("../models/NGOProfile");
@@ -218,6 +248,11 @@ const getMessages = catchAsync(async (req: Request, res: Response, next: NextFun
     };
     if (before) {
       query._id = { $lt: before };
+    }
+    
+    // Only fetch messages created after the user last cleared the chat
+    if (conversation.clearedAt && conversation.clearedAt[userId]) {
+      query.createdAt = { $gt: new Date(conversation.clearedAt[userId]) };
     }
 
     const messages = await Message.find(query)
@@ -502,14 +537,16 @@ const markAsRead = catchAsync(async (req: Request, res: Response, next: NextFunc
 });
 
 // â”€â”€ DELETE /api/chat/conversations/:conversationId â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Soft deletes a conversation for the current user.
 const deleteConversation = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user!.id;
     const { conversationId } = req.params;
 
     const conversation = await Conversation.findOneAndUpdate(
       { _id: conversationId, participants: userId },
-      { $addToSet: { deletedFor: userId } },
+      { 
+        $addToSet: { deletedFor: userId },
+        $set: { [`clearedAt.${userId}`]: new Date() }
+      },
       { new: true }
     );
 

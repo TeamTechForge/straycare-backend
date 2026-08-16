@@ -31,15 +31,30 @@ const reportedUsersRoutes = require("./routes/reportedUsersRoutes");
 const moderationRoutes = require("./routes/moderationRoutes");
 const adminNotificationsRoutes = require("./routes/adminNotificationsRoutes");
 const adminManagementRoutes = require("./routes/adminRoutes");
+const reportedPostsRoutes = require("./routes/reportedPostsRoutes");
 const searchRoutes = require("./routes/searchRoutes");
+const adoptionRoutes = require("./routes/adoptionRoutes");
+const lostFoundRoutes = require("./routes/lostFoundRoutes");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
 
 // List of frontend origins that are allowed to make requests to this server.
 // This prevents random websites from calling our API.
-const allowedOrigins: string[] = [
+const configuredOrigins = [
+  process.env.FRONTEND_ORIGINS,
   process.env.FRONTEND_ORIGIN,
+  process.env.FRONTEND_URL,
+]
+  .filter(Boolean)
+  .flatMap((value) => value!.split(","))
+  .map((origin) => origin.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
+const allowedOrigins: string[] = [
+  ...configuredOrigins,
+  "https://straycareweb.web.app",
+  "https://straycareweb.firebaseapp.com",
   "http://localhost:8081",
   "http://localhost:8082",
   "http://127.0.0.1:8081",
@@ -51,7 +66,7 @@ const allowedOrigins: string[] = [
   "http://192.168.8.161:8082",
   "http://192.168.8.142:8081",
   "http://192.168.8.142:8082",
-].filter(Boolean) as string[];
+];
 
 app.use((req: Request, res: Response, next: NextFunction) => {
   res.setHeader("ngrok-skip-browser-warning", "true");
@@ -110,7 +125,10 @@ app.use("/api/admin", reportedUsersRoutes);
 app.use("/api/moderation", moderationRoutes);
 app.use("/api/admin-notifications", adminNotificationsRoutes);
 app.use("/api/admins", adminManagementRoutes);
+app.use("/api/admin/reported-posts", reportedPostsRoutes);
 app.use("/api/support", require("./routes/supportRoutes"));
+app.use("/api/adoption", adoptionRoutes);
+app.use("/api/animals", lostFoundRoutes);
 
 app.get("/ping", (req: Request, res: Response) => {
   return res.status(200).json({

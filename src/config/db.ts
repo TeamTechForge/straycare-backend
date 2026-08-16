@@ -28,7 +28,7 @@ const connectDB = async (): Promise<void> => {
   }
 
   try {
-    Logger.info(`Connecting to MongoDB at ${mongoURI}...`, { service: "Database" });
+    Logger.info("Connecting to configured MongoDB database...", { service: "Database" });
     await mongoose.connect(mongoURI, {
       serverSelectionTimeoutMS: 5000, // 5s timeout to trigger fallback quickly if offline
       socketTimeoutMS: 45000,
@@ -52,7 +52,7 @@ const startMemoryServer = async (): Promise<void> => {
     });
     const memoryURI = mongod.getUri();
     Logger.info(`In-memory MongoDB Server started at: ${memoryURI}`, { service: "Database" });
-    
+
     // Override the environment variable so other components (like GridFS) use the correct URI
     process.env.MONGO_URI = memoryURI;
 

@@ -1,7 +1,8 @@
 import { catchAsync } from "../utils/catchAsync";
 import type { NextFunction } from "express";
+const crypto = require("crypto");
 const Admin = require("../models/Admin");
-const { sendPasswordResetEmail } = require("../utils/emailService");
+const { sendAdminPasswordResetCodeEmail } = require("../utils/emailService");
 
 import { JwtService } from "../services/jwtService";
 import { PasswordService } from "../services/passwordService";
@@ -36,44 +37,43 @@ exports.forgotPassword = catchAsync(async (req: Request, res: Response, next: Ne
     const admin = await Admin.findOne({ email });
 
     if (!admin) {
-      res.json({ message: "If this email exists, a reset link has been sent." });
+      res.json({ message: "If this email exists, a 6-digit reset code has been sent." });
       return;
     }
 
-    const token = JwtService.generateToken({ email }, "1h");
-    admin.resetToken = token;
-    admin.resetTokenExpiry = new Date(Date.now() + 3600000);
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedCode = crypto.createHash('sha256').update(resetCode).digest('hex');
+
+    admin.resetToken = hashedCode;
+    admin.resetTokenExpiry = new Date(Date.now() + 900000); // 15 mins
     await admin.save();
 
-    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-    await sendPasswordResetEmail(email, resetLink);
+    try {
+      await sendAdminPasswordResetCodeEmail(admin.email, resetCode);
+    } catch (err) {
+      console.error("Error sending admin reset email:", err);
+    }
 
-    res.json({ message: "If this email exists, a reset link has been sent." });
+    res.json({ message: "If this email exists, a 6-digit reset code has been sent." });
   });;
 
 exports.resetPassword = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { token, newPassword } = req.body;
 
     if (!token || !newPassword) {
-      res.status(400).json({ error: "Token and new password are required" });
+      res.status(400).json({ error: "Reset code and new password are required" });
       return;
     }
 
-    let decoded: any;
-    try {
-      decoded = JwtService.verifyToken(token);
-    } catch (err) {
-      res.status(400).json({ error: "Invalid or expired token" });
-      return;
-    }
+    const hashedCode = crypto.createHash('sha256').update(token).digest('hex');
 
     const admin = await Admin.findOne({
-      resetToken: token,
+      resetToken: hashedCode,
       resetTokenExpiry: { $gt: new Date() },
     });
 
     if (!admin) {
-      res.status(400).json({ error: "Invalid or expired token" });
+      res.status(400).json({ error: "Invalid or expired reset code" });
       return;
     }
 
