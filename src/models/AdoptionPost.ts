@@ -54,4 +54,5 @@ const AdoptionPostSchema = new Schema<IAdoptionPost>(
 );
 
 // Explicitly bind to "Adoptionposts" collection in MongoDB
-export default mongoose.model<IAdoptionPost>("AdoptionPost", AdoptionPostSchema, "Adoptionposts");
+export default mongoose.models.AdoptionPost ||
+  mongoose.model<IAdoptionPost>("AdoptionPost", AdoptionPostSchema, "Adoptionposts");

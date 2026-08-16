@@ -6,6 +6,9 @@ const VolunteerProfile = require("../models/VolunteerProfile");
 const VetProfile = require("../models/VetProfile");
 const NGOProfile = require("../models/NGOProfile");
 const ForumPost = require("../models/ForumPost");
+const CommunityPost = require("../models/communityPost").default || require("../models/communityPost");
+const CommunityLike = require("../models/CommunityLike").default || require("../models/CommunityLike");
+const CommunityComment = require("../models/CommunityComment").default || require("../models/CommunityComment");
 const StrayReport = require("../models/StrayReport");
 const RescueHistory = require("../models/RescueHistory");
 const RescueRequest = require("../models/RescueRequest");
@@ -138,9 +141,58 @@ exports.toggleBlockUser = catchAsync(async (req: Request, res: Response, next: N
 // Fetch user's posts
 exports.getUserPosts = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { userId } = req.params;
-    const posts = await ForumPost.find({ userId }).sort({ createdAt: -1 });
-    res.status(200).json(posts);
-  });;
+
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId as string)) {
+        res.status(400).json({ message: "Invalid user ID format" });
+        return;
+    }
+
+    const [forumPosts, communityPosts] = await Promise.all([
+        ForumPost.find({ userId }).sort({ createdAt: -1 }).lean(),
+        CommunityPost.find({ authorUserId: userId }).sort({ submittedAt: -1, createdAt: -1 }).lean(),
+    ]);
+
+    const formattedCommunityPosts = await Promise.all(
+        communityPosts.map(async (p: any) => {
+            const [likeCount, commentCount] = await Promise.all([
+                CommunityLike.countDocuments({ postId: p._id }),
+                CommunityComment.countDocuments({ postId: p._id }),
+            ]);
+
+            return {
+                _id: String(p._id),
+                title: p.title || "Community Post",
+                tag: p.category || "Community",
+                author: p.username || "User",
+                imageUrl: p.imageUrl || null,
+                likes: likeCount,
+                likeCount: likeCount,
+                comments: commentCount,
+                commentCount: commentCount,
+                createdAt: p.submittedAt || p.createdAt,
+            };
+        })
+    );
+
+    const formattedForumPosts = forumPosts.map((p: any) => ({
+        _id: String(p._id),
+        title: p.title || "Forum Post",
+        tag: p.tag || "General",
+        author: p.author || "User",
+        imageUrl: p.imageUrl || null,
+        likes: p.likes || 0,
+        likeCount: p.likes || 0,
+        comments: p.commentCount || 0,
+        commentCount: p.commentCount || 0,
+        createdAt: p.createdAt,
+    }));
+
+    const combinedPosts = [...formattedCommunityPosts, ...formattedForumPosts].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    res.status(200).json(combinedPosts);
+  });
 
 // Fetch user's reports (public reports only, or all if requesting user is self)
 exports.getUserReports = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {

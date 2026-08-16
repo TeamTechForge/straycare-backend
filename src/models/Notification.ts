@@ -66,4 +66,4 @@ notificationSchema.index(
   }
 );
 
-module.exports = mongoose.model<INotification>("Notification", notificationSchema);
+module.exports = mongoose.models.Notification || mongoose.model<INotification>("Notification", notificationSchema);

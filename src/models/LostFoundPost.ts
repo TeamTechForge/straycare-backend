@@ -90,7 +90,8 @@ const LostFoundPostSchema = new Schema<ILostFoundPost>(
 
 LostFoundPostSchema.index({ status: 1, createdAt: -1 });
 
-export default mongoose.model<ILostFoundPost>(
-  "LostFoundPost",
-  LostFoundPostSchema
-);
+export default mongoose.models.LostFoundPost ||
+  mongoose.model<ILostFoundPost>(
+    "LostFoundPost",
+    LostFoundPostSchema
+  );

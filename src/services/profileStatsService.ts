@@ -3,6 +3,7 @@ const VolunteerProfile = require("../models/VolunteerProfile");
 const VetProfile = require("../models/VetProfile");
 const NGOProfile = require("../models/NGOProfile");
 const ForumPost = require("../models/ForumPost");
+const CommunityPost = require("../models/CommunityPost").default || require("../models/CommunityPost");
 const StrayReport = require("../models/StrayReport");
 const RescueHistory = require("../models/RescueHistory");
 const RescueRequest = require("../models/RescueRequest");
@@ -180,7 +181,11 @@ export class ProfileStatsService {
    * @returns A promise resolving to the user's profile data and their aggregated app statistics.
    */
   public static async getProfileAndStats(userId: string, role: string, isSelf = false): Promise<ProfileResult> {
-    const postCount = await ForumPost.countDocuments({ userId });
+    const [forumCount, communityCount] = await Promise.all([
+      ForumPost.countDocuments({ userId }),
+      CommunityPost.countDocuments({ authorUserId: userId }),
+    ]);
+    const postCount = forumCount + communityCount;
     
     let result: ProfileResult = { profileData: {}, stats: {} };
     
