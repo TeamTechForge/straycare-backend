@@ -14,15 +14,19 @@ interface ProfileResult {
   stats: any;
 }
 
-type ProfileStrategy = (userId: string) => Promise<ProfileResult>;
+type ProfileStrategy = (userId: string, isSelf?: boolean) => Promise<ProfileResult>;
 
 export class ProfileStatsService {
   private static readonly strategies: Record<string, ProfileStrategy> = {
-    general_user: async (userId: string) => {
+    general_user: async (userId: string, isSelf = false) => {
       const generalProfile: any = await GeneralUserProfile.findOne({ userId }).lean() || {};
-      const reportCount = await StrayReport.countDocuments({
+      const reportQuery: any = {
         $or: [{ reporterUserId: userId }, { userId: userId }]
-      });
+      };
+      if (!isSelf) {
+        reportQuery.anonymous = false;
+      }
+      const reportCount = await StrayReport.countDocuments(reportQuery);
       return {
         profileData: {
           location: generalProfile.location || "",
@@ -32,14 +36,18 @@ export class ProfileStatsService {
         stats: { reportsCount: reportCount }
       };
     },
-    volunteer: async (userId: string) => {
+    volunteer: async (userId: string, isSelf = false) => {
       const volunteerProfile: any = await VolunteerProfile.findOne({ userId }).lean() || {};
       const rescuer = await Rescuer.findOne({ userId });
       const rescuerIdQuery = rescuer ? rescuer._id : userId;
 
-      const reportCount = await StrayReport.countDocuments({
+      const reportQuery: any = {
         $or: [{ reporterUserId: userId }, { userId: userId }]
-      });
+      };
+      if (!isSelf) {
+        reportQuery.anonymous = false;
+      }
+      const reportCount = await StrayReport.countDocuments(reportQuery);
       const totalRescues = await RescueHistory.countDocuments({ 
         $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
       });
@@ -67,14 +75,18 @@ export class ProfileStatsService {
         }
       };
     },
-    vet: async (userId: string) => {
+    vet: async (userId: string, isSelf = false) => {
       const vetProfile: any = await VetProfile.findOne({ userId }).lean() || {};
       const rescuer = await Rescuer.findOne({ userId });
       const rescuerIdQuery = rescuer ? rescuer._id : userId;
 
-      const reportCount = await StrayReport.countDocuments({
+      const reportQuery: any = {
         $or: [{ reporterUserId: userId }, { userId: userId }]
-      });
+      };
+      if (!isSelf) {
+        reportQuery.anonymous = false;
+      }
+      const reportCount = await StrayReport.countDocuments(reportQuery);
       const totalRescues = await RescueHistory.countDocuments({ 
         $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
       });
@@ -110,14 +122,18 @@ export class ProfileStatsService {
         }
       };
     },
-    ngo: async (userId: string) => {
+    ngo: async (userId: string, isSelf = false) => {
       const ngoProfile: any = await NGOProfile.findOne({ userId }).lean() || {};
       const rescuer = await Rescuer.findOne({ userId });
       const rescuerIdQuery = rescuer ? rescuer._id : userId;
 
-      const reportCount = await StrayReport.countDocuments({
+      const reportQuery: any = {
         $or: [{ reporterUserId: userId }, { userId: userId }]
-      });
+      };
+      if (!isSelf) {
+        reportQuery.anonymous = false;
+      }
+      const reportCount = await StrayReport.countDocuments(reportQuery);
       const totalRescues = await RescueHistory.countDocuments({ 
         $or: [{ rescuerId: userId }, { rescuerId: String(rescuerIdQuery) }]
       });
@@ -160,16 +176,17 @@ export class ProfileStatsService {
    * 
    * @param userId - The MongoDB ObjectId of the user.
    * @param role - The string representation of the user's role (e.g., 'general_user', 'vet').
+   * @param isSelf - Whether the requesting user is viewing their own profile.
    * @returns A promise resolving to the user's profile data and their aggregated app statistics.
    */
-  public static async getProfileAndStats(userId: string, role: string): Promise<ProfileResult> {
+  public static async getProfileAndStats(userId: string, role: string, isSelf = false): Promise<ProfileResult> {
     const postCount = await ForumPost.countDocuments({ userId });
     
     let result: ProfileResult = { profileData: {}, stats: {} };
     
     const strategy = this.strategies[role];
     if (strategy) {
-      result = await strategy(userId);
+      result = await strategy(userId, isSelf);
     }
     
     result.stats.postsCount = postCount;

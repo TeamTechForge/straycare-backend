@@ -34,7 +34,8 @@ exports.getPublicProfile = catchAsync(async (req: Request, res: Response, next: 
       return;
     }
 
-    const { profileData, stats } = await ProfileStatsService.getProfileAndStats(userId as string, user.role);
+    const isSelf = String(currentUserId) === String(userId);
+    const { profileData, stats } = await ProfileStatsService.getProfileAndStats(userId as string, user.role, isSelf);
     
     const messagePermission = await PrivacyService.canMessage(currentUserId, userId as string);
     const callPermission = await PrivacyService.canCall(currentUserId, userId as string);
