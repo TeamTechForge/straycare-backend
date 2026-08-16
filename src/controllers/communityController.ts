@@ -5,6 +5,7 @@ import CommunityPost from "../models/communityPost";
 import CommunityReport from "../models/CommunityReport";
 import CommunityLike from "../models/CommunityLike";
 import CommunityComment from "../models/CommunityComment";
+import SavedCommunityPost from "../models/SavedCommunityPost";
 import User from "../models/User";
 const Notification = require("../models/Notification");
 const GeneralUserProfile = require("../models/GeneralUserProfile");
@@ -59,11 +60,14 @@ const serializePost = async (post: any, currentUserId?: string) => {
     const authorId = plain.authorUserId ? String(plain.authorUserId) : null;
     const author = await getAuthorDetails(plain.authorUserId);
 
-    const [likeCount, commentCount, isLiked] = await Promise.all([
+    const [likeCount, commentCount, isLiked, isSaved] = await Promise.all([
         CommunityLike.countDocuments({ postId: plain._id }),
         CommunityComment.countDocuments({ postId: plain._id }),
         currentUserId
             ? CommunityLike.exists({ postId: plain._id, userId: currentUserId })
+            : Promise.resolve(null),
+        currentUserId
+            ? SavedCommunityPost.exists({ postId: plain._id, userId: currentUserId })
             : Promise.resolve(null),
     ]);
 
@@ -77,9 +81,76 @@ const serializePost = async (post: any, currentUserId?: string) => {
         likeCount,
         commentCount,
         isLiked: Boolean(isLiked),
-        isSaved: false,
+        isSaved: Boolean(isSaved),
         isOwner: Boolean(currentUserId && authorId === currentUserId),
     };
+};
+
+const getAuthenticatedUserId = (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+        res.status(401).json({ success: false, message: "Authentication required" });
+        return null;
+    }
+    return userId;
+};
+
+export const getMyCommunityPosts = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = getAuthenticatedUserId(req, res);
+        if (!userId) return;
+        const posts = await CommunityPost.find({ authorUserId: userId }).sort({ submittedAt: -1 });
+        res.status(200).json({ success: true, data: await Promise.all(posts.map((post) => serializePost(post, userId))) });
+    } catch (error) {
+        console.error("Get my community posts error:", error);
+        res.status(500).json({ success: false, message: "Failed to fetch your posts" });
+    }
+};
+
+export const getSavedCommunityPosts = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = getAuthenticatedUserId(req, res);
+        if (!userId) return;
+        const saved = await SavedCommunityPost.find({ userId }).sort({ createdAt: -1 }).lean();
+        const postIds = saved.map((item: any) => item.postId);
+        const posts = await CommunityPost.find({ _id: { $in: postIds } });
+        const byId = new Map(posts.map((post) => [String(post._id), post]));
+        const orderedPosts = postIds.map((postId: any) => byId.get(String(postId))).filter(Boolean);
+        res.status(200).json({ success: true, data: await Promise.all(orderedPosts.map((post) => serializePost(post, userId))) });
+    } catch (error) {
+        console.error("Get saved community posts error:", error);
+        res.status(500).json({ success: false, message: "Failed to fetch saved posts" });
+    }
+};
+
+export const saveCommunityPost = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const context = await getValidatedPostAndUser(req, res);
+        if (!context) return;
+        const { postId, userId } = context;
+        await SavedCommunityPost.updateOne(
+            { postId, userId },
+            { $setOnInsert: { postId, userId } },
+            { upsert: true }
+        );
+        res.status(200).json({ success: true, data: { postId, isSaved: true } });
+    } catch (error) {
+        console.error("Save community post error:", error);
+        res.status(500).json({ success: false, message: "Failed to save community post" });
+    }
+};
+
+export const unsaveCommunityPost = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const context = await getValidatedPostAndUser(req, res);
+        if (!context) return;
+        const { postId, userId } = context;
+        await SavedCommunityPost.deleteOne({ postId, userId });
+        res.status(200).json({ success: true, data: { postId, isSaved: false } });
+    } catch (error) {
+        console.error("Unsave community post error:", error);
+        res.status(500).json({ success: false, message: "Failed to remove saved post" });
+    }
 };
 
 const serializeComment = async (comment: any) => {
