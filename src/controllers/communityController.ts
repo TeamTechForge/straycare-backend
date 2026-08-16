@@ -344,8 +344,8 @@ export const deleteCommunityComment = async (req: Request, res: Response): Promi
         if (
             typeof postId !== "string" ||
             typeof commentId !== "string" ||
-            !mongoose.Types.ObjectId.isValid(postId) ||
-            !mongoose.Types.ObjectId.isValid(commentId)
+            !mongoose.Types.ObjectId.isValid(postId as string) ||
+            !mongoose.Types.ObjectId.isValid(commentId as string)
         ) {
             res.status(400).json({ success: false, message: "Invalid post or comment ID" });
             return;

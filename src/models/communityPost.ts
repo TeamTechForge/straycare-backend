@@ -82,12 +82,5 @@ const communityPostSchema =
     );
 
 // ─────────────────────────────────────────────
-const CommunityPost =
-    mongoose.models.CommunityPost ||
-    mongoose.model<ICommunityPost>(
-        "CommunityPost",
-        communityPostSchema
-    );
-
-export default CommunityPost;
+export default mongoose.models.CommunityPost || mongoose.model<ICommunityPost>("CommunityPost", communityPostSchema);
 
