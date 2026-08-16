@@ -9,6 +9,8 @@ import mongoose, {
 
 export interface ICommunityPost
     extends Document {
+    authorUserId?: mongoose.Types.ObjectId;
+
     title: string;
 
     category: string;
@@ -17,7 +19,7 @@ export interface ICommunityPost
 
     imageUrl: string | null;
 
-    authorName: string;
+    authorName?: string;
 
     submittedAt: Date;
 
@@ -33,6 +35,12 @@ export interface ICommunityPost
 const communityPostSchema =
     new Schema<ICommunityPost>(
         {
+            authorUserId: {
+                type: Schema.Types.ObjectId,
+                ref: "User",
+                index: true,
+            },
+
             title: {
                 type: String,
                 required: true,
@@ -59,7 +67,6 @@ const communityPostSchema =
 
             authorName: {
                 type: String,
-                required: true,
                 trim: true,
             },
 
