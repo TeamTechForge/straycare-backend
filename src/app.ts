@@ -31,9 +31,14 @@ const reportedUsersRoutes = require("./routes/reportedUsersRoutes");
 const moderationRoutes = require("./routes/moderationRoutes");
 const adminNotificationsRoutes = require("./routes/adminNotificationsRoutes");
 const adminManagementRoutes = require("./routes/adminRoutes");
+const reportedPostsRoutes = require("./routes/reportedPostsRoutes");
 const searchRoutes = require("./routes/searchRoutes");
 const adoptionRoutes = require("./routes/adoptionRoutes");
 const lostFoundRoutes = require("./routes/lostFoundRoutes");
+const communityRoutes = require("./routes/communityRoutes");
+
+
+
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -124,9 +129,11 @@ app.use("/api/admin", reportedUsersRoutes);
 app.use("/api/moderation", moderationRoutes);
 app.use("/api/admin-notifications", adminNotificationsRoutes);
 app.use("/api/admins", adminManagementRoutes);
+app.use("/api/admin/reported-posts", reportedPostsRoutes);
 app.use("/api/support", require("./routes/supportRoutes"));
 app.use("/api/adoption", adoptionRoutes);
 app.use("/api/animals", lostFoundRoutes);
+app.use("/api/community", communityRoutes);
 
 app.get("/ping", (req: Request, res: Response) => {
   return res.status(200).json({

@@ -151,9 +151,9 @@ const getMyProfile = catchAsync(async (req: Request, res: Response, next: NextFu
   } else if (role === "volunteer") {
     profile = await VolunteerProfile.findOne({ userId });
   } else if (role === "ngo") {
-    profile = await NGOProfile.findOne({ userId });
+    profile = await NGOProfile.findOne({ userId }).select("+payHereAppId +payHereAppSecret");
   } else if (role === "vet") {
-    profile = await VetProfile.findOne({ userId });
+    profile = await VetProfile.findOne({ userId }).select("+payHereAppId +payHereAppSecret");
   }
 
   if (!profile) {
@@ -161,7 +161,16 @@ const getMyProfile = catchAsync(async (req: Request, res: Response, next: NextFu
     return;
   }
 
-  res.status(200).json(profile);
+  const safeProfile: any = typeof profile.toObject === "function" ? profile.toObject() : { ...profile };
+  if (role === "ngo" || role === "vet") {
+    safeProfile.recurringPaymentsEnabled = Boolean(
+      safeProfile.payHereAppId && safeProfile.payHereAppSecret
+    );
+    delete safeProfile.payHereAppId;
+    delete safeProfile.payHereAppSecret;
+  }
+
+  res.status(200).json(safeProfile);
 });
 
 const updateGeneralProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -210,11 +219,15 @@ const updateVolunteerProfile = catchAsync(async (req: Request, res: Response, ne
 
 const updateNGOProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const userId = req.user!.id;
-  const { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret } = req.body;
+  const { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret, payHereAppId, payHereAppSecret } = req.body;
+
+  const ngoUpdates: any = { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret };
+  if (payHereAppId) ngoUpdates.payHereAppId = String(payHereAppId).trim();
+  if (payHereAppSecret) ngoUpdates.payHereAppSecret = String(payHereAppSecret).trim();
 
   const profile = await NGOProfile.findOneAndUpdate(
     { userId },
-    { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret },
+    ngoUpdates,
     { new: true, runValidators: true, upsert: true }
   );
 
@@ -230,11 +243,15 @@ const updateNGOProfile = catchAsync(async (req: Request, res: Response, next: Ne
 
 const updateVetProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const userId = req.user!.id;
-  const { name, primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret } = req.body;
+  const { name, primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret, payHereAppId, payHereAppSecret } = req.body;
+
+  const vetUpdates: any = { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret };
+  if (payHereAppId) vetUpdates.payHereAppId = String(payHereAppId).trim();
+  if (payHereAppSecret) vetUpdates.payHereAppSecret = String(payHereAppSecret).trim();
 
   const profile = await VetProfile.findOneAndUpdate(
     { userId },
-    { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret },
+    vetUpdates,
     { new: true, runValidators: true, upsert: true }
   );
 

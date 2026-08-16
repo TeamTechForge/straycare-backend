@@ -214,96 +214,95 @@ const buildReportPayload = (
 
 //  1. CREATE REPORT
 exports.createReport = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const { reportPayload, categoryValidation } = buildReportPayload(req);
-    console.log("[STRAY][POST] Creating report with payload:", { caseId: reportPayload.caseId, animalType: reportPayload.animalType, location: reportPayload.location });
+  const { reportPayload, categoryValidation } = buildReportPayload(req);
+  console.log("[STRAY][POST] Creating report with payload:", { caseId: reportPayload.caseId, animalType: reportPayload.animalType, location: reportPayload.location });
 
-    const validationErrors: Record<string, string> = {};
-    if (!reportPayload.animalType || reportPayload.animalType.toLowerCase() === "other") {
-      validationErrors.animalType = "Enter a specific animal type.";
-    } else if (reportPayload.animalType.length > 50) {
-      validationErrors.animalType = "Animal type must be 50 characters or fewer.";
-    }
-    if (String(reportPayload.breed || "").length > 60) {
-      validationErrors.breed = "Breed must be 60 characters or fewer.";
-    }
-    if (String(reportPayload.notes || "").length > 500) {
-      validationErrors.notes = "Condition notes must be 500 characters or fewer.";
-    }
-    if (categoryValidation.invalidCategories.length > 0) {
-      validationErrors.categories = "Categories may only be Injured, Abandoned, or Aggressive.";
-    } else if (categoryValidation.hasDuplicates) {
-      validationErrors.categories = "Categories must not contain duplicates.";
-    } else if (reportPayload.categories.length < 1 || reportPayload.categories.length > 3) {
-      validationErrors.categories = "Select between 1 and 3 categories.";
-    }
-    if (reportPayload.photos.length < 1 || reportPayload.photos.length > 5) {
-      validationErrors.photos = "Add between 1 and 5 photos.";
-    }
-    if (
-      !reportPayload.location ||
-      !Number.isFinite(reportPayload.location.lat) ||
-      reportPayload.location.lat < -90 ||
-      reportPayload.location.lat > 90 ||
-      !Number.isFinite(reportPayload.location.lng) ||
-      reportPayload.location.lng < -180 ||
-      reportPayload.location.lng > 180
-    ) {
-      validationErrors.location = "A valid location with latitude and longitude is required.";
-    }
+  const validationErrors: Record<string, string> = {};
+  if (!reportPayload.animalType || reportPayload.animalType.toLowerCase() === "other") {
+    validationErrors.animalType = "Enter a specific animal type.";
+  } else if (reportPayload.animalType.length > 50) {
+    validationErrors.animalType = "Animal type must be 50 characters or fewer.";
+  }
+  if (String(reportPayload.breed || "").length > 60) {
+    validationErrors.breed = "Breed must be 60 characters or fewer.";
+  }
+  if (String(reportPayload.notes || "").length > 500) {
+    validationErrors.notes = "Condition notes must be 500 characters or fewer.";
+  }
+  if (categoryValidation.invalidCategories.length > 0) {
+    validationErrors.categories = "Categories may only be Injured, Abandoned, or Aggressive.";
+  } else if (categoryValidation.hasDuplicates) {
+    validationErrors.categories = "Categories must not contain duplicates.";
+  } else if (reportPayload.categories.length < 1 || reportPayload.categories.length > 3) {
+    validationErrors.categories = "Select between 1 and 3 categories.";
+  }
+  if (reportPayload.photos.length < 1 || reportPayload.photos.length > 5) {
+    validationErrors.photos = "Add between 1 and 5 photos.";
+  }
+  if (
+    !reportPayload.location ||
+    !Number.isFinite(reportPayload.location.lat) ||
+    reportPayload.location.lat < -90 ||
+    reportPayload.location.lat > 90 ||
+    !Number.isFinite(reportPayload.location.lng) ||
+    reportPayload.location.lng < -180 ||
+    reportPayload.location.lng > 180
+  ) {
+    validationErrors.location = "A valid location with latitude and longitude is required.";
+  }
 
-    if (Object.keys(validationErrors).length > 0) {
-      console.warn("[STRAY][VALIDATION] Report payload rejected:", {
-        caseId: reportPayload.caseId,
-        fields: Object.keys(validationErrors),
-      });
-      res.status(400).json({
-        message: "Please correct the invalid report fields.",
-        errors: validationErrors,
-      });
-      return;
-    }
+  if (Object.keys(validationErrors).length > 0) {
+    console.warn("[STRAY][VALIDATION] Report payload rejected:", {
+      caseId: reportPayload.caseId,
+      fields: Object.keys(validationErrors),
+    });
+    res.status(400).json({
+      message: "Please correct the invalid report fields.",
+      errors: validationErrors,
+    });
+    return;
+  }
 
-    const initialReporter =
-      !reportPayload.anonymous && req.user?.id
-        ? await require("../models/User").findById(req.user.id).select("name")
-        : null;
+  const initialReporter =
+    !reportPayload.anonymous && req.user?.id
+      ? await require("../models/User").findById(req.user.id).select("name")
+      : null;
 
-    // The report is immediately visible on the map as Needs Help.
-    reportPayload.timeline = [
-      {
-        status: reportPayload.status,
-        message: `Case reported by ${
-          reportPayload.anonymous ? "Anonymous" : initialReporter?.name || "Reporter"
+  // The report is immediately visible on the map as Needs Help.
+  reportPayload.timeline = [
+    {
+      status: reportPayload.status,
+      message: `Case reported by ${reportPayload.anonymous ? "Anonymous" : initialReporter?.name || "Reporter"
         }`,
-        timestamp: new Date(),
-      },
-    ];
+      timestamp: new Date(),
+    },
+  ];
 
-    try {
-      const newReport = await StrayReport.create(reportPayload);
-      console.log("[STRAY][SUCCESS] Report created:", newReport._id);
+  try {
+    const newReport = await StrayReport.create(reportPayload);
+    console.log("[STRAY][SUCCESS] Report created:", newReport._id);
 
-      // ────────────────────────────────────────────────────────
-      // AUTOMATIC NEAREST RESCUER LOOKUP & REQUEST
-      // ────────────────────────────────────────────────────────
-      let rescueRequest = null;
-      if (req.body.preventAutoMatch !== true) {
-        try {
-          const { RescueService } = require("../services/rescueService");
-          const User = require("../models/User");
-          
-          const reporterUser =
-            !reportPayload.anonymous && req.user
-              ? await User.findById(req.user.id)
-              : null;
-          
-          console.log(`[STRAY] Attempting automatic rescuer matching within 5km for report ${newReport.caseId}`);
-          const nearestResult = await RescueService.findNearestRescuer({
-            latitude: newReport.location.lat,
-            longitude: newReport.location.lng,
-            caseId: newReport.caseId,
-            maxDistanceKm: 5,
-          });
+    // ────────────────────────────────────────────────────────
+    // AUTOMATIC NEAREST RESCUER LOOKUP & REQUEST
+    // ────────────────────────────────────────────────────────
+    let rescueRequest = null;
+    if (req.body.preventAutoMatch !== true) {
+      try {
+        const { RescueService } = require("../services/rescueService");
+        const User = require("../models/User");
+
+        const reporterUser =
+          !reportPayload.anonymous && req.user
+            ? await User.findById(req.user.id)
+            : null;
+
+        console.log(`[STRAY] Attempting automatic rescuer matching within 5km for report ${newReport.caseId}`);
+        const nearestResult = await RescueService.findNearestRescuer({
+          latitude: newReport.location.lat,
+          longitude: newReport.location.lng,
+          caseId: newReport.caseId,
+          maxDistanceKm: 5,
+        });
 
         if (nearestResult) {
           const distanceKm = Number(nearestResult.distance);
@@ -342,110 +341,124 @@ exports.createReport = catchAsync(async (req: Request, res: Response, next: Next
       }
     }
 
-      res.status(201).json({
-        message: "Report submitted successfully",
-        request: newReport,
-        rescueRequest,
+    res.status(201).json({
+      message: "Report submitted successfully",
+      request: newReport,
+      rescueRequest,
+    });
+  } catch (error: any) {
+    // Handle duplicate key error (E11000)
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      console.warn(`[STRAY][DUPLICATE] Duplicate ${field}:`, error.keyValue);
+      res.status(409).json({
+        message: `A report with this ${field} already exists. Please refresh and try again.`,
+        code: "DUPLICATE_KEY",
+        field: field,
       });
-    } catch (error: any) {
-      // Handle duplicate key error (E11000)
-      if (error.code === 11000) {
-        const field = Object.keys(error.keyPattern)[0];
-        console.warn(`[STRAY][DUPLICATE] Duplicate ${field}:`, error.keyValue);
-        res.status(409).json({
-          message: `A report with this ${field} already exists. Please refresh and try again.`,
-          code: "DUPLICATE_KEY",
-          field: field,
-        });
-        return;
-      }
-      // Re-throw other errors to be handled by global error handler
-      throw error;
+      return;
     }
-  });;
+    // Re-throw other errors to be handled by global error handler
+    throw error;
+  }
+});;
 
 // 2. GET REPORT BY CASE ID. Return only fields that are safe for case viewers.
 exports.getReportByCaseId = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const report: any = await StrayReport.findOne({ caseId: req.params.caseId });
+  const report: any = await StrayReport.findOne({ caseId: req.params.caseId });
 
-    if (!report) {
-      res.status(404).json({ message: "Report not found" });
-      return;
-    }
+  if (!report) {
+    res.status(404).json({ message: "Report not found" });
+    return;
+  }
 
-    let reporterName: string | undefined;
-    if (!report.anonymous && report.reporterUserId) {
-      const User = require("../models/User");
-      try {
-        const reporter = await User.findById(report.reporterUserId).select("name");
-        if (reporter) {
-          reporterName = reporter.name;
-        }
-      } catch (err) {
-        console.warn(`[STRAY] Could not populate reporter for case ${report.caseId}:`, err);
-      }
-    }
-
-    // Populate assigned rescuer user ID if active rescue request exists
+  let reporterName: string | undefined;
+  if (!report.anonymous && report.reporterUserId) {
+    const User = require("../models/User");
     try {
-      const RescueRequest = require("../models/RescueRequest");
-      const Rescuer = require("../models/Rescuer");
-
-      const activeRequest = await RescueRequest.findOne({
-        caseId: req.params.caseId,
-        status: { $in: ["accepted", "under rescue", "Under Rescue", "completed", "treated", "ready for adoption"] },
-      });
-
-      if (activeRequest && activeRequest.rescuerId) {
-        let rescuerUserId = String(activeRequest.rescuerId);
-        const rescuerDoc = await Rescuer.findById(activeRequest.rescuerId);
-        if (rescuerDoc && rescuerDoc.userId) {
-          rescuerUserId = String(rescuerDoc.userId);
-        }
-        report._doc.assignedRescuerUserId = rescuerUserId;
+      const reporter = await User.findById(report.reporterUserId).select("name");
+      if (reporter) {
+        reporterName = reporter.name;
       }
     } catch (err) {
-      console.warn(`[STRAY] Could not populate assigned rescuer for case ${report.caseId}:`, err);
+      console.warn(`[STRAY] Could not populate reporter for case ${report.caseId}:`, err);
     }
+  }
 
-    let permissions = { canAccept: false, canUpdate: false };
-    if (req.user?.id) {
-      const User = require("../models/User");
-      const Rescuer = require("../models/Rescuer");
-      const currentUser = await User.findById(req.user.id).select("role");
-      const canRescue = RESCUER_ROLES.includes(currentUser?.role);
-      if (canRescue) {
-        const rescuer = await Rescuer.findOne({ userId: req.user.id }).select("_id");
-        permissions = {
-          canAccept: Boolean(report.status === "Needs Help" && !report.assignedRescuerId),
-          canUpdate: Boolean(rescuer && report.assignedRescuerId && String(report.assignedRescuerId) === String(rescuer._id)),
-        };
+  // Populate assigned rescuer user ID if active rescue request exists
+  let activeRequest: any = null;
+  try {
+    const RescueRequest = require("../models/RescueRequest");
+    const Rescuer = require("../models/Rescuer");
+
+    activeRequest = await RescueRequest.findOne({
+      caseId: req.params.caseId,
+      status: { $in: ["accepted", "under rescue", "Under Rescue", "completed", "treated", "ready for adoption"] },
+    });
+
+    if (activeRequest && activeRequest.rescuerId) {
+      let rescuerUserId = String(activeRequest.rescuerId);
+      const rescuerDoc = await Rescuer.findById(activeRequest.rescuerId);
+      if (rescuerDoc && rescuerDoc.userId) {
+        rescuerUserId = String(rescuerDoc.userId);
       }
+      report._doc.assignedRescuerUserId = rescuerUserId;
     }
+  } catch (err) {
+    console.warn(`[STRAY] Could not populate assigned rescuer for case ${report.caseId}:`, err);
+  }
 
-    res.json(toSafeReport(report, reporterName, permissions));
-  });;
+  let permissions = { canAccept: false, canUpdate: false };
+  if (req.user?.id) {
+    const User = require("../models/User");
+    const Rescuer = require("../models/Rescuer");
+    const currentUser = await User.findById(req.user.id).select("role");
+    const canRescue = RESCUER_ROLES.includes(currentUser?.role);
+    if (canRescue) {
+      const rescuer = await Rescuer.findOne({ userId: req.user.id }).select("_id");
+      const rescuerDocId = rescuer ? String(rescuer._id) : "";
+      const currentUserId = String(req.user.id);
+
+      const reportAssignedId = report.assignedRescuerId ? String(report.assignedRescuerId) : "";
+      const requestRescuerId = activeRequest?.rescuerId ? String(activeRequest.rescuerId) : "";
+
+      const isAssignedRescuer = Boolean(
+        (reportAssignedId && (reportAssignedId === rescuerDocId || reportAssignedId === currentUserId)) ||
+        (requestRescuerId && (requestRescuerId === rescuerDocId || requestRescuerId === currentUserId))
+      );
+
+      const hasAssignedRescuer = Boolean(report.assignedRescuerId || (activeRequest && activeRequest.rescuerId));
+
+      permissions = {
+        canAccept: Boolean(report.status === "Needs Help" && !hasAssignedRescuer),
+        canUpdate: isAssignedRescuer,
+      };
+    }
+  }
+
+  res.json(toSafeReport(report, reporterName, permissions));
+});;
 
 // 3. GET ALL REPORTS
 exports.getAllReports = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    // The map reflects the report's persisted status. A pending rescuer
-    // assignment must not hide a newly committed "Needs Help" report.
-    const reports = await StrayReport.find({}, {
-      status: 1,
-      location: 1,
-      caseId: 1,
-      animalType: 1,
-      anonymous: 1,
-      description: 1,
-      breed: 1,
-      category: 1,
-      categories: 1,
-      photos: 1,
-      createdAt: 1
-    });
-    console.log("[STRAY][GET] Fetched all reports:", reports.length);
-    res.json(reports);
-  });;
+  // The map reflects the report's persisted status. A pending rescuer
+  // assignment must not hide a newly committed "Needs Help" report.
+  const reports = await StrayReport.find({}, {
+    status: 1,
+    location: 1,
+    caseId: 1,
+    animalType: 1,
+    anonymous: 1,
+    description: 1,
+    breed: 1,
+    category: 1,
+    categories: 1,
+    photos: 1,
+    createdAt: 1
+  });
+  console.log("[STRAY][GET] Fetched all reports:", reports.length);
+  res.json(reports);
+});;
 
 // Accepting from the map belongs to the report workflow and does not alter
 // the existing rescue-controller flow.
@@ -490,158 +503,164 @@ exports.acceptReportFromMap = catchAsync(async (req: Request, res: Response): Pr
 
 // 4. UPDATE CASE STATUS (RESCUERS ONLY)
 exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const { caseId } = req.params;
-    const { status } = req.body;
-    const userId = req.user?.id;
+  const { caseId } = req.params;
+  const { status } = req.body;
+  const userId = req.user?.id;
 
-    // 🔒 Check if user is authenticated
-    if (!userId) {
-      res.status(401).json({ message: "Unauthorized. Please login first." });
-      return;
-    }
+  // 🔒 Check if user is authenticated
+  if (!userId) {
+    res.status(401).json({ message: "Unauthorized. Please login first." });
+    return;
+  }
 
-    // 🔒 Check if user is a rescuer/volunteer/ngo/vet
-    const User = require("../models/User");
-    const user = await User.findById(userId).select("name role");
+  // 🔒 Check if user is a rescuer/volunteer/ngo/vet
+  const User = require("../models/User");
+  const user = await User.findById(userId).select("name role");
 
-    if (!user) {
-      res.status(404).json({ message: "User not found" });
-      return;
-    }
+  if (!user) {
+    res.status(404).json({ message: "User not found" });
+    return;
+  }
 
-    const rescuerRoles = ["volunteer", "ngo", "vet", "rescuer"];
-    if (!rescuerRoles.includes(user.role)) {
-      console.warn(`[STRAY][UNAUTHORIZED] User ${userId} (role: ${user.role}) attempted to update case status`);
-      res.status(403).json({
-        message: "Only rescuers, volunteers, NGOs, and veterinarians can update case status.",
-        requiredRole: "rescuer/volunteer/ngo/vet",
-        userRole: user.role,
-      });
-      return;
-    }
-
-    const report = await StrayReport.findOne({ caseId });
-
-    if (!report) {
-      res.status(404).json({ message: "Case not found" });
-      return;
-    }
-
-    // 🔒 Check if case is assigned to a rescuer — only assigned rescuer can manage/update status
-    const Rescuer = require("../models/Rescuer");
-    const RescueRequest = require("../models/RescueRequest");
-
-    // A role alone is not sufficient: the caller must be the rescuer who
-    // accepted this specific case. Pending requests do not grant ownership.
-    if (!Object.prototype.hasOwnProperty.call(STATUS_TRANSITIONS, status)) {
-      res.status(400).json({ message: "Invalid case status." });
-      return;
-    }
-
-    if (!STATUS_TRANSITIONS[report.status]?.includes(status)) {
-      res.status(400).json({
-        message: `Status cannot change from ${report.status} to ${status}.`,
-      });
-      return;
-    }
-
-    const activeRequest = await RescueRequest.findOne({
-      caseId,
-      status: { $in: ["accepted", "under rescue", "Under Rescue", "completed", "treated", "ready for adoption"] },
+  const rescuerRoles = ["volunteer", "ngo", "vet", "rescuer"];
+  if (!rescuerRoles.includes(user.role)) {
+    console.warn(`[STRAY][UNAUTHORIZED] User ${userId} (role: ${user.role}) attempted to update case status`);
+    res.status(403).json({
+      message: "Only rescuers, volunteers, NGOs, and veterinarians can update case status.",
+      requiredRole: "rescuer/volunteer/ngo/vet",
+      userRole: user.role,
     });
+    return;
+  }
 
-    if (!activeRequest) {
-      res.status(403).json({
-        message: "Forbidden. A rescuer must accept this case before updating its status.",
-      });
-      return;
-    }
+  const report = await StrayReport.findOne({ caseId });
 
-    const rescuerDoc = await Rescuer.findOne({ userId });
-    const rescuerDocId = rescuerDoc ? String(rescuerDoc._id) : "";
-    const currentUserIdStr = String(userId);
-    const assignedRescuerIdStr = String(activeRequest.rescuerId);
+  if (!report) {
+    res.status(404).json({ message: "Case not found" });
+    return;
+  }
 
-    const isAssignedRescuer =
-      assignedRescuerIdStr === currentUserIdStr ||
-      (rescuerDocId && assignedRescuerIdStr === rescuerDocId);
+  // 🔒 Check if case is assigned to a rescuer — only assigned rescuer can manage/update status
+  const Rescuer = require("../models/Rescuer");
+  const RescueRequest = require("../models/RescueRequest");
 
-    if (!isAssignedRescuer) {
-      res.status(403).json({
-        message: "Forbidden. Only the accepted rescuer assigned to this case can change its status.",
-      });
-      return;
-    }
+  // A role alone is not sufficient: the caller must be the rescuer who
+  // accepted this specific case. Pending requests do not grant ownership.
+  if (!Object.prototype.hasOwnProperty.call(STATUS_TRANSITIONS, status)) {
+    res.status(400).json({ message: "Invalid case status." });
+    return;
+  }
 
-    // Update main status
-    report.status = status;
-
-    // Ensure timeline exists
-    if (!report.timeline) {
-      report.timeline = [];
-    }
-
-    // Add new timeline entry with rescuer info
-    report.timeline.push({
-      status,
-      message: `${user.name} updated the case: ${status}`,
-      rescuerId: userId,
-      rescuerName: user.name,
-      rescuerRole: user.role,
-      timestamp: new Date(),
+  if (!STATUS_TRANSITIONS[report.status]?.includes(status)) {
+    res.status(400).json({
+      message: `Status cannot change from ${report.status} to ${status}.`,
     });
+    return;
+  }
 
-    await report.save();
+  const activeRequest = await RescueRequest.findOne({
+    caseId,
+    status: { $in: ["accepted", "under rescue", "Under Rescue", "completed", "treated", "ready for adoption"] },
+  });
 
-    // Reaching adoption readiness finishes the rescuer's assignment, but the
-    // public StrayReport deliberately remains "Ready for Adoption" so it is
-    // still discoverable on the map by potential adopters.
-    if (status === "Ready for Adoption") {
+  if (!activeRequest && !report.assignedRescuerId) {
+    res.status(403).json({
+      message: "Forbidden. A rescuer must accept this case before updating its status.",
+    });
+    return;
+  }
+
+  const rescuerDoc = await Rescuer.findOne({ userId });
+  const rescuerDocId = rescuerDoc ? String(rescuerDoc._id) : "";
+  const currentUserIdStr = String(userId);
+  const assignedRescuerIdStr = activeRequest?.rescuerId ? String(activeRequest.rescuerId) : "";
+  const reportAssignedRescuerIdStr = report.assignedRescuerId ? String(report.assignedRescuerId) : "";
+
+  const isAssignedRescuer =
+    (assignedRescuerIdStr && (assignedRescuerIdStr === currentUserIdStr || (rescuerDocId && assignedRescuerIdStr === rescuerDocId))) ||
+    (reportAssignedRescuerIdStr && (reportAssignedRescuerIdStr === currentUserIdStr || (rescuerDocId && reportAssignedRescuerIdStr === rescuerDocId)));
+
+  if (!isAssignedRescuer) {
+    res.status(403).json({
+      message: "Forbidden. Only the accepted rescuer assigned to this case can change its status.",
+    });
+    return;
+  }
+
+  // Update main status
+  report.status = status;
+  if (!report.assignedRescuerId && rescuerDoc) {
+    report.assignedRescuerId = rescuerDoc._id;
+  }
+
+  // Ensure timeline exists
+  if (!report.timeline) {
+    report.timeline = [];
+  }
+
+  // Add new timeline entry with rescuer info
+  report.timeline.push({
+    status,
+    message: `${user.name} updated the case: ${status}`,
+    rescuerId: userId,
+    rescuerName: user.name,
+    rescuerRole: user.role,
+    timestamp: new Date(),
+  });
+
+  await report.save();
+
+  // Reaching adoption readiness finishes the rescuer's assignment, but the
+  // public StrayReport deliberately remains "Ready for Adoption" so it is
+  // still discoverable on the map by potential adopters.
+  if (status === "Ready for Adoption") {
+    if (activeRequest) {
       activeRequest.status = "completed";
       await activeRequest.save();
     }
+  }
 
-    // 🔔 Notify reporter of status update (if not anonymous)
-    if (!report.anonymous && report.reporterUserId) {
-      const statusMessages: { [key: string]: string } = {
-        Treated: `Case ${report.caseId}: the ${report.animalType || "animal"} is now receiving treatment. Updated by ${user.name}.`,
-        "Ready for Adoption": `Case ${report.caseId}: the ${report.animalType || "animal"} is now ready for adoption. Updated by ${user.name}.`,
-      };
+  // 🔔 Notify reporter of status update (if not anonymous)
+  if (!report.anonymous && report.reporterUserId) {
+    const statusMessages: { [key: string]: string } = {
+      Treated: `Case ${report.caseId}: the ${report.animalType || "animal"} is now receiving treatment. Updated by ${user.name}.`,
+      "Ready for Adoption": `Case ${report.caseId}: the ${report.animalType || "animal"} is now ready for adoption. Updated by ${user.name}.`,
+    };
 
-      const notificationMessage = statusMessages[status] || `Status updated to ${status}`;
+    const notificationMessage = statusMessages[status] || `Status updated to ${status}`;
 
-      try {
-        // Save in-app notification
-        await NotificationService.sendNotification(
-          report.reporterUserId,
-          status === "Treated"
-            ? `Treatment Started • ${report.caseId}`
-            : `Ready for Adoption • ${report.caseId}`,
-          notificationMessage,
-          "success",
-          "",
-          report.caseId,
-          {
-            event: "case_status_updated",
-            status,
-            animalType: report.animalType || "animal",
-            assignedRescuerName: user.name,
-            action: "view_case",
-            categoryId: "case_update",
-          }
-        );
-        console.log(`[STRAY] Notification sent to reporter for case ${report.caseId}`);
-      } catch (err: any) {
-        console.warn(`[STRAY] Failed to send reporter notification:`, err.message);
-      }
+    try {
+      // Save in-app notification
+      await NotificationService.sendNotification(
+        report.reporterUserId,
+        status === "Treated"
+          ? `Treatment Started • ${report.caseId}`
+          : `Ready for Adoption • ${report.caseId}`,
+        notificationMessage,
+        "success",
+        "",
+        report.caseId,
+        {
+          event: "case_status_updated",
+          status,
+          animalType: report.animalType || "animal",
+          assignedRescuerName: user.name,
+          action: "view_case",
+          categoryId: "case_update",
+        }
+      );
+      console.log(`[STRAY] Notification sent to reporter for case ${report.caseId}`);
+    } catch (err: any) {
+      console.warn(`[STRAY] Failed to send reporter notification:`, err.message);
     }
+  }
 
-    const reporter = !report.anonymous && report.reporterUserId
-      ? await User.findById(report.reporterUserId).select("name")
-      : null;
+  const reporter = !report.anonymous && report.reporterUserId
+    ? await User.findById(report.reporterUserId).select("name")
+    : null;
 
-    res.json(toSafeReport(report, reporter?.name, { canAccept: false, canUpdate: true }));
-  });;
+  res.json(toSafeReport(report, reporter?.name, { canAccept: false, canUpdate: true }));
+});;
 
 // 5. GET USER NOTIFICATIONS
 exports.getUserNotifications = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -653,7 +672,23 @@ exports.getUserNotifications = catchAsync(async (req: Request, res: Response, ne
   }
 
   const Notification = require("../models/Notification");
-  const notifications = await Notification.find({ userId })
+  const RescueRequest = require("../models/RescueRequest");
+
+  // Get cancelled request IDs and caseIds
+  const cancelled = await RescueRequest.find({ status: "cancelled" }).select("_id caseId").lean();
+  const cancelledIds: string[] = [];
+  cancelled.forEach((r: any) => {
+    if (r._id) cancelledIds.push(String(r._id));
+    if (r.caseId) cancelledIds.push(String(r.caseId));
+  });
+
+  const query: any = { userId };
+  if (cancelledIds.length > 0) {
+    query.rescueRequestId = { $nin: cancelledIds };
+    query.caseId = { $nin: cancelledIds };
+  }
+
+  const notifications = await Notification.find(query)
     .sort({ createdAt: -1 })
     .limit(50);
 

@@ -10,7 +10,7 @@ interface IRescueHistory extends mongoose.Document {
   rescueRequestId?: string;
   userId: string;
   caseId: string;
-  status: "completed" | "rejected";
+  status: "completed" | "rejected" | "failed";
   animalType: string;
   description: string;
   photos: string[];
@@ -39,7 +39,7 @@ const rescueHistorySchema = new mongoose.Schema({
   caseId: { type: String, default: "" },
   status: {
     type: String,
-    enum: ["completed", "rejected"],
+    enum: ["completed", "rejected", "failed"],
     default: "completed",
   },
   animalType: { type: String, default: "Unknown animal" },

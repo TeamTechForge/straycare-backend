@@ -28,7 +28,7 @@ const connectDB = async (): Promise<void> => {
   }
 
   try {
-    Logger.info(`Connecting to MongoDB at ${mongoURI}...`, { service: "Database" });
+    Logger.info("Connecting to configured MongoDB database...", { service: "Database" });
     await mongoose.connect(mongoURI, {
       serverSelectionTimeoutMS: 5000, // 5s timeout to trigger fallback quickly if offline
       socketTimeoutMS: 45000,

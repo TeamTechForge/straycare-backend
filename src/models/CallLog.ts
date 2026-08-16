@@ -44,4 +44,5 @@ const callLogSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export default mongoose.model<ICallLog>("CallLog", callLogSchema);
+export default mongoose.models.CallLog ||
+  mongoose.model<ICallLog>("CallLog", callLogSchema);

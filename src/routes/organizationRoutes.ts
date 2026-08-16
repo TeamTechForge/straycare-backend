@@ -13,13 +13,21 @@ const eligibleFilter = {
   merchantSecret: { $exists: true, $nin: [null, ""] },
 };
 
+const sanitizeOrganization = (organization: any) => {
+  const { merchantSecret, payHereAppId, payHereAppSecret, ...safeOrganization } = organization;
+  return {
+    ...safeOrganization,
+    recurringEnabled: Boolean(payHereAppId && payHereAppSecret),
+  };
+};
+
 // Get all organizations (vetprofiles + ngoprofiles) — only verified & payment-ready
 router.get("/", async (req: Request, res: Response) => {
   try {
     const db = mongoose.connection.db;
     const vets = await db.collection("vetprofiles").find(eligibleFilter).toArray();
     const shelters = await db.collection("ngoprofiles").find(eligibleFilter).toArray();
-    res.json([...vets, ...shelters]);
+    res.json([...vets, ...shelters].map(sanitizeOrganization));
   } catch (err) {
     console.error("Error fetching organizations:", err);
     res.status(500).json({ error: "Failed to fetch organizations" });
@@ -38,7 +46,7 @@ router.get("/category/:category", async (req: Request, res: Response) => {
       results = await db.collection("ngoprofiles").find(eligibleFilter).toArray();
     }
  
-    res.json(results);
+    res.json(results.map(sanitizeOrganization));
   } catch (err) {
     console.error("Error fetching organizations by category:", err);
     res.status(500).json({ error: "Failed to fetch organizations by category" });

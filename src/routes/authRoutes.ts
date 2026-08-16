@@ -16,6 +16,7 @@ router.get("/test", (req: Request, res: Response) => {
 
 router.post("/register", register);
 router.post("/login", login);
+router.post("/Login", login);
 router.post("/google", googleAuth);
 router.put("/select-role", verifyToken, selectRole);
 router.get("/me", verifyToken, getMe);
