@@ -341,13 +341,12 @@ export const likeCommunityPost = async (req: Request, res: Response): Promise<vo
         if (!context) return;
 
         const { postId, userId, post, user } = context;
-        let created = false;
-        try {
-            await CommunityLike.create({ postId, userId });
-            created = true;
-        } catch (error: any) {
-            if (error?.code !== 11000) throw error;
-        }
+        const likeResult = await CommunityLike.updateOne(
+            { postId, userId },
+            { $setOnInsert: { postId, userId } },
+            { upsert: true }
+        );
+        const created = likeResult.upsertedCount === 1;
 
         const ownerId = post.authorUserId ? String(post.authorUserId) : null;
         if (created && ownerId && ownerId !== userId) {
