@@ -468,10 +468,10 @@ exports.listUserRescues = catchAsync(async (req: Request, res: Response, next: N
       status: { $in: [RescueStatus.ACCEPTED, "accepted", "under rescue", "Under Rescue"] },
     };
 
-    // Completed rescue cases: assigned to this rescuer AND completed
+    // Terminal rescue cases: assigned to this rescuer and completed or failed.
     const completedQuery = {
       $or: rescuerConditions,
-      status: { $in: [RescueStatus.COMPLETED, "completed", "Completed"] },
+      status: { $in: [RescueStatus.COMPLETED, RescueStatus.FAILED, "completed", "Completed", "failed", "Failed"] },
     };
 
     const [active, completed] = await Promise.all([
@@ -489,6 +489,8 @@ exports.listUserRescues = catchAsync(async (req: Request, res: Response, next: N
     const enrichedCompleted = await Promise.all(
       completed.map(async (history: any) => {
         const enriched = await enrichCaseRecordWithReporterAndStray(history.toObject ? history.toObject() : history);
+        // A history entry's terminal outcome takes precedence over the public case status.
+        enriched.status = history.status;
         return formatCaseRecord({ request: enriched, history: enriched });
       })
     );
@@ -867,11 +869,133 @@ exports.updateRescueDetails = catchAsync(async (req: Request, res: Response, nex
 
     if (activeDoc) {
       await activeDoc.save();
+
+      if (
+        status === "Completed" &&
+        strayReport &&
+        !strayReport.anonymous &&
+        strayReport.reporterUserId &&
+        mongoose.Types.ObjectId.isValid(strayReport.reporterUserId)
+      ) {
+        const rescuerName = activeDoc.rescuerName || "the assigned rescuer";
+        try {
+          await NotificationService.sendNotification(
+            String(strayReport.reporterUserId),
+            `Rescue Completed • ${activeDoc.caseId}`,
+            `The rescue for case ${activeDoc.caseId} has been completed by ${rescuerName}.`,
+            "success",
+            String(activeDoc.rescueRequestId || activeDoc._id || ""),
+            activeDoc.caseId || "",
+            {
+              event: "rescue_completed",
+              status: "Completed",
+              animalType: strayReport.animalType || activeDoc.animalType || "animal",
+              assignedRescuerName: rescuerName,
+              action: "view_case",
+              categoryId: "case_update",
+            }
+          );
+        } catch (err: any) {
+          console.error("[RESCUE] Failed to notify reporter of completion:", err.message);
+        }
+      }
+
       res.json({ success: true, doc: activeDoc, report: strayReport });
       return;
     }
 
     res.status(404).json({ error: "Rescue request or history not found" });
+  });;
+
+// PATCH /api/rescue/request/:id/fail
+// Records a failed rescue in history. Only its assigned rescuer can perform this action.
+exports.markRescueFailed = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const { id } = req.params;
+    const request = await findRequestByIdOrCustomId(String(id));
+
+    if (!request) {
+      res.status(404).json({ error: "Rescue request not found" });
+      return;
+    }
+
+    const rescuer = await Rescuer.findOne({ userId: req.user?.id });
+    if (!rescuer || !request.rescuerId || String(request.rescuerId._id || request.rescuerId) !== String(rescuer._id)) {
+      res.status(403).json({ error: "Only the assigned rescuer can mark this rescue as failed." });
+      return;
+    }
+
+    if ([RescueStatus.COMPLETED, RescueStatus.FAILED, "completed", "failed"].includes(request.status)) {
+      res.status(400).json({ error: "This rescue has already reached a final status." });
+      return;
+    }
+
+    const rescueRequestId = String(request.rescueRequestId || request._id);
+    const failureSummary = "Rescue marked as failed by the assigned rescuer.";
+    const history = await RescueHistory.findOneAndUpdate(
+      { rescueRequestId },
+      {
+        $set: {
+          rescueRequestId,
+          userId: String(request.userId || ""),
+          caseId: request.caseId || "",
+          status: RescueStatus.FAILED,
+          animalType: request.animalType || "Unknown animal",
+          description: request.description || failureSummary,
+          photos: request.photos || [],
+          reporterName: request.reporterName || "Reporter",
+          reporterPhone: request.reporterPhone || "",
+          reporterAvatar: request.reporterAvatar || "",
+          reporterLocation: request.reporterLocation || {},
+          rescuerId: String(rescuer._id),
+          rescuerName: request.rescuerName || rescuer.name || "",
+          rescuerPhone: request.rescuerPhone || rescuer.phone || "",
+          rescuerAvatar: request.rescuerAvatar || rescuer.avatar || "",
+          rescuerLocation: request.rescueLocation || rescuer.location || {},
+          location: request.rescueLocation || rescuer.location || {},
+          distanceKm: request.distanceKm ?? null,
+          etaMinutes: request.etaMinutes ?? null,
+          summary: request.summary || failureSummary,
+          outcome: "failed",
+          completedAt: new Date(),
+        },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    request.status = RescueStatus.FAILED;
+    await request.save();
+
+    const StrayReport = require("../models/StrayReport");
+    const report = await StrayReport.findOne({ caseId: request.caseId });
+    if (
+      report &&
+      !report.anonymous &&
+      report.reporterUserId &&
+      mongoose.Types.ObjectId.isValid(report.reporterUserId)
+    ) {
+      try {
+        await NotificationService.sendNotification(
+          String(report.reporterUserId),
+          `Rescue Failed • ${request.caseId}`,
+          `The rescue for case ${request.caseId} could not be completed.`,
+          "error",
+          rescueRequestId,
+          request.caseId || "",
+          {
+            event: "rescue_failed",
+            status: "Failed",
+            animalType: report.animalType || request.animalType || "animal",
+            assignedRescuerName: request.rescuerName || rescuer.name || "the assigned rescuer",
+            action: "view_case",
+            categoryId: "case_update",
+          }
+        );
+      } catch (err: any) {
+        console.error("[RESCUE] Failed to notify reporter of rescue failure:", err.message);
+      }
+    }
+
+    res.json({ success: true, history });
   });;
 
 // POST /api/rescue/accept-from-map

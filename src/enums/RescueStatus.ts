@@ -3,5 +3,6 @@ export enum RescueStatus {
   ACCEPTED = "accepted",
   REJECTED = "rejected",
   COMPLETED = "completed",
+  FAILED = "failed",
   CANCELLED = "cancelled",
 }
