@@ -5,7 +5,8 @@ import {
     createPost,
     updatePost,
     deletePost,
-    getMyPosts
+    getMyPosts,
+    toggleLikePost
 } from "../controllers/adoptionController";
 // @ts-ignore - Tells TypeScript to bypass checking this mixed-syntax export
 import authMiddleware from "../middleware/authMiddleware";
@@ -16,6 +17,7 @@ router.get("/", getAllPosts);
 router.get("/my", authMiddleware, getMyPosts);
 router.get("/:postId", getPostById);
 router.post("/", authMiddleware, createPost);
+router.post("/:postId/like", authMiddleware, toggleLikePost);
 router.put("/:postId", authMiddleware, updatePost);
 router.delete("/:postId", authMiddleware, deletePost);
 

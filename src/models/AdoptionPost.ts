@@ -1,11 +1,11 @@
 import mongoose, { Document, Schema } from "mongoose";
 
-export interface IPost extends Document {
+export interface IAdoptionPost extends Document {
   userId: mongoose.Types.ObjectId;
   category: string;
   customCategory?: string;
   breed: string;
-  age: string;
+  age?: string;
   gender: string;
   name: string;
   status: "Available" | "Pending" | "Adopted";
@@ -17,17 +17,18 @@ export interface IPost extends Document {
   posterName: string;
   contact: string;
   notes?: string;
+  likes: mongoose.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
 
-const PostSchema = new Schema<IPost>(
+const AdoptionPostSchema = new Schema<IAdoptionPost>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     category: { type: String, required: true },
     customCategory: { type: String },
     breed: { type: String, required: true },
-    age: { type: String, required: true },
+    age: { type: String, default: "" },
     gender: { type: String, required: true },
     name: { type: String, required: true, trim: true },
     status: {
@@ -47,8 +48,10 @@ const PostSchema = new Schema<IPost>(
     posterName: { type: String, required: true },
     contact: { type: String, required: true },
     notes: { type: String },
+    likes: [{ type: Schema.Types.ObjectId, ref: "User", default: [] }],
   },
   { timestamps: true }
 );
 
-export default mongoose.model<IPost>("Post", PostSchema);
+// Explicitly bind to "Adoptionposts" collection in MongoDB
+export default mongoose.model<IAdoptionPost>("AdoptionPost", AdoptionPostSchema, "Adoptionposts");
