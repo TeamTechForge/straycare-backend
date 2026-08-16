@@ -1,7 +1,5 @@
 import { catchAsync } from "../utils/catchAsync";
-import type { NextFunction } from "express";
-// This file contains the actual logic for each rescue-related API endpoint.
-// Each function is called by a route in rescueRoutes.js.
+import type { NextFunction, Request, Response } from "express";
 
 const mongoose = require("mongoose");
 const Rescuer = require("../models/Rescuer");
@@ -14,7 +12,6 @@ import { RescueService } from "../services/rescueService";
 import { Logger } from "../utils/logger";
 import { RescueMathHelper } from "../utils/rescueMathHelper";
 import { RescueStatus } from "../enums/RescueStatus";
-import type { Request, Response } from "express";
 
 const findRequestByIdOrCustomId = async (id: string): Promise<any> => {
   let request = null;
@@ -218,7 +215,7 @@ const enrichCaseRecordWithReporterAndStray = async (formatted: any, caseIdOrId: 
       }
     }
 
-    // 5. Enrich Assigned Rescuer details (name, avatar, phone)
+    // Enrich Assigned Rescuer details (name, avatar, phone)
     const Rescuer = require("../models/Rescuer");
     const rescuerId = formatted.rescuer?.id || formatted.rescuerId;
     let rescuerUserId = formatted.rescuer?.userId;
@@ -258,14 +255,13 @@ const enrichCaseRecordWithReporterAndStray = async (formatted: any, caseIdOrId: 
           name: rName,
           phone: rPhone,
           avatar: rAvatar,
-          location: rescuerDoc.location ? { latitude: rescuerDoc.location.latitude, longitude: rescuerDoc.location.longitude } : null,
+          location: rescuerDoc.location || formatted.location,
         };
       }
     }
   } catch (err: any) {
-    console.warn("[RESCUE] Error enriching case record:", err.message || err);
+    console.error("[RESCUE] enrichCaseRecord error:", err.message);
   }
-
   return formatted;
 };
 
@@ -274,11 +270,9 @@ exports.listRescuers = catchAsync(async (req: Request, res: Response, next: Next
   const rescuers = await Rescuer.find({});
   console.log(`[RESCUE] Found ${rescuers.length} rescuers in database`);
   res.json({ count: rescuers.length, rescuers });
-});;
+});
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // POST /api/rescue/find-nearest
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 exports.findNearestRescuer = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { latitude, longitude, excludeIds, caseId, maxDistanceKm } = req.body;
   const maxDist = maxDistanceKm !== undefined && Number.isFinite(Number(maxDistanceKm)) ? Number(maxDistanceKm) : 5;
@@ -316,7 +310,7 @@ exports.findNearestRescuer = catchAsync(async (req: Request, res: Response, next
   console.log(`[RESCUE] Nearest rescuer: ${result.rescuer.name} at ${result.distance} km`);
 
   res.json(result);
-});;
+});
 
 // POST /api/rescue/send-request
 exports.sendRescueRequest = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -394,7 +388,7 @@ exports.sendRescueRequest = catchAsync(async (req: Request, res: Response, next:
       location: rescuer.location,
     },
   });
-});;
+});
 
 // PATCH /api/rescue/request/:id/cancel
 exports.cancelRescueRequest = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -433,8 +427,7 @@ exports.cancelRescueRequest = catchAsync(async (req: Request, res: Response, nex
     console.warn("[RESCUE] Failed to delete notifications for cancelled request:", notifErr.message || notifErr);
   }
 
-  // Notify the rescuer immediately via Socket.IO so they don't wait for the next poll.
-  // The rescuer's screen joins the room using the request's _id as the rescueId.
+  // Notify the rescuer immediately via Socket.IO
   try {
     const io = req.app.get("io");
     if (io) {
@@ -449,7 +442,7 @@ exports.cancelRescueRequest = catchAsync(async (req: Request, res: Response, nex
   }
 
   res.json({ success: true, request });
-});;
+});
 
 exports.listPendingRescues = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const pending = await RescueRequest.find({ status: { $in: [RescueStatus.PENDING, RescueStatus.ACCEPTED] } })
@@ -457,13 +450,13 @@ exports.listPendingRescues = catchAsync(async (req: Request, res: Response, next
     .populate("rescuerId");
 
   res.json(pending.map((request: any) => formatCaseRecord({ request, rescuer: request.rescuerId || null })));
-});;
+});
 
 exports.listCompletedRescues = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const historyEntries = await RescueHistory.find({ status: RescueStatus.COMPLETED }).sort({ completedAt: -1, createdAt: -1 });
 
   res.json(historyEntries.map((history: any) => formatCaseRecord({ request: history, history })));
-});;
+});
 
 exports.listAllRescues = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const [pending, completed] = await Promise.all([
@@ -481,7 +474,7 @@ exports.listAllRescues = catchAsync(async (req: Request, res: Response, next: Ne
   });
 
   res.json(all);
-});;
+});
 
 exports.listUserRescues = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   let userId = (req.params && req.params.userId) || (req.query && req.query.userId);
@@ -518,10 +511,22 @@ exports.listUserRescues = catchAsync(async (req: Request, res: Response, next: N
     status: { $in: [RescueStatus.ACCEPTED, "accepted", "under rescue", "Under Rescue", "in progress", "treated", "Treated"] },
   };
 
-  // Completed rescue cases assigned to this rescuer (completed, ready for adoption, etc.)
+  // Terminal rescue cases assigned to this rescuer.
   const completedQuery = {
     $or: rescuerConditions,
-    status: { $in: [RescueStatus.COMPLETED, "completed", "Completed", "ready for adoption", "Ready for Adoption", "closed"] },
+    status: {
+      $in: [
+        RescueStatus.COMPLETED,
+        RescueStatus.FAILED,
+        "completed",
+        "Completed",
+        "failed",
+        "Failed",
+        "ready for adoption",
+        "Ready for Adoption",
+        "closed",
+      ],
+    },
   };
 
   const [activeRequests, completedRequests, completedHistory] = await Promise.all([
@@ -547,6 +552,8 @@ exports.listUserRescues = catchAsync(async (req: Request, res: Response, next: N
   const enrichedCompletedHistory = await Promise.all(
     completedHistory.map(async (history: any) => {
       const enriched = await enrichCaseRecordWithReporterAndStray(history.toObject ? history.toObject() : history);
+      // A history entry's terminal outcome takes precedence over the public case status.
+      enriched.status = history.status;
       return formatCaseRecord({ request: enriched, history: enriched });
     })
   );
@@ -572,7 +579,7 @@ exports.listUserRescues = catchAsync(async (req: Request, res: Response, next: N
 
   Logger.info(`Found ${deduplicated.length} assigned rescues for user ID: ${userId}`, { service: "RescueController" });
   res.json(deduplicated);
-});;
+});
 
 exports.getRescueById = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { id } = req.params;
@@ -645,7 +652,7 @@ exports.getRescueById = catchAsync(async (req: Request, res: Response, next: Nex
   }
 
   res.status(404).json({ error: "Rescue not found" });
-});;
+});
 
 exports.getLiveTracking = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { requestId } = req.params;
@@ -667,7 +674,7 @@ exports.getLiveTracking = catchAsync(async (req: Request, res: Response, next: N
     etaMinutes: formatted.etaMinutes,
     lastUpdatedAt: getIsoString(request.updatedAt || request.createdAt),
   });
-});;
+});
 
 exports.checkRequestStatus = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { requestId } = req.params;
@@ -684,13 +691,14 @@ exports.checkRequestStatus = catchAsync(async (req: Request, res: Response, next
   let formatted = formatCaseRecord({ request, rescuer: request.rescuerId || null });
   formatted = await enrichCaseRecordWithReporterAndStray(formatted, request.caseId || String(requestId), request.userId);
 
-  // IMPORTANT: preserve the RescueRequest's actual status (pending/accepted/rejected)
-  // enrichCaseRecordWithReporterAndStray may overwrite it with the StrayReport status
-  const actualRequestStatus = request.status;
+  const resolvedStatus = (formatted.status && formatted.status.toLowerCase().includes("adopt"))
+    ? formatted.status
+    : (formatted.status || request.status);
 
   res.json({
     ...formatted,
-    status: actualRequestStatus,
+    status: resolvedStatus,
+    caseStatus: formatted.status || request.status,
     requestId: String(request._id),
     reporterLocation: formatted.reporter?.location || null,
     rescuerLocation: formatted.rescuer?.location || null,
@@ -698,19 +706,17 @@ exports.checkRequestStatus = catchAsync(async (req: Request, res: Response, next
     etaMinutes: formatted.etaMinutes,
     lastUpdatedAt: getIsoString(request.updatedAt || request.createdAt),
   });
-});;
+});
 
 // GET /api/rescue/active-request
 exports.getActiveRescuerRequest = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const userId = req.user!.id;
-  // Find the Rescuer document for this user
   const rescuer = await Rescuer.findOne({ userId });
   if (!rescuer) {
     res.json({ request: null });
     return;
   }
 
-  // Find the latest pending request for this rescuer
   const pendingRequest = await RescueRequest.findOne({
     rescuerId: rescuer._id,
     status: RescueStatus.PENDING,
@@ -725,7 +731,7 @@ exports.getActiveRescuerRequest = catchAsync(async (req: Request, res: Response,
   formatted = await enrichCaseRecordWithReporterAndStray(formatted, pendingRequest.caseId || String(pendingRequest._id), pendingRequest.userId);
 
   res.json({ request: formatted });
-});;
+});
 
 // PATCH /api/rescue/request/:id/respond
 exports.respondToRescueRequest = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -868,7 +874,7 @@ exports.respondToRescueRequest = catchAsync(async (req: Request, res: Response, 
   }
 
   res.json({ success: true, request });
-});;
+});
 
 // PATCH /api/rescue/request/:id/details
 exports.updateRescueDetails = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -959,12 +965,154 @@ exports.updateRescueDetails = catchAsync(async (req: Request, res: Response, nex
 
   if (activeDoc) {
     await activeDoc.save();
+
+    if (
+      status === "Completed" &&
+      strayReport &&
+      !strayReport.anonymous &&
+      strayReport.reporterUserId &&
+      mongoose.Types.ObjectId.isValid(strayReport.reporterUserId)
+    ) {
+      const rescuerName = activeDoc.rescuerName || "the assigned rescuer";
+      try {
+        await NotificationService.sendNotification(
+          String(strayReport.reporterUserId),
+          `Rescue Completed • ${activeDoc.caseId}`,
+          `The rescue for case ${activeDoc.caseId} has been completed by ${rescuerName}.`,
+          "success",
+          String(activeDoc.rescueRequestId || activeDoc._id || ""),
+          activeDoc.caseId || "",
+          {
+            event: "rescue_completed",
+            status: "Completed",
+            animalType: strayReport.animalType || activeDoc.animalType || "animal",
+            assignedRescuerName: rescuerName,
+            action: "view_case",
+            categoryId: "case_update",
+          }
+        );
+      } catch (err: any) {
+        console.error("[RESCUE] Failed to notify reporter of completion:", err.message);
+      }
+    }
+
     res.json({ success: true, doc: activeDoc, report: strayReport });
     return;
   }
 
   res.status(404).json({ error: "Rescue request or history not found" });
-});;
+});
+
+// PATCH /api/rescue/request/:id/fail
+// Records a failed rescue in history. Only its assigned rescuer can perform this action.
+exports.markRescueFailed = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const { id } = req.params;
+  const request = await findRequestByIdOrCustomId(String(id));
+
+  if (!request) {
+    res.status(404).json({ error: "Rescue request not found" });
+    return;
+  }
+
+  const rescuer = await Rescuer.findOne({ userId: req.user?.id });
+  const assignedRescuerId = request.rescuerId
+    ? String(request.rescuerId._id || request.rescuerId)
+    : "";
+  const isAssignedRescuer = Boolean(
+    rescuer &&
+    assignedRescuerId &&
+    (assignedRescuerId === String(rescuer._id) || assignedRescuerId === String(req.user?.id))
+  );
+  if (!isAssignedRescuer) {
+    res.status(403).json({ error: "Only the assigned rescuer can mark this rescue as failed." });
+    return;
+  }
+
+  if ([RescueStatus.COMPLETED, RescueStatus.FAILED, "completed", "failed"].includes(request.status)) {
+    res.status(400).json({ error: "This rescue has already reached a final status." });
+    return;
+  }
+
+  const rescueRequestId = String(request.rescueRequestId || request._id);
+  const failureSummary = "Rescue marked as failed by the assigned rescuer.";
+  const history = await RescueHistory.findOneAndUpdate(
+    { rescueRequestId },
+    {
+      $set: {
+        rescueRequestId,
+        userId: String(request.userId || ""),
+        caseId: request.caseId || "",
+        status: RescueStatus.FAILED,
+        animalType: request.animalType || "Unknown animal",
+        description: request.description || failureSummary,
+        photos: request.photos || [],
+        reporterName: request.reporterName || "Reporter",
+        reporterPhone: request.reporterPhone || "",
+        reporterAvatar: request.reporterAvatar || "",
+        reporterLocation: request.reporterLocation || {},
+        rescuerId: String(rescuer._id),
+        rescuerName: request.rescuerName || rescuer.name || "",
+        rescuerPhone: request.rescuerPhone || rescuer.phone || "",
+        rescuerAvatar: request.rescuerAvatar || rescuer.avatar || "",
+        rescuerLocation: request.rescueLocation || rescuer.location || {},
+        location: request.rescueLocation || rescuer.location || {},
+        distanceKm: request.distanceKm ?? null,
+        etaMinutes: request.etaMinutes ?? null,
+        summary: request.summary || failureSummary,
+        outcome: "failed",
+        completedAt: new Date(),
+      },
+    },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
+
+  request.status = RescueStatus.FAILED;
+  await request.save();
+
+  const StrayReport = require("../models/StrayReport");
+  const report = await StrayReport.findOne({ caseId: request.caseId });
+  if (report) {
+    if (!report.timeline) report.timeline = [];
+    report.timeline.push({
+      status: "Rescue Failed",
+      message: failureSummary,
+      rescuerId: rescuer._id,
+      rescuerName: request.rescuerName || rescuer.name || "Rescuer",
+      timestamp: new Date(),
+    });
+    await report.save();
+  }
+
+  if (
+    report &&
+    !report.anonymous &&
+    report.reporterUserId &&
+    mongoose.Types.ObjectId.isValid(report.reporterUserId)
+  ) {
+    try {
+      await NotificationService.sendNotification(
+        String(report.reporterUserId),
+        `Rescue Failed • ${request.caseId}`,
+        `The rescue for case ${request.caseId} could not be completed.`,
+        "error",
+        rescueRequestId,
+        request.caseId || "",
+        {
+          event: "rescue_failed",
+          status: "Failed",
+          animalType: report.animalType || request.animalType || "animal",
+          assignedRescuerName: request.rescuerName || rescuer.name || "the assigned rescuer",
+          action: "view_case",
+          categoryId: "case_update",
+        }
+      );
+    } catch (err: any) {
+      console.error("[RESCUE] Failed to notify reporter of rescue failure:", err.message);
+    }
+  }
+
+  res.json({ success: true, history });
+});
 
 // POST /api/rescue/accept-from-map
 // Allows a rescuer to directly accept a case from the public rescue map
@@ -1088,4 +1236,4 @@ exports.acceptFromMap = catchAsync(async (req: Request, res: Response, next: Nex
       avatar: rescuer.avatar || "",
     },
   });
-});;
+});

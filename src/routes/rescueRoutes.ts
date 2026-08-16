@@ -8,6 +8,7 @@ const {
   getActiveRescuerRequest,
   respondToRescueRequest,
   updateRescueDetails,
+  markRescueFailed,
   cancelRescueRequest,
   acceptFromMap,
 } = require("../controllers/rescueController");
@@ -34,6 +35,7 @@ router.get("/status/:requestId", checkRequestStatus);
 router.get("/active-request", verifyToken, getActiveRescuerRequest);
 router.patch("/request/:id/respond", verifyToken, respondToRescueRequest);
 router.patch("/request/:id/details", verifyToken, updateRescueDetails);
+router.patch("/request/:id/fail", verifyToken, markRescueFailed);
 
 // Accept a rescue case directly from the public map (rescuers only)
 router.post("/accept-from-map", verifyToken, acceptFromMap);
