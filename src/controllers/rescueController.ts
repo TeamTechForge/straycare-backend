@@ -919,7 +919,15 @@ exports.markRescueFailed = catchAsync(async (req: Request, res: Response, next: 
     }
 
     const rescuer = await Rescuer.findOne({ userId: req.user?.id });
-    if (!rescuer || !request.rescuerId || String(request.rescuerId._id || request.rescuerId) !== String(rescuer._id)) {
+    const assignedRescuerId = request.rescuerId
+      ? String(request.rescuerId._id || request.rescuerId)
+      : "";
+    const isAssignedRescuer = Boolean(
+      rescuer &&
+      assignedRescuerId &&
+      (assignedRescuerId === String(rescuer._id) || assignedRescuerId === String(req.user?.id))
+    );
+    if (!isAssignedRescuer) {
       res.status(403).json({ error: "Only the assigned rescuer can mark this rescue as failed." });
       return;
     }
@@ -967,6 +975,18 @@ exports.markRescueFailed = catchAsync(async (req: Request, res: Response, next: 
 
     const StrayReport = require("../models/StrayReport");
     const report = await StrayReport.findOne({ caseId: request.caseId });
+    if (report) {
+      if (!report.timeline) report.timeline = [];
+      report.timeline.push({
+        status: "Rescue Failed",
+        message: failureSummary,
+        rescuerId: rescuer._id,
+        rescuerName: request.rescuerName || rescuer.name || "Rescuer",
+        timestamp: new Date(),
+      });
+      await report.save();
+    }
+
     if (
       report &&
       !report.anonymous &&
