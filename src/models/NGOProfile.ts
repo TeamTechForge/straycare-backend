@@ -14,6 +14,8 @@ interface INGOProfile extends mongoose.Document {
   accountStatus?: string;
   merchantId: string;
   merchantSecret: string;
+  payHereAppId?: string;
+  payHereAppSecret?: string;
   totalAdoptions?: number;
   donationCampaignCount?: number;
   createdAt: Date;
@@ -44,6 +46,8 @@ const NGOProfileSchema = new mongoose.Schema(
     accountStatus: { type: String },
     merchantId: { type: String, default: "" },
     merchantSecret: { type: String, default: "" },
+    payHereAppId: { type: String, default: "", select: false },
+    payHereAppSecret: { type: String, default: "", select: false },
   },
   { timestamps: true }
 );
