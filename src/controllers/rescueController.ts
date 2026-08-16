@@ -413,6 +413,26 @@ exports.cancelRescueRequest = catchAsync(async (req: Request, res: Response, nex
 
     console.log(`[RESCUE] Request ${id} cancelled by reporter (DB _id: ${request._id})`);
 
+    // Remove notification for the rescuer so it disappears immediately from their notifications
+    try {
+      const Notification = require("../models/Notification");
+      const conditions: any[] = [
+        { rescueRequestId: String(request._id) },
+      ];
+      if (request.caseId) {
+        conditions.push({ caseId: request.caseId });
+        conditions.push({ rescueRequestId: request.caseId });
+      }
+      if (id) {
+        conditions.push({ rescueRequestId: id });
+        conditions.push({ caseId: id });
+      }
+      const deleteResult = await Notification.deleteMany({ $or: conditions });
+      console.log(`[RESCUE] Deleted ${deleteResult.deletedCount} notifications for cancelled request ${id}`);
+    } catch (notifErr: any) {
+      console.warn("[RESCUE] Failed to delete notifications for cancelled request:", notifErr.message || notifErr);
+    }
+
     // Notify the rescuer immediately via Socket.IO so they don't wait for the next poll.
     // The rescuer's screen joins the room using the request's _id as the rescueId.
     try {

@@ -653,7 +653,23 @@ exports.getUserNotifications = catchAsync(async (req: Request, res: Response, ne
   }
 
   const Notification = require("../models/Notification");
-  const notifications = await Notification.find({ userId })
+  const RescueRequest = require("../models/RescueRequest");
+
+  // Get cancelled request IDs and caseIds
+  const cancelled = await RescueRequest.find({ status: "cancelled" }).select("_id caseId").lean();
+  const cancelledIds: string[] = [];
+  cancelled.forEach((r: any) => {
+    if (r._id) cancelledIds.push(String(r._id));
+    if (r.caseId) cancelledIds.push(String(r.caseId));
+  });
+
+  const query: any = { userId };
+  if (cancelledIds.length > 0) {
+    query.rescueRequestId = { $nin: cancelledIds };
+    query.caseId = { $nin: cancelledIds };
+  }
+
+  const notifications = await Notification.find(query)
     .sort({ createdAt: -1 })
     .limit(50);
 
