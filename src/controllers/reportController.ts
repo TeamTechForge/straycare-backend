@@ -386,11 +386,12 @@ exports.getReportByCaseId = catchAsync(async (req: Request, res: Response, next:
   }
 
   // Populate assigned rescuer user ID if active rescue request exists
+  let activeRequest: any = null;
   try {
     const RescueRequest = require("../models/RescueRequest");
     const Rescuer = require("../models/Rescuer");
 
-    const activeRequest = await RescueRequest.findOne({
+    activeRequest = await RescueRequest.findOne({
       caseId: req.params.caseId,
       status: { $in: ["accepted", "under rescue", "Under Rescue", "completed", "treated", "ready for adoption"] },
     });
@@ -415,9 +416,22 @@ exports.getReportByCaseId = catchAsync(async (req: Request, res: Response, next:
     const canRescue = RESCUER_ROLES.includes(currentUser?.role);
     if (canRescue) {
       const rescuer = await Rescuer.findOne({ userId: req.user.id }).select("_id");
+      const rescuerDocId = rescuer ? String(rescuer._id) : "";
+      const currentUserId = String(req.user.id);
+
+      const reportAssignedId = report.assignedRescuerId ? String(report.assignedRescuerId) : "";
+      const requestRescuerId = activeRequest?.rescuerId ? String(activeRequest.rescuerId) : "";
+
+      const isAssignedRescuer = Boolean(
+        (reportAssignedId && (reportAssignedId === rescuerDocId || reportAssignedId === currentUserId)) ||
+        (requestRescuerId && (requestRescuerId === rescuerDocId || requestRescuerId === currentUserId))
+      );
+
+      const hasAssignedRescuer = Boolean(report.assignedRescuerId || (activeRequest && activeRequest.rescuerId));
+
       permissions = {
-        canAccept: Boolean(report.status === "Needs Help" && !report.assignedRescuerId),
-        canUpdate: Boolean(rescuer && report.assignedRescuerId && String(report.assignedRescuerId) === String(rescuer._id)),
+        canAccept: Boolean(report.status === "Needs Help" && !hasAssignedRescuer),
+        canUpdate: isAssignedRescuer,
       };
     }
   }
@@ -549,7 +563,7 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
     status: { $in: ["accepted", "under rescue", "Under Rescue", "completed", "treated", "ready for adoption"] },
   });
 
-  if (!activeRequest) {
+  if (!activeRequest && !report.assignedRescuerId) {
     res.status(403).json({
       message: "Forbidden. A rescuer must accept this case before updating its status.",
     });
@@ -559,11 +573,12 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
   const rescuerDoc = await Rescuer.findOne({ userId });
   const rescuerDocId = rescuerDoc ? String(rescuerDoc._id) : "";
   const currentUserIdStr = String(userId);
-  const assignedRescuerIdStr = String(activeRequest.rescuerId);
+  const assignedRescuerIdStr = activeRequest?.rescuerId ? String(activeRequest.rescuerId) : "";
+  const reportAssignedRescuerIdStr = report.assignedRescuerId ? String(report.assignedRescuerId) : "";
 
   const isAssignedRescuer =
-    assignedRescuerIdStr === currentUserIdStr ||
-    (rescuerDocId && assignedRescuerIdStr === rescuerDocId);
+    (assignedRescuerIdStr && (assignedRescuerIdStr === currentUserIdStr || (rescuerDocId && assignedRescuerIdStr === rescuerDocId))) ||
+    (reportAssignedRescuerIdStr && (reportAssignedRescuerIdStr === currentUserIdStr || (rescuerDocId && reportAssignedRescuerIdStr === rescuerDocId)));
 
   if (!isAssignedRescuer) {
     res.status(403).json({
@@ -574,6 +589,9 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
 
   // Update main status
   report.status = status;
+  if (!report.assignedRescuerId && rescuerDoc) {
+    report.assignedRescuerId = rescuerDoc._id;
+  }
 
   // Ensure timeline exists
   if (!report.timeline) {
@@ -596,8 +614,10 @@ exports.updateCaseStatus = catchAsync(async (req: Request, res: Response, next: 
   // public StrayReport deliberately remains "Ready for Adoption" so it is
   // still discoverable on the map by potential adopters.
   if (status === "Ready for Adoption") {
-    activeRequest.status = "completed";
-    await activeRequest.save();
+    if (activeRequest) {
+      activeRequest.status = "completed";
+      await activeRequest.save();
+    }
   }
 
   // 🔔 Notify reporter of status update (if not anonymous)

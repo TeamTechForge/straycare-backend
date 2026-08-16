@@ -77,10 +77,37 @@ export class RescueService {
       return null;
     }
 
+    // Filter out unapproved Vets/NGOs and suspended users
+    const User = require("../models/User");
+    const rescuerUserIds = rescuers.map((r: any) => r.userId).filter(Boolean);
+    const userMap = new Map();
+    if (rescuerUserIds.length > 0) {
+      const users = await User.find({ _id: { $in: rescuerUserIds } }).select("role isApproved accountStatus").lean();
+      if (users && Array.isArray(users)) {
+        users.forEach((u: any) => userMap.set(u._id.toString(), u));
+      }
+    }
+
+    const eligibleRescuers = rescuers.filter((rescuer: any) => {
+      if (rescuer.userId) {
+        const u = userMap.get(String(rescuer.userId));
+        if (!u) return false;
+        if (u.accountStatus === "Suspended") return false;
+        if (["vet", "ngo"].includes(u.role)) {
+          return u.isApproved === true;
+        }
+      }
+      return true;
+    });
+
+    if (!eligibleRescuers.length) {
+      return null;
+    }
+
     let nearest: any = null;
     let minDistance = Infinity;
 
-    rescuers.forEach((rescuer: any) => {
+    eligibleRescuers.forEach((rescuer: any) => {
       // Ensure reporter is never selected as rescuer for their own report
       if (reporterUserId) {
         const rescuerUserIdStr = rescuer.userId ? String(rescuer.userId) : "";
@@ -96,7 +123,7 @@ export class RescueService {
         rescuer.location
       );
 
-      if (dist < minDistance) {
+      if (dist < minDistance && (maxDistanceKm == null || dist <= maxDistanceKm)) {
         minDistance = dist;
         nearest = rescuer;
       }

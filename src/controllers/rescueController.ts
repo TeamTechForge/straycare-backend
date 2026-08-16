@@ -764,17 +764,30 @@ exports.respondToRescueRequest = catchAsync(async (req: Request, res: Response, 
     let acceptedReport: any = null;
     try {
       const StrayReport = require("../models/StrayReport");
+      const Rescuer = require("../models/Rescuer");
+
+      let rescuerId = request.rescuerId;
+      if (!rescuerId && req.user?.id) {
+        const rescuerDoc = await Rescuer.findOne({ userId: req.user.id });
+        if (rescuerDoc) rescuerId = rescuerDoc._id;
+      }
+
       acceptedReport = await StrayReport.findOne({ caseId: request.caseId });
       if (acceptedReport) {
         acceptedReport.status = "Under Rescue";
+        if (rescuerId) {
+          acceptedReport.assignedRescuerId = rescuerId;
+        }
         if (!acceptedReport.timeline) acceptedReport.timeline = [];
         acceptedReport.timeline.push({
           status: "Under Rescue",
           message: `Case accepted by rescuer: ${request.rescuerName || "Rescuer"}`,
+          rescuerName: request.rescuerName || "Rescuer",
+          rescuerId: req.user?.id || rescuerId,
           timestamp: new Date(),
         });
         await acceptedReport.save();
-        console.log(`[RESCUE] StrayReport ${request.caseId} updated status to 'Under Rescue'`);
+        console.log(`[RESCUE] StrayReport ${request.caseId} updated status to 'Under Rescue' and assigned to rescuer ${rescuerId}`);
       }
     } catch (err: any) {
       console.error("[RESCUE] Failed to update StrayReport status on accept:", err.message || err);
@@ -1183,10 +1196,13 @@ exports.acceptFromMap = catchAsync(async (req: Request, res: Response, next: Nex
 
   // Update stray report status to "Under Rescue"
   report.status = "Under Rescue";
+  report.assignedRescuerId = rescuer._id;
   if (!report.timeline) report.timeline = [];
   report.timeline.push({
     status: "Under Rescue",
     message: `Case accepted by rescuer: ${rescuer.name}`,
+    rescuerName: rescuer.name,
+    rescuerId: req.user?.id || rescuer._id,
     timestamp: new Date(),
   });
   await report.save();
