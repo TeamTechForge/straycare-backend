@@ -14,6 +14,8 @@ import {
     getSavedCommunityPosts,
     saveCommunityPost,
     unsaveCommunityPost,
+    updateCommunityPost,
+    deleteCommunityPost,
 } from "../controllers/communityController";
 
 const { verifyToken, optionalToken } = require("../middleware/authMiddleware");
@@ -37,6 +39,8 @@ router.get("/:id/comments", optionalToken, getCommunityComments); // GET    /api
 router.post("/:id/comments", verifyToken, createCommunityComment); // POST  /api/community/:id/comments
 router.post("/:id/save", verifyToken, saveCommunityPost);        // POST   /api/community/:id/save
 router.delete("/:id/save", verifyToken, unsaveCommunityPost);    // DELETE /api/community/:id/save
+router.put("/:id", verifyToken, upload.any(), updateCommunityPost); // PUT /api/community/:id
+router.delete("/:id", verifyToken, deleteCommunityPost);         // DELETE /api/community/:id
 router.get("/:id", optionalToken, getCommunityPostById);         // GET    /api/community/:id
 router.post("/:id/report", verifyToken, reportCommunityPost);  // POST   /api/community/:id/report
 router.patch("/:id/report", verifyToken, reportCommunityPost); // PATCH  /api/community/:id/report

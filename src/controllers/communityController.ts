@@ -153,6 +153,63 @@ export const unsaveCommunityPost = async (req: Request, res: Response): Promise<
     }
 };
 
+export const updateCommunityPost = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const context = await getValidatedPostAndUser(req, res);
+        if (!context) return;
+        const { post, userId } = context;
+        if (!post.authorUserId || String(post.authorUserId) !== userId) {
+            res.status(403).json({ success: false, message: "Only the post owner may edit this post" });
+            return;
+        }
+
+        const title = typeof req.body.title === "string" ? req.body.title.trim() : "";
+        const category = typeof req.body.category === "string" ? req.body.category.trim() : "";
+        const content = typeof req.body.content === "string" ? req.body.content.trim() : "";
+        if (!title || !category || !content) {
+            res.status(400).json({ success: false, message: "Title, category and content are required" });
+            return;
+        }
+
+        const uploadRequest = req as UploadRequest;
+        const file = uploadRequest.file ||
+            (uploadRequest.files && Array.isArray(uploadRequest.files) ? uploadRequest.files[0] : null);
+        if (file) post.imageUrl = await uploadFileToCloudinary(file);
+        post.title = title;
+        post.category = category;
+        post.content = content;
+        await post.save();
+        res.status(200).json({ success: true, data: await serializePost(post, userId) });
+    } catch (error) {
+        console.error("Update community post error:", error);
+        res.status(500).json({ success: false, message: "Failed to update community post" });
+    }
+};
+
+export const deleteCommunityPost = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const context = await getValidatedPostAndUser(req, res);
+        if (!context) return;
+        const { post, postId, userId } = context;
+        if (!post.authorUserId || String(post.authorUserId) !== userId) {
+            res.status(403).json({ success: false, message: "Only the post owner may delete this post" });
+            return;
+        }
+
+        await Promise.all([
+            CommunityLike.deleteMany({ postId }),
+            CommunityComment.deleteMany({ postId }),
+            SavedCommunityPost.deleteMany({ postId }),
+            Notification.deleteMany({ postId }),
+            post.deleteOne(),
+        ]);
+        res.status(200).json({ success: true, message: "Community post deleted", data: { postId } });
+    } catch (error) {
+        console.error("Delete community post error:", error);
+        res.status(500).json({ success: false, message: "Failed to delete community post" });
+    }
+};
+
 const serializeComment = async (comment: any) => {
     const plain = typeof comment.toObject === "function" ? comment.toObject() : comment;
     const commenter = await getAuthorDetails(plain.userId);
@@ -547,7 +604,7 @@ export const reportCommunityPost = async (
     res: Response
 ): Promise<void> => {
     try {
-        const postId = req.params.id as string;
+        const postId = req.params.id;
 
         const { reason } = req.body;
 
@@ -573,6 +630,11 @@ export const reportCommunityPost = async (
                 message:
                     "Authentication required to report a post",
             });
+            return;
+        }
+
+        if (typeof postId !== "string" || !mongoose.Types.ObjectId.isValid(postId)) {
+            res.status(400).json({ success: false, message: "Invalid post ID" });
             return;
         }
 
@@ -619,6 +681,11 @@ export const reportCommunityPost = async (
             return;
         }
 
+        if (post.authorUserId && String(post.authorUserId) === reporterUserId) {
+            res.status(403).json({ success: false, message: "You cannot report your own post" });
+            return;
+        }
+
         // ─────────────────────────────────────
         // 4. CHECK FOR DUPLICATE REPORT
         // ─────────────────────────────────────
@@ -645,6 +712,7 @@ export const reportCommunityPost = async (
         // 5. CREATE REPORT
         // ─────────────────────────────────────
 
+        const reportedAuthor = await getAuthorDetails(post.authorUserId);
         const report =
             await CommunityReport.create({
                 postId,
@@ -659,7 +727,7 @@ export const reportCommunityPost = async (
                     content: post.content,
                     category: post.category,
                     imageUrl: post.imageUrl,
-                    authorName: post.authorName,
+                    authorName: reportedAuthor?.username || post.authorName || "Community User",
                     submittedAt: post.submittedAt,
                 },
 
