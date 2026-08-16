@@ -27,4 +27,4 @@ const VolunteerProfileSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model<IVolunteerProfile>("VolunteerProfile", VolunteerProfileSchema);
+module.exports = mongoose.models.VolunteerProfile || mongoose.model<IVolunteerProfile>("VolunteerProfile", VolunteerProfileSchema);

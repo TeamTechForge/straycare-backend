@@ -10,6 +10,7 @@ import {
     unlikeCommunityPost,
     getCommunityComments,
     createCommunityComment,
+    deleteCommunityComment,
     getMyCommunityPosts,
     getSavedCommunityPosts,
     saveCommunityPost,
@@ -37,6 +38,7 @@ router.post("/:id/like", verifyToken, likeCommunityPost);        // POST   /api/
 router.delete("/:id/like", verifyToken, unlikeCommunityPost);    // DELETE /api/community/:id/like
 router.get("/:id/comments", optionalToken, getCommunityComments); // GET    /api/community/:id/comments
 router.post("/:id/comments", verifyToken, createCommunityComment); // POST  /api/community/:id/comments
+router.delete("/:id/comments/:commentId", verifyToken, deleteCommunityComment); // DELETE /api/community/:id/comments/:commentId
 router.post("/:id/save", verifyToken, saveCommunityPost);        // POST   /api/community/:id/save
 router.delete("/:id/save", verifyToken, unsaveCommunityPost);    // DELETE /api/community/:id/save
 router.put("/:id", verifyToken, upload.any(), updateCommunityPost); // PUT /api/community/:id

@@ -161,7 +161,7 @@ const getMyProfile = catchAsync(async (req: Request, res: Response, next: NextFu
     return;
   }
 
-  const safeProfile: any = profile.toObject();
+  const safeProfile: any = typeof profile.toObject === "function" ? profile.toObject() : { ...profile };
   if (role === "ngo" || role === "vet") {
     safeProfile.recurringPaymentsEnabled = Boolean(
       safeProfile.payHereAppId && safeProfile.payHereAppSecret

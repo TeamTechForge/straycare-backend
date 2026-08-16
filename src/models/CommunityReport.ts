@@ -134,7 +134,8 @@ communityReportSchema.index(
     }
 );
 
-export default mongoose.model<ICommunityReport>(
-    "CommunityReport",
-    communityReportSchema
-);
+export default mongoose.models.CommunityReport ||
+    mongoose.model<ICommunityReport>(
+        "CommunityReport",
+        communityReportSchema
+    );

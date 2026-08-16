@@ -53,4 +53,4 @@ const VetProfileSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model<IVetProfile>("VetProfile", VetProfileSchema);
+module.exports = mongoose.models.VetProfile || mongoose.model<IVetProfile>("VetProfile", VetProfileSchema);

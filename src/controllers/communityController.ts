@@ -215,17 +215,21 @@ export const deleteCommunityPost = async (req: Request, res: Response): Promise<
     }
 };
 
-const serializeComment = async (comment: any) => {
+const serializeComment = async (comment: any, currentUserId?: string, postAuthorId?: string) => {
     const plain = typeof comment.toObject === "function" ? comment.toObject() : comment;
     const commenter = await getAuthorDetails(plain.userId);
+    const isCommentOwner = currentUserId ? String(plain.userId) === String(currentUserId) : false;
+    const isPostOwner = postAuthorId && currentUserId ? String(postAuthorId) === String(currentUserId) : false;
 
     return {
         _id: String(plain._id),
         postId: String(plain.postId),
         userId: String(plain.userId),
+        parentCommentId: plain.parentCommentId ? String(plain.parentCommentId) : null,
         username: commenter?.username || "Community User",
         profileImage: commenter?.profileImage || "",
         content: plain.content,
+        canDelete: isCommentOwner || isPostOwner,
         createdAt: plain.createdAt,
         updatedAt: plain.updatedAt,
     };
@@ -234,11 +238,13 @@ const serializeComment = async (comment: any) => {
 export const getCommunityComments = async (req: Request, res: Response): Promise<void> => {
     try {
         const postId = req.params.id;
+        const currentUserId = req.user?.id;
         if (typeof postId !== "string" || !mongoose.Types.ObjectId.isValid(postId)) {
             res.status(400).json({ success: false, message: "Invalid post ID" });
             return;
         }
-        if (!(await CommunityPost.exists({ _id: postId }))) {
+        const post = await CommunityPost.findById(postId);
+        if (!post) {
             res.status(404).json({ success: false, message: "Post not found" });
             return;
         }
@@ -246,7 +252,15 @@ export const getCommunityComments = async (req: Request, res: Response): Promise
         const comments = await CommunityComment.find({ postId }).sort({ createdAt: 1 });
         res.status(200).json({
             success: true,
-            data: await Promise.all(comments.map(serializeComment)),
+            data: await Promise.all(
+                comments.map((c) =>
+                    serializeComment(
+                        c,
+                        currentUserId,
+                        post.authorUserId ? String(post.authorUserId) : undefined
+                    )
+                )
+            ),
             commentCount: comments.length,
         });
     } catch (error) {
@@ -261,6 +275,12 @@ export const createCommunityComment = async (req: Request, res: Response): Promi
         if (!context) return;
 
         const content = typeof req.body.content === "string" ? req.body.content.trim() : "";
+        const parentCommentId =
+            typeof req.body.parentCommentId === "string" &&
+            mongoose.Types.ObjectId.isValid(req.body.parentCommentId)
+                ? new mongoose.Types.ObjectId(req.body.parentCommentId)
+                : null;
+
         if (!content) {
             res.status(400).json({ success: false, message: "Comment content is required" });
             return;
@@ -271,7 +291,7 @@ export const createCommunityComment = async (req: Request, res: Response): Promi
         }
 
         const { postId, userId, post, user } = context;
-        const comment = await CommunityComment.create({ postId, userId, content });
+        const comment = await CommunityComment.create({ postId, userId, parentCommentId, content });
         const ownerId = post.authorUserId ? String(post.authorUserId) : null;
 
         if (ownerId && ownerId !== userId) {
@@ -302,12 +322,73 @@ export const createCommunityComment = async (req: Request, res: Response): Promi
         const commentCount = await CommunityComment.countDocuments({ postId });
         res.status(201).json({
             success: true,
-            data: await serializeComment(comment),
+            data: await serializeComment(comment, userId, ownerId || undefined),
             commentCount,
         });
     } catch (error) {
         console.error("Create community comment error:", error);
         res.status(500).json({ success: false, message: "Failed to create comment" });
+    }
+};
+
+export const deleteCommunityComment = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const postId = req.params.id;
+        const commentId = req.params.commentId;
+        const userId = req.user?.id;
+
+        if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+            res.status(401).json({ success: false, message: "Authentication required" });
+            return;
+        }
+        if (
+            typeof postId !== "string" ||
+            typeof commentId !== "string" ||
+            !mongoose.Types.ObjectId.isValid(postId as string) ||
+            !mongoose.Types.ObjectId.isValid(commentId as string)
+        ) {
+            res.status(400).json({ success: false, message: "Invalid post or comment ID" });
+            return;
+        }
+
+        const [post, comment] = await Promise.all([
+            CommunityPost.findById(postId),
+            CommunityComment.findById(commentId),
+        ]);
+
+        if (!post) {
+            res.status(404).json({ success: false, message: "Post not found" });
+            return;
+        }
+        if (!comment) {
+            res.status(404).json({ success: false, message: "Comment not found" });
+            return;
+        }
+
+        const isCommentAuthor = String(comment.userId) === String(userId);
+        const isPostOwner = post.authorUserId && String(post.authorUserId) === String(userId);
+
+        if (!isCommentAuthor && !isPostOwner) {
+            res.status(403).json({ success: false, message: "You are not authorized to delete this comment" });
+            return;
+        }
+
+        // Delete comment and any nested replies
+        await Promise.all([
+            comment.deleteOne(),
+            CommunityComment.deleteMany({ parentCommentId: commentId }),
+            Notification.deleteMany({ commentId }),
+        ]);
+
+        const commentCount = await CommunityComment.countDocuments({ postId });
+        res.status(200).json({
+            success: true,
+            message: "Comment deleted successfully",
+            data: { commentId, commentCount },
+        });
+    } catch (error) {
+        console.error("Delete community comment error:", error);
+        res.status(500).json({ success: false, message: "Failed to delete comment" });
     }
 };
 
@@ -857,6 +938,11 @@ export const updateCommunityReportStatus = async (
                 success: false,
                 message: "Valid status ('pending', 'dismissed', 'action_taken') is required",
             });
+            return;
+        }
+
+        if (typeof reportId !== "string" || !mongoose.Types.ObjectId.isValid(reportId)) {
+            res.status(400).json({ success: false, message: "Invalid report ID" });
             return;
         }
 

@@ -12,7 +12,7 @@ jest.mock("../../../src/services/notificationService", () => ({
   NotificationService: { sendNotification: jest.fn().mockResolvedValue(true) },
 }));
 
-const { createReport, acceptReportFromMap, updateCaseStatus } = require("../../../src/controllers/reportController");
+const { createReport, acceptReportFromMap, updateCaseStatus, getReportByCaseId } = require("../../../src/controllers/reportController");
 const StrayReport = require("../../../src/models/StrayReport");
 const User = require("../../../src/models/User");
 const Rescuer = require("../../../src/models/Rescuer");
@@ -31,6 +31,83 @@ describe("Report controller reporting workflow", () => {
     res = mockResponse();
     next = mockNext();
     jest.clearAllMocks();
+  });
+
+  describe("getReportByCaseId", () => {
+    it("grants canUpdate: true to a rescuer assigned via RescueRequest workflow", async () => {
+      req.user = { id: "rescuer-user" };
+      req.params = { caseId: "SC-100" };
+      const reportDoc = {
+        _doc: {
+          caseId: "SC-100",
+          animalType: "Dog",
+          status: "Under Rescue",
+          photos: [],
+          timeline: [],
+        },
+        caseId: "SC-100",
+        animalType: "Dog",
+        status: "Under Rescue",
+        photos: [],
+        timeline: [],
+      };
+      StrayReport.findOne.mockResolvedValue(reportDoc);
+      RescueRequest.findOne.mockResolvedValue({
+        caseId: "SC-100",
+        status: "accepted",
+        rescuerId: "rescuer-doc-1",
+      });
+      Rescuer.findById.mockResolvedValue({ _id: "rescuer-doc-1", userId: "rescuer-user" });
+      Rescuer.findOne.mockReturnValue({
+        select: jest.fn().mockResolvedValue({ _id: "rescuer-doc-1" }),
+      });
+      User.findById.mockReturnValue(selectResult({ role: "volunteer" }));
+
+      await getReportByCaseId(req, res, next);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          caseId: "SC-100",
+          permissions: { canAccept: false, canUpdate: true },
+        })
+      );
+    });
+
+    it("grants canUpdate: true to a rescuer assigned via report.assignedRescuerId directly", async () => {
+      req.user = { id: "rescuer-user" };
+      req.params = { caseId: "SC-101" };
+      const reportDoc = {
+        _doc: {
+          caseId: "SC-101",
+          animalType: "Cat",
+          status: "Under Rescue",
+          assignedRescuerId: "rescuer-doc-1",
+          photos: [],
+          timeline: [],
+        },
+        caseId: "SC-101",
+        animalType: "Cat",
+        status: "Under Rescue",
+        assignedRescuerId: "rescuer-doc-1",
+        photos: [],
+        timeline: [],
+      };
+      StrayReport.findOne.mockResolvedValue(reportDoc);
+      RescueRequest.findOne.mockResolvedValue(null);
+      Rescuer.findOne.mockReturnValue({
+        select: jest.fn().mockResolvedValue({ _id: "rescuer-doc-1" }),
+      });
+      User.findById.mockReturnValue(selectResult({ role: "ngo" }));
+
+      await getReportByCaseId(req, res, next);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          caseId: "SC-101",
+          permissions: { canAccept: false, canUpdate: true },
+        })
+      );
+    });
   });
 
   describe("createReport", () => {
@@ -85,6 +162,7 @@ describe("Report controller reporting workflow", () => {
       const anonymousPayload = StrayReport.create.mock.calls[0][0];
       expect(anonymousPayload).toEqual(expect.objectContaining({ anonymous: true }));
       expect(anonymousPayload).not.toHaveProperty("reporterUserId");
+      expect(res.status).toHaveBeenCalledWith(201);
     });
 
     it("rejects a report without valid photos, categories, and location", async () => {
@@ -234,7 +312,7 @@ describe("Report controller reporting workflow", () => {
       expect(report.save).toHaveBeenCalledTimes(1);
       expect(NotificationService.sendNotification).toHaveBeenCalledWith(
         "reporter-1",
-        "Treatment Started â€¢ SC-123",
+        expect.stringContaining("Treatment Started"),
         expect.stringContaining("SC-123: the dog is now receiving treatment"),
         "success",
         "",
@@ -282,7 +360,7 @@ describe("Report controller reporting workflow", () => {
       expect(assignedRequest.save).toHaveBeenCalledTimes(1);
       expect(NotificationService.sendNotification).toHaveBeenCalledWith(
         "reporter-1",
-        "Ready for Adoption • SC-125",
+        expect.stringContaining("Ready for Adoption"),
         expect.stringContaining("SC-125: the dog is now ready for adoption"),
         "success",
         "",

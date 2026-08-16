@@ -24,4 +24,4 @@ const GeneralUserProfileSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model<IGeneralUserProfile>("GeneralUserProfile", GeneralUserProfileSchema);
+module.exports = mongoose.models.GeneralUserProfile || mongoose.model<IGeneralUserProfile>("GeneralUserProfile", GeneralUserProfileSchema);
