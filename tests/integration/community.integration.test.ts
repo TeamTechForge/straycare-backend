@@ -36,6 +36,7 @@ describe("Community Feed integration", () => {
         title: "Safe feeding tips",
         category: "Pet Care Tips",
         content: "Always provide clean water and introduce new food gradually.",
+        imageUrl: "https://example.com/original.jpg",
         authorName: "Forged author",
       });
     expect(created.status).toBe(201);
@@ -107,6 +108,13 @@ describe("Community Feed integration", () => {
       .send({ title: "Updated feeding tips", category: "Health & First Aid", content: "Use clean bowls and introduce every dietary change gradually." });
     expect(ownerEdit.status).toBe(200);
     expect(ownerEdit.body.data.title).toBe("Updated feeding tips");
+    expect(ownerEdit.body.data.imageUrl).toBe("https://example.com/original.jpg");
+
+    const removeImage = await request(app).put(`/api/community/${postId}`)
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({ title: "Updated feeding tips", category: "Health & First Aid", content: "Use clean bowls and introduce every dietary change gradually.", removeImage: true });
+    expect(removeImage.status).toBe(200);
+    expect(removeImage.body.data.imageUrl).toBeNull();
 
     const selfReport = await request(app).post(`/api/community/${postId}/report`)
       .set("Authorization", `Bearer ${owner.token}`).send({ reason: "Spam or irrelevant" });

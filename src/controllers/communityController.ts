@@ -174,7 +174,12 @@ export const updateCommunityPost = async (req: Request, res: Response): Promise<
         const uploadRequest = req as UploadRequest;
         const file = uploadRequest.file ||
             (uploadRequest.files && Array.isArray(uploadRequest.files) ? uploadRequest.files[0] : null);
-        if (file) post.imageUrl = await uploadFileToCloudinary(file);
+        const removeImage = req.body.removeImage === true || req.body.removeImage === "true";
+        if (file) {
+            post.imageUrl = await uploadFileToCloudinary(file);
+        } else if (removeImage) {
+            post.imageUrl = null;
+        }
         post.title = title;
         post.category = category;
         post.content = content;
