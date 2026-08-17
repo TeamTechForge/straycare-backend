@@ -676,21 +676,24 @@ exports.getLiveTracking = catchAsync(async (req: Request, res: Response, next: N
   });
 });
 
+// GET /api/rescue/status/:requestId
+// Checks current progress of a rescue request for the reporter
 exports.checkRequestStatus = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { requestId } = req.params;
   Logger.info(`Checking status of request: ${requestId}`, { service: "RescueController" });
 
+  // 1. Find request in database
   const request = await findRequestByIdOrCustomId(String(requestId));
-
   if (!request) {
     res.status(404).json({ error: "Request not found" });
     return;
   }
 
-  // Build full case record with reporter + stray enrichment
+  // 2. Attach reporter, rescuer, and animal case details
   let formatted = formatCaseRecord({ request, rescuer: request.rescuerId || null });
   formatted = await enrichCaseRecordWithReporterAndStray(formatted, request.caseId || String(requestId), request.userId);
 
+  // 3. Normalize status so the mobile app cleanly shows "accepted"
   const rawReqStatus = String(request.status || "").toLowerCase();
   const rawCaseStatus = String(formatted.status || "").toLowerCase();
 
@@ -705,6 +708,7 @@ exports.checkRequestStatus = catchAsync(async (req: Request, res: Response, next
     resolvedStatus = "cancelled";
   }
 
+  // 4. Send response to frontend
   res.json({
     ...formatted,
     status: resolvedStatus,
