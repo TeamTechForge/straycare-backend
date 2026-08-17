@@ -691,9 +691,19 @@ exports.checkRequestStatus = catchAsync(async (req: Request, res: Response, next
   let formatted = formatCaseRecord({ request, rescuer: request.rescuerId || null });
   formatted = await enrichCaseRecordWithReporterAndStray(formatted, request.caseId || String(requestId), request.userId);
 
-  const resolvedStatus = (formatted.status && formatted.status.toLowerCase().includes("adopt"))
-    ? formatted.status
-    : (formatted.status || request.status);
+  const rawReqStatus = String(request.status || "").toLowerCase();
+  const rawCaseStatus = String(formatted.status || "").toLowerCase();
+
+  let resolvedStatus: string = request.status || formatted.status || "pending";
+  if (rawReqStatus === "accepted" || rawCaseStatus === "accepted" || rawCaseStatus === "under rescue") {
+    resolvedStatus = "accepted";
+  } else if (rawReqStatus === "completed" || rawCaseStatus === "completed" || rawCaseStatus.includes("adopt") || rawCaseStatus === "treated") {
+    resolvedStatus = "completed";
+  } else if (rawReqStatus === "rejected" || rawReqStatus === "failed") {
+    resolvedStatus = "rejected";
+  } else if (rawReqStatus === "cancelled") {
+    resolvedStatus = "cancelled";
+  }
 
   res.json({
     ...formatted,
@@ -823,9 +833,46 @@ exports.respondToRescueRequest = catchAsync(async (req: Request, res: Response, 
         console.error("[RESCUE] Failed to create notification for reporter:", err.message);
       }
     }
+
+    // Emit real-time socket event for the reporter/rescue room
+    try {
+      const io = req.app?.get?.("io");
+      if (io) {
+        const rescueNamespace = io.of("/rescue");
+        rescueNamespace.to(String(request._id)).emit("status_update", {
+          status: "accepted",
+          caseStatus: "Under Rescue",
+          rescuerId: String(request.rescuerId || ""),
+          rescuerName: request.rescuerName || "Rescuer",
+        });
+        if (request.caseId) {
+          rescueNamespace.to(request.caseId).emit("status_update", {
+            status: "accepted",
+            caseStatus: "Under Rescue",
+            rescuerId: String(request.rescuerId || ""),
+            rescuerName: request.rescuerName || "Rescuer",
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error("[RESCUE] Socket emit failed on accept:", err.message);
+    }
   }
 
   if (action === "reject") {
+    // Emit real-time socket event for rejection
+    try {
+      const io = req.app?.get?.("io");
+      if (io) {
+        const rescueNamespace = io.of("/rescue");
+        rescueNamespace.to(String(request._id)).emit("status_update", {
+          status: "rejected",
+          requestId: String(request._id),
+        });
+      }
+    } catch (err: any) {
+      console.error("[RESCUE] Socket emit failed on reject:", err.message);
+    }
     // 2. Trigger circular matching to find the next nearest rescuer
     try {
       console.log(`[RESCUE] Rejection triggered circular matching lookup for caseId: ${request.caseId}`);
