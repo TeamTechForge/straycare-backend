@@ -1,11 +1,15 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const router = express.Router();
+const { verifyToken } = require("../middleware/authMiddleware");
+const requireAdmin = require("../middleware/requireAdmin");
 
 import type { Request, Response } from "express";
 
 const Notification = require("../models/Notification");
 const User = require("../models/User");
+
+router.use(verifyToken, requireAdmin);
 
 // GET all admin notifications
 

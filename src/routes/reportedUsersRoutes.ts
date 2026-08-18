@@ -1,8 +1,12 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const router = express.Router();
+const { verifyToken } = require("../middleware/authMiddleware");
+const requireAdmin = require("../middleware/requireAdmin");
 
 import type { Request, Response } from "express";
+
+router.use(verifyToken, requireAdmin);
 
 router.get("/reported-users", async (req: Request, res: Response) => {
   try {

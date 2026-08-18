@@ -1,15 +1,36 @@
 const nodemailer = require("nodemailer");
 
+const emailUser = process.env.EMAIL_USER?.trim();
+const emailPass = process.env.EMAIL_PASS?.replace(/\s/g, "");
+
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    user: emailUser,
+    pass: emailPass,
   },
+  connectionTimeout: 15000,
+  greetingTimeout: 15000,
+  socketTimeout: 20000,
   tls: {
     rejectUnauthorized: false,
   },
 });
+
+const verifyEmailTransport = async (): Promise<boolean> => {
+  if (!emailUser || !emailPass) {
+    console.error("[EMAIL] EMAIL_USER or EMAIL_PASS is missing. Hosted email delivery is disabled.");
+    return false;
+  }
+  try {
+    await transporter.verify();
+    console.log(`[EMAIL] Gmail transport verified for ${emailUser}.`);
+    return true;
+  } catch (error: any) {
+    console.error("[EMAIL] Gmail transport verification failed:", error?.message || error);
+    return false;
+  }
+};
 
 const escapeHtml = (value: string): string =>
   value.replace(/[&<>'"]/g, (character) => {
@@ -170,7 +191,8 @@ const sendSupportTicketReplyEmail = async (
 const sendOrganizationVerificationEmail = async (
   toEmail: string,
   organizationName: string,
-  status: "Verified" | "Rejected"
+  status: "Verified" | "Rejected",
+  rejectionReason?: string
 ): Promise<void> => {
   const safeName = escapeHtml(organizationName || "Organization representative");
   const isVerified = status === "Verified";
@@ -178,12 +200,15 @@ const sendOrganizationVerificationEmail = async (
   const resultMessage = isVerified
     ? "Your organization profile has been verified. You can now access the organization features available in StrayCare."
     : "We could not verify your organization using the submitted information. Please review your profile and verification documents before contacting StrayCare support or submitting updated information.";
+  const safeReason = escapeHtml(rejectionReason || "Verification requirements were not met");
+  const reasonText = isVerified ? "" : `\n\nReason: ${rejectionReason || "Verification requirements were not met"}`;
+  const reasonHtml = isVerified ? "" : `<p style="margin: 10px 0 0;"><strong>Reason:</strong> ${safeReason}</p>`;
 
   await transporter.sendMail({
     from: `"StrayCare Verification" <${process.env.EMAIL_USER}>`,
     to: toEmail,
     subject: `StrayCare Organization ${status}`,
-    text: `Hello ${organizationName || "Organization representative"},\n\n${resultHeading}.\n\n${resultMessage}\n\nStrayCare Team`,
+    text: `Hello ${organizationName || "Organization representative"},\n\n${resultHeading}.\n\n${resultMessage}${reasonText}\n\nStrayCare Team`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #412828;">
         <h2 style="color: #F5A623;">StrayCare Organization Verification</h2>
@@ -191,6 +216,7 @@ const sendOrganizationVerificationEmail = async (
         <div style="background: ${isVerified ? "#F0FDF4" : "#FFF7ED"}; border-left: 4px solid ${isVerified ? "#16A34A" : "#EA580C"}; padding: 14px 16px; margin: 18px 0;">
           <strong>${resultHeading}</strong>
           <p style="margin: 8px 0 0; line-height: 1.6;">${resultMessage}</p>
+          ${reasonHtml}
         </div>
         <p style="color: #888; font-size: 13px;">This email was sent after an administrator reviewed your organization verification documents.</p>
       </div>
@@ -205,4 +231,5 @@ module.exports = {
   sendAdminPasswordResetCodeEmail,
   sendSupportTicketReplyEmail,
   sendOrganizationVerificationEmail,
+  verifyEmailTransport,
 };
