@@ -144,6 +144,7 @@ export const getUserDocuments = async (req: Request, res: Response) => {
           location: ngo.location,
           bio: ngo.bio,
           status: ngo.status || "Pending",
+          rejectionReason: ngo.rejectionReason || "",
           createdAt: ngo.createdAt,
         },
         documents: ngo.verificationDocument
@@ -164,6 +165,7 @@ export const getUserDocuments = async (req: Request, res: Response) => {
           location: vet.primaryLocation,
           bio: vet.bio,
           status: vet.status || "Pending",
+          rejectionReason: vet.rejectionReason || "",
           createdAt: vet.createdAt,
         },
         documents: vet.licenseDocument
@@ -180,10 +182,21 @@ export const getUserDocuments = async (req: Request, res: Response) => {
 
 export const updateUserStatus = async (req: Request, res: Response) => {
   try {
-    const { status } = req.body;
+    const { status, rejectionReason } = req.body;
+
+    const allowedRejectionReasons = [
+      "Registration or license details could not be verified",
+      "Submitted document is unclear, expired, or incomplete",
+      "Organization details do not match the submitted document",
+      "Required verification information is missing",
+    ];
 
     if (!["Verified", "Rejected"].includes(status)) {
       return res.status(400).json({ error: "Status must be Verified or Rejected" });
+    }
+
+    if (status === "Rejected" && !allowedRejectionReasons.includes(rejectionReason)) {
+      return res.status(400).json({ error: "A valid rejection reason is required" });
     }
 
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -194,14 +207,14 @@ export const updateUserStatus = async (req: Request, res: Response) => {
 
     updated = await NGOProfile.findByIdAndUpdate(
       req.params.id,
-      { $set: { status } },
+      { $set: { status, rejectionReason: status === "Rejected" ? rejectionReason : "" } },
       { new: true }
     ).lean();
 
     if (!updated) {
       updated = await VetProfile.findByIdAndUpdate(
         req.params.id,
-        { $set: { status } },
+        { $set: { status, rejectionReason: status === "Rejected" ? rejectionReason : "" } },
         { new: true }
       ).lean();
     }
@@ -221,7 +234,8 @@ export const updateUserStatus = async (req: Request, res: Response) => {
           await sendOrganizationVerificationEmail(
             account.email,
             updated.orgName || updated.clinicName || account.name,
-            status
+            status,
+            status === "Rejected" ? rejectionReason : undefined
           );
           emailSent = true;
         } catch (emailError) {

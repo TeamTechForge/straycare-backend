@@ -40,6 +40,8 @@ const communityRoutes = require("./routes/communityRoutes");
 
 
 const errorHandler = require("./middleware/errorHandler");
+const { verifyToken } = require("./middleware/authMiddleware");
+const requireAdmin = require("./middleware/requireAdmin");
 
 const app = express();
 
@@ -126,7 +128,7 @@ app.use("/api/donations", donationRoutes);
 app.use("/api/organizations", organizationRoutes);
 app.use("/api/users", usersManagementRoutes);
 app.use("/api/admin", reportedUsersRoutes);
-app.use("/api/moderation", moderationRoutes);
+app.use("/api/moderation", verifyToken, requireAdmin, moderationRoutes);
 app.use("/api/admin-notifications", adminNotificationsRoutes);
 app.use("/api/admins", adminManagementRoutes);
 app.use("/api/admin/reported-posts", reportedPostsRoutes);
