@@ -676,25 +676,39 @@ exports.getLiveTracking = catchAsync(async (req: Request, res: Response, next: N
   });
 });
 
+// GET /api/rescue/status/:requestId
+// Checks current progress of a rescue request for the reporter
 exports.checkRequestStatus = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { requestId } = req.params;
   Logger.info(`Checking status of request: ${requestId}`, { service: "RescueController" });
 
+  // 1. Find request in database
   const request = await findRequestByIdOrCustomId(String(requestId));
-
   if (!request) {
     res.status(404).json({ error: "Request not found" });
     return;
   }
 
-  // Build full case record with reporter + stray enrichment
+  // 2. Attach reporter, rescuer, and animal case details
   let formatted = formatCaseRecord({ request, rescuer: request.rescuerId || null });
   formatted = await enrichCaseRecordWithReporterAndStray(formatted, request.caseId || String(requestId), request.userId);
 
-  const resolvedStatus = (formatted.status && formatted.status.toLowerCase().includes("adopt"))
-    ? formatted.status
-    : (formatted.status || request.status);
+  // 3. Normalize status so the mobile app cleanly shows "accepted"
+  const rawReqStatus = String(request.status || "").toLowerCase();
+  const rawCaseStatus = String(formatted.status || "").toLowerCase();
 
+  let resolvedStatus: string = request.status || formatted.status || "pending";
+  if (rawReqStatus === "accepted" || rawCaseStatus === "accepted" || rawCaseStatus === "under rescue") {
+    resolvedStatus = "accepted";
+  } else if (rawReqStatus === "completed" || rawCaseStatus === "completed" || rawCaseStatus.includes("adopt") || rawCaseStatus === "treated") {
+    resolvedStatus = "completed";
+  } else if (rawReqStatus === "rejected" || rawReqStatus === "failed") {
+    resolvedStatus = "rejected";
+  } else if (rawReqStatus === "cancelled") {
+    resolvedStatus = "cancelled";
+  }
+
+  // 4. Send response to frontend
   res.json({
     ...formatted,
     status: resolvedStatus,
@@ -823,9 +837,46 @@ exports.respondToRescueRequest = catchAsync(async (req: Request, res: Response, 
         console.error("[RESCUE] Failed to create notification for reporter:", err.message);
       }
     }
+
+    // Emit real-time socket event for the reporter/rescue room
+    try {
+      const io = req.app?.get?.("io");
+      if (io) {
+        const rescueNamespace = io.of("/rescue");
+        rescueNamespace.to(String(request._id)).emit("status_update", {
+          status: "accepted",
+          caseStatus: "Under Rescue",
+          rescuerId: String(request.rescuerId || ""),
+          rescuerName: request.rescuerName || "Rescuer",
+        });
+        if (request.caseId) {
+          rescueNamespace.to(request.caseId).emit("status_update", {
+            status: "accepted",
+            caseStatus: "Under Rescue",
+            rescuerId: String(request.rescuerId || ""),
+            rescuerName: request.rescuerName || "Rescuer",
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error("[RESCUE] Socket emit failed on accept:", err.message);
+    }
   }
 
   if (action === "reject") {
+    // Emit real-time socket event for rejection
+    try {
+      const io = req.app?.get?.("io");
+      if (io) {
+        const rescueNamespace = io.of("/rescue");
+        rescueNamespace.to(String(request._id)).emit("status_update", {
+          status: "rejected",
+          requestId: String(request._id),
+        });
+      }
+    } catch (err: any) {
+      console.error("[RESCUE] Socket emit failed on reject:", err.message);
+    }
     // 2. Trigger circular matching to find the next nearest rescuer
     try {
       console.log(`[RESCUE] Rejection triggered circular matching lookup for caseId: ${request.caseId}`);
