@@ -3,6 +3,23 @@ import AdoptionPost from "../models/AdoptionPost";
 
 const normalizePostPayload = (body: any) => {
   const payload = { ...body };
+  const hasLatitude = body.latitude !== undefined && body.latitude !== null && body.latitude !== "";
+  const hasLongitude = body.longitude !== undefined && body.longitude !== null && body.longitude !== "";
+  if (hasLatitude !== hasLongitude) {
+    throw new Error("Latitude and longitude must be provided together");
+  }
+  if (hasLatitude && hasLongitude) {
+    const latitude = Number(body.latitude);
+    const longitude = Number(body.longitude);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+      throw new Error("Latitude must be between -90 and 90");
+    }
+    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      throw new Error("Longitude must be between -180 and 180");
+    }
+    payload.latitude = latitude;
+    payload.longitude = longitude;
+  }
   if (body.images !== undefined && !Array.isArray(body.images)) {
     throw new Error("Images must be an array");
   }
