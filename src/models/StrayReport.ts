@@ -22,7 +22,7 @@ interface IStrayReport extends mongoose.Document {
   category: string;
   categories: Array<"Injured" | "Abandoned" | "Aggressive">;
   description: string;
-  status: "Needs Help" | "Under Rescue" | "Treated" | "Ready for Adoption" | "Completed";
+  status: "Needs Help" | "Under Rescue" | "Treated" | "Ready for Adoption" | "Completed" | "Failed";
   location: IStrayReportLocation;
   photos: string[];
   anonymous: boolean;
@@ -53,7 +53,7 @@ const strayReportSchema = new mongoose.Schema(
     description: { type: String, default: "" },
     status: {
       type: String,
-      enum: ["Needs Help", "Under Rescue", "Treated", "Ready for Adoption", "Completed"],
+      enum: ["Needs Help", "Under Rescue", "Treated", "Ready for Adoption", "Completed", "Failed"],
       default: "Needs Help",
     },
     location: {
