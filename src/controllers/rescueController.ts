@@ -265,11 +265,50 @@ const enrichCaseRecordWithReporterAndStray = async (formatted: any, caseIdOrId: 
   return formatted;
 };
 
-// Returns all rescuers in the database.
+// Returns all rescuers in the database with their actual user profile image.
 exports.listRescuers = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const User = require("../models/User");
+  const VolunteerProfile = require("../models/VolunteerProfile");
+  const NGOProfile = require("../models/NGOProfile");
+  const VetProfile = require("../models/VetProfile");
+
   const rescuers = await Rescuer.find({});
   console.log(`[RESCUE] Found ${rescuers.length} rescuers in database`);
-  res.json({ count: rescuers.length, rescuers });
+
+  const enrichedRescuers = await Promise.all(
+    rescuers.map(async (r: any) => {
+      const doc = r.toObject ? r.toObject() : { ...r };
+      let actualAvatar = doc.avatar || "";
+
+      if (doc.userId && mongoose.Types.ObjectId.isValid(String(doc.userId))) {
+        const uId = String(doc.userId);
+        const [userDoc, vol, ngo, vet] = await Promise.all([
+          User.findById(uId).select("name profileImage avatar role").lean(),
+          VolunteerProfile.findOne({ userId: uId }).select("profileImage").lean(),
+          NGOProfile.findOne({ userId: uId }).select("profileImage").lean(),
+          VetProfile.findOne({ userId: uId }).select("profileImage").lean(),
+        ]);
+
+        actualAvatar =
+          userDoc?.profileImage ||
+          userDoc?.avatar ||
+          vol?.profileImage ||
+          ngo?.profileImage ||
+          vet?.profileImage ||
+          actualAvatar;
+
+        if (userDoc?.name && !doc.name) {
+          doc.name = userDoc.name;
+        }
+      }
+
+      doc.avatar = actualAvatar;
+      doc.profileImage = actualAvatar;
+      return doc;
+    })
+  );
+
+  res.json({ count: enrichedRescuers.length, rescuers: enrichedRescuers });
 });
 
 // POST /api/rescue/find-nearest
