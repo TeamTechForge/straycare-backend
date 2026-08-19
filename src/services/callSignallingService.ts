@@ -73,10 +73,16 @@ class CallSignallingService {
 
     logger.info(`[CallSignalling] ${caller.userId} is calling ${calleeId}`);
     
-    // Mask caller identity if this is a Case Chat, to prevent anonymous reporters from leaking their real names
-    if (payload.receiverNameOverride && payload.receiverNameOverride.includes("Case Chat")) {
-      payload.callerNameOverride = "Case Chat";
-      payload.caller.name = "Case Chat";
+    // Mask caller identity if this is an anonymous report, to prevent reporters from leaking their real names
+    if (payload.receiverNameOverride && (payload.receiverNameOverride.includes("Anonymous Reporter") || payload.receiverNameOverride.includes("Anonymous Report"))) {
+      const caseIdMatch = payload.receiverNameOverride.match(/\((.*?)\)/);
+      const caseIdSuffix = caseIdMatch ? ` (${caseIdMatch[1]})` : "";
+      
+      const isCallerRescuer = payload.receiverNameOverride.includes("Anonymous Reporter");
+      const newCallerName = isCallerRescuer ? `Anonymous Report${caseIdSuffix}` : `Anonymous Reporter${caseIdSuffix}`;
+
+      payload.callerNameOverride = newCallerName;
+      payload.caller.name = newCallerName;
     }
 
     // We emit to the callee's room (using 'user:${calleeId}' room created on connection)
