@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { verifyToken } = require("../middleware/authMiddleware");
+const requireAdmin = require("../middleware/requireAdmin");
 const {
   createSupportTicket,
   getAllSupportTickets,
@@ -8,7 +9,7 @@ const {
 } = require("../controllers/supportController");
 
 router.post("/", verifyToken, createSupportTicket);
-router.get("/", verifyToken, getAllSupportTickets);
-router.patch("/:id", verifyToken, updateSupportTicket);
+router.get("/", verifyToken, requireAdmin, getAllSupportTickets);
+router.patch("/:id", verifyToken, requireAdmin, updateSupportTicket);
 
 module.exports = router;

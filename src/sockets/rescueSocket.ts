@@ -18,8 +18,19 @@ module.exports = (io: Server) => {
     });
 
     // Live location updates from rescuer
-    socket.on("location_update", ({ rescueId, lat, lng }: { rescueId: string; lat: number; lng: number }) => {
-      rescueNamespace.to(rescueId).emit("location_update", { lat, lng });
+    socket.on("location_update", (data: any) => {
+      const { rescueId } = data || {};
+      if (rescueId) {
+        rescueNamespace.to(String(rescueId)).emit("location_update", data);
+      }
+    });
+
+    // Location sharing toggle status
+    socket.on("location_sharing_status", (data: any) => {
+      const { rescueId } = data || {};
+      if (rescueId) {
+        rescueNamespace.to(String(rescueId)).emit("location_sharing_status", data);
+      }
     });
 
     // Status updates
