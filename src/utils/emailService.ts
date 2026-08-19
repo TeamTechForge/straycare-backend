@@ -2,6 +2,8 @@ const nodemailer = require("nodemailer");
 
 const emailUser = process.env.EMAIL_USER?.trim();
 const emailPass = process.env.EMAIL_PASS?.replace(/\s/g, "");
+const brevoApiKey = process.env.BREVO_API_KEY?.trim();
+const emailFrom = process.env.EMAIL_FROM?.trim() || emailUser;
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -17,9 +19,76 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-const verifyEmailTransport = async (): Promise<boolean> => {
+interface EmailMessage {
+  from?: string;
+  to: string;
+  subject: string;
+  html?: string;
+  text?: string;
+}
+
+const sendEmail = async (message: EmailMessage): Promise<void> => {
+  if (brevoApiKey) {
+    if (!emailFrom) {
+      throw new Error("EMAIL_FROM is required when BREVO_API_KEY is configured");
+    }
+
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": brevoApiKey,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        sender: { name: "StrayCare", email: emailFrom },
+        to: [{ email: message.to }],
+        subject: message.subject,
+        ...(message.html ? { htmlContent: message.html } : {}),
+        ...(message.text ? { textContent: message.text } : {}),
+      }),
+    });
+
+    if (!response.ok) {
+      const details = await response.text();
+      throw new Error(`Brevo email failed (${response.status}): ${details}`);
+    }
+
+    const result = (await response.json()) as { messageId?: string };
+    console.log(`[EMAIL] Brevo accepted message ${result.messageId || "(no message ID)"}.`);
+    return;
+  }
+
   if (!emailUser || !emailPass) {
-    console.error("[EMAIL] EMAIL_USER or EMAIL_PASS is missing. Hosted email delivery is disabled.");
+    throw new Error("Email delivery is not configured. Set BREVO_API_KEY and EMAIL_FROM.");
+  }
+
+  await transporter.sendMail(message);
+};
+
+const verifyEmailTransport = async (): Promise<boolean> => {
+  if (brevoApiKey) {
+    if (!emailFrom) {
+      console.error("[EMAIL] EMAIL_FROM is missing. Brevo email delivery is disabled.");
+      return false;
+    }
+    try {
+      const response = await fetch("https://api.brevo.com/v3/account", {
+        headers: { "api-key": brevoApiKey, Accept: "application/json" },
+      });
+      if (!response.ok) {
+        throw new Error(`Brevo API returned ${response.status}: ${await response.text()}`);
+      }
+      console.log(`[EMAIL] Brevo API verified. Sender: ${emailFrom}.`);
+      return true;
+    } catch (error: any) {
+      console.error("[EMAIL] Brevo API verification failed:", error?.message || error);
+      return false;
+    }
+  }
+
+  if (!emailUser || !emailPass) {
+    console.error("[EMAIL] BREVO_API_KEY is missing and Gmail fallback is not configured.");
     return false;
   }
   try {
@@ -71,7 +140,7 @@ const sendPasswordResetEmail = async (toEmail: string, resetLink: string): Promi
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail(mailOptions);
 };
 
 // Admin invitation email
@@ -102,7 +171,7 @@ const sendAdminInviteEmail = async (toEmail: string, inviteLink: string, usernam
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail(mailOptions);
 };
 
 // 6-Digit Code Password reset email for general users
@@ -132,7 +201,7 @@ const sendPasswordResetCodeEmail = async (toEmail: string, code: string): Promis
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail(mailOptions);
 };
 
 // Admin 6-Digit Code Password reset email
@@ -152,7 +221,7 @@ const sendAdminPasswordResetCodeEmail = async (toEmail: string, code: string): P
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail(mailOptions);
 };
 
 const sendSupportTicketReplyEmail = async (
@@ -167,7 +236,7 @@ const sendSupportTicketReplyEmail = async (
   const safeReply = escapeHtml(reply).replace(/\n/g, "<br />");
   const safeStatus = escapeHtml(status);
 
-  await transporter.sendMail({
+  await sendEmail({
     from: `"StrayCare Support" <${process.env.EMAIL_USER}>`,
     to: toEmail,
     subject: `StrayCare Support Reply: ${subject}`,
@@ -204,7 +273,7 @@ const sendOrganizationVerificationEmail = async (
   const reasonText = isVerified ? "" : `\n\nReason: ${rejectionReason || "Verification requirements were not met"}`;
   const reasonHtml = isVerified ? "" : `<p style="margin: 10px 0 0;"><strong>Reason:</strong> ${safeReason}</p>`;
 
-  await transporter.sendMail({
+  await sendEmail({
     from: `"StrayCare Verification" <${process.env.EMAIL_USER}>`,
     to: toEmail,
     subject: `StrayCare Organization ${status}`,
