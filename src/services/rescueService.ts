@@ -131,8 +131,34 @@ export class RescueService {
 
     if (!nearest) return null;
 
+    let nearestObj = nearest.toObject ? nearest.toObject() : { ...nearest };
+    if (nearestObj.userId && mongoose.Types.ObjectId.isValid(String(nearestObj.userId))) {
+      const uId = String(nearestObj.userId);
+      const VolunteerProfile = require("../models/VolunteerProfile");
+      const NGOProfile = require("../models/NGOProfile");
+      const VetProfile = require("../models/VetProfile");
+      const [userDoc, vol, ngo, vet] = await Promise.all([
+        User.findById(uId).select("name profileImage avatar role").lean(),
+        VolunteerProfile.findOne({ userId: uId }).select("profileImage").lean(),
+        NGOProfile.findOne({ userId: uId }).select("profileImage").lean(),
+        VetProfile.findOne({ userId: uId }).select("profileImage").lean(),
+      ]);
+
+      const actualAvatar =
+        userDoc?.profileImage ||
+        userDoc?.avatar ||
+        vol?.profileImage ||
+        ngo?.profileImage ||
+        vet?.profileImage ||
+        nearestObj.avatar ||
+        "";
+
+      nearestObj.avatar = actualAvatar;
+      nearestObj.profileImage = actualAvatar;
+    }
+
     return {
-      rescuer: nearest,
+      rescuer: nearestObj,
       distance: minDistance.toFixed(2),
     };
   }
