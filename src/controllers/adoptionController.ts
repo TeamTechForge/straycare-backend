@@ -1,23 +1,8 @@
 import { Request, Response } from "express";
 import AdoptionPost from "../models/AdoptionPost";
 
-const normalizePostPayload = (body: any, partial = false) => {
+const normalizePostPayload = (body: any) => {
   const payload = { ...body };
-  if (!partial || body.age !== undefined || body.ageValue !== undefined || body.ageUnit !== undefined) {
-    const legacyMatch = typeof body.age === "string"
-      ? body.age.trim().match(/^(\d+(?:\.\d+)?)\s*(months?|years?)$/i)
-      : null;
-    const ageValue = Number(body.ageValue ?? legacyMatch?.[1]);
-    const rawUnit = String(body.ageUnit ?? legacyMatch?.[2] ?? "").toLowerCase();
-    const ageUnit = rawUnit.startsWith("month") ? "Months" : rawUnit.startsWith("year") ? "Years" : "";
-    if (!Number.isFinite(ageValue) || ageValue <= 0 || !ageUnit) {
-      throw new Error("Age must be a positive number with Months or Years selected");
-    }
-    payload.ageValue = ageValue;
-    payload.ageUnit = ageUnit;
-    payload.age = `${ageValue} ${ageUnit}`;
-  }
-
   if (body.images !== undefined && !Array.isArray(body.images)) {
     throw new Error("Images must be an array");
   }
@@ -91,7 +76,7 @@ export const updatePost = async (req: Request, res: Response): Promise<void> => 
     }
 
     delete req.body.userId;
-    const updated = await AdoptionPost.findByIdAndUpdate(req.params.postId, normalizePostPayload(req.body, true), {
+    const updated = await AdoptionPost.findByIdAndUpdate(req.params.postId, normalizePostPayload(req.body), {
       new: true,
       runValidators: true,
     });

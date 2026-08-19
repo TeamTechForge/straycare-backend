@@ -6,8 +6,6 @@ export interface IAdoptionPost extends Document {
   customCategory?: string;
   breed: string;
   age?: string;
-  ageValue?: number;
-  ageUnit?: "Months" | "Years";
   gender: string;
   name: string;
   status: "Available" | "Pending" | "Adopted";
@@ -31,8 +29,6 @@ const AdoptionPostSchema = new Schema<IAdoptionPost>(
     customCategory: { type: String },
     breed: { type: String, required: true },
     age: { type: String, default: "" },
-    ageValue: { type: Number, min: 0.01 },
-    ageUnit: { type: String, enum: ["Months", "Years"] },
     gender: { type: String, required: true },
     name: { type: String, required: true, trim: true },
     status: {
