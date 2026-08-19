@@ -11,6 +11,7 @@ interface IVetProfile extends mongoose.Document {
   profileImage: string;
   licenseDocument: string;
   status: "Pending" | "Verified" | "Rejected";
+  rejectionReason?: string;
   accountStatus?: string;
   merchantId: string;
   merchantSecret: string;
@@ -44,6 +45,7 @@ const VetProfileSchema = new mongoose.Schema(
       enum: ["Pending", "Verified", "Rejected"],
       default: "Pending",
     },
+    rejectionReason: { type: String, default: "" },
     accountStatus: { type: String },
     merchantId: { type: String, default: "" },
     merchantSecret: { type: String, default: "" },

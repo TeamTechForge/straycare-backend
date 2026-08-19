@@ -26,6 +26,7 @@ import type { Request, Response } from "express";
 const app       = require("./src/app");
 
 const connectDB = require("./src/config/db");
+const { verifyEmailTransport } = require("./src/utils/emailService");
 
 // ─── 1. Node version check ────────────────────────────────────────────────────
 // multer-gridfs-storage is broken on Node 23+. Recommend Node 20 LTS.
@@ -109,6 +110,9 @@ async function startup(): Promise<void> {
     console.error("           Error:", dbErr.message);
     process.exit(1);
   }
+
+  // Verify hosted email configuration at startup without preventing the API from starting.
+  void verifyEmailTransport();
 
   app.get("/payhere/return", (req: Request, res: Response) => {
     const { status } = req.query;

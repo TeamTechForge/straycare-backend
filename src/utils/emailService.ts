@@ -1,15 +1,105 @@
 const nodemailer = require("nodemailer");
 
+const emailUser = process.env.EMAIL_USER?.trim();
+const emailPass = process.env.EMAIL_PASS?.replace(/\s/g, "");
+const brevoApiKey = process.env.BREVO_API_KEY?.trim();
+const emailFrom = process.env.EMAIL_FROM?.trim() || emailUser;
+
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    user: emailUser,
+    pass: emailPass,
   },
+  connectionTimeout: 15000,
+  greetingTimeout: 15000,
+  socketTimeout: 20000,
   tls: {
     rejectUnauthorized: false,
   },
 });
+
+interface EmailMessage {
+  from?: string;
+  to: string;
+  subject: string;
+  html?: string;
+  text?: string;
+}
+
+const sendEmail = async (message: EmailMessage): Promise<void> => {
+  if (brevoApiKey) {
+    if (!emailFrom) {
+      throw new Error("EMAIL_FROM is required when BREVO_API_KEY is configured");
+    }
+
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": brevoApiKey,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        sender: { name: "StrayCare", email: emailFrom },
+        to: [{ email: message.to }],
+        subject: message.subject,
+        ...(message.html ? { htmlContent: message.html } : {}),
+        ...(message.text ? { textContent: message.text } : {}),
+      }),
+    });
+
+    if (!response.ok) {
+      const details = await response.text();
+      throw new Error(`Brevo email failed (${response.status}): ${details}`);
+    }
+
+    const result = (await response.json()) as { messageId?: string };
+    console.log(`[EMAIL] Brevo accepted message ${result.messageId || "(no message ID)"}.`);
+    return;
+  }
+
+  if (!emailUser || !emailPass) {
+    throw new Error("Email delivery is not configured. Set BREVO_API_KEY and EMAIL_FROM.");
+  }
+
+  await transporter.sendMail(message);
+};
+
+const verifyEmailTransport = async (): Promise<boolean> => {
+  if (brevoApiKey) {
+    if (!emailFrom) {
+      console.error("[EMAIL] EMAIL_FROM is missing. Brevo email delivery is disabled.");
+      return false;
+    }
+    try {
+      const response = await fetch("https://api.brevo.com/v3/account", {
+        headers: { "api-key": brevoApiKey, Accept: "application/json" },
+      });
+      if (!response.ok) {
+        throw new Error(`Brevo API returned ${response.status}: ${await response.text()}`);
+      }
+      console.log(`[EMAIL] Brevo API verified. Sender: ${emailFrom}.`);
+      return true;
+    } catch (error: any) {
+      console.error("[EMAIL] Brevo API verification failed:", error?.message || error);
+      return false;
+    }
+  }
+
+  if (!emailUser || !emailPass) {
+    console.error("[EMAIL] BREVO_API_KEY is missing and Gmail fallback is not configured.");
+    return false;
+  }
+  try {
+    await transporter.verify();
+    console.log(`[EMAIL] Gmail transport verified for ${emailUser}.`);
+    return true;
+  } catch (error: any) {
+    console.error("[EMAIL] Gmail transport verification failed:", error?.message || error);
+    return false;
+  }
+};
 
 const escapeHtml = (value: string): string =>
   value.replace(/[&<>'"]/g, (character) => {
@@ -50,7 +140,7 @@ const sendPasswordResetEmail = async (toEmail: string, resetLink: string): Promi
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail(mailOptions);
 };
 
 // Admin invitation email
@@ -81,7 +171,7 @@ const sendAdminInviteEmail = async (toEmail: string, inviteLink: string, usernam
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail(mailOptions);
 };
 
 // 6-Digit Code Password reset email for general users
@@ -111,7 +201,7 @@ const sendPasswordResetCodeEmail = async (toEmail: string, code: string): Promis
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail(mailOptions);
 };
 
 // Admin 6-Digit Code Password reset email
@@ -131,7 +221,7 @@ const sendAdminPasswordResetCodeEmail = async (toEmail: string, code: string): P
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  await sendEmail(mailOptions);
 };
 
 const sendSupportTicketReplyEmail = async (
@@ -146,7 +236,7 @@ const sendSupportTicketReplyEmail = async (
   const safeReply = escapeHtml(reply).replace(/\n/g, "<br />");
   const safeStatus = escapeHtml(status);
 
-  await transporter.sendMail({
+  await sendEmail({
     from: `"StrayCare Support" <${process.env.EMAIL_USER}>`,
     to: toEmail,
     subject: `StrayCare Support Reply: ${subject}`,
@@ -170,7 +260,8 @@ const sendSupportTicketReplyEmail = async (
 const sendOrganizationVerificationEmail = async (
   toEmail: string,
   organizationName: string,
-  status: "Verified" | "Rejected"
+  status: "Verified" | "Rejected",
+  rejectionReason?: string
 ): Promise<void> => {
   const safeName = escapeHtml(organizationName || "Organization representative");
   const isVerified = status === "Verified";
@@ -178,12 +269,15 @@ const sendOrganizationVerificationEmail = async (
   const resultMessage = isVerified
     ? "Your organization profile has been verified. You can now access the organization features available in StrayCare."
     : "We could not verify your organization using the submitted information. Please review your profile and verification documents before contacting StrayCare support or submitting updated information.";
+  const safeReason = escapeHtml(rejectionReason || "Verification requirements were not met");
+  const reasonText = isVerified ? "" : `\n\nReason: ${rejectionReason || "Verification requirements were not met"}`;
+  const reasonHtml = isVerified ? "" : `<p style="margin: 10px 0 0;"><strong>Reason:</strong> ${safeReason}</p>`;
 
-  await transporter.sendMail({
+  await sendEmail({
     from: `"StrayCare Verification" <${process.env.EMAIL_USER}>`,
     to: toEmail,
     subject: `StrayCare Organization ${status}`,
-    text: `Hello ${organizationName || "Organization representative"},\n\n${resultHeading}.\n\n${resultMessage}\n\nStrayCare Team`,
+    text: `Hello ${organizationName || "Organization representative"},\n\n${resultHeading}.\n\n${resultMessage}${reasonText}\n\nStrayCare Team`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #412828;">
         <h2 style="color: #F5A623;">StrayCare Organization Verification</h2>
@@ -191,6 +285,7 @@ const sendOrganizationVerificationEmail = async (
         <div style="background: ${isVerified ? "#F0FDF4" : "#FFF7ED"}; border-left: 4px solid ${isVerified ? "#16A34A" : "#EA580C"}; padding: 14px 16px; margin: 18px 0;">
           <strong>${resultHeading}</strong>
           <p style="margin: 8px 0 0; line-height: 1.6;">${resultMessage}</p>
+          ${reasonHtml}
         </div>
         <p style="color: #888; font-size: 13px;">This email was sent after an administrator reviewed your organization verification documents.</p>
       </div>
@@ -205,4 +300,5 @@ module.exports = {
   sendAdminPasswordResetCodeEmail,
   sendSupportTicketReplyEmail,
   sendOrganizationVerificationEmail,
+  verifyEmailTransport,
 };

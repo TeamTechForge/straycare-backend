@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
+const requireAdmin = require("../middleware/requireAdmin");
 const Admin = require("../models/Admin");
 const bcrypt = require("bcryptjs");
 import { JwtService } from "../services/jwtService";
@@ -9,7 +10,7 @@ const { sendAdminInviteEmail } = require("../utils/emailService");
 import type { Request, Response } from "express";
 
 // GET all admins (active + those with no status but have password)
-router.get("/", authMiddleware, async (req: Request, res: Response) => {
+router.get("/", authMiddleware, requireAdmin, async (req: Request, res: Response) => {
   try {
     const admins = await Admin.find(
       {
@@ -28,7 +29,7 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
 });
 
 // GET the currently logged-in admin's own info (including preferences)
-router.get("/me", authMiddleware, async (req: Request, res: Response) => {
+router.get("/me", authMiddleware, requireAdmin, async (req: Request, res: Response) => {
   try {
     const admin = await Admin.findById((req as any).user.id, { password: 0 });
     if (!admin) return res.status(404).json({ error: "Admin not found" });
@@ -39,7 +40,7 @@ router.get("/me", authMiddleware, async (req: Request, res: Response) => {
 });
 
 // POST migrate existing admins to active status (run once)
-router.post("/migrate", authMiddleware, async (req: Request, res: Response) => {
+router.post("/migrate", authMiddleware, requireAdmin, async (req: Request, res: Response) => {
   try {
     const result = await Admin.updateMany(
       { status: { $exists: false }, password: { $exists: true, $ne: null } },
@@ -56,7 +57,7 @@ router.post("/migrate", authMiddleware, async (req: Request, res: Response) => {
 });
 
 // POST invite new admin
-router.post("/invite", authMiddleware, async (req: Request, res: Response) => {
+router.post("/invite", authMiddleware, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { username, email } = req.body;
     if (!username || !email) {
@@ -126,8 +127,21 @@ router.post("/accept-invite", async (req: Request, res: Response) => {
 });
 
 // DELETE remove admin
-router.delete("/:id", authMiddleware, async (req: Request, res: Response) => {
+router.delete("/:id", authMiddleware, requireAdmin, async (req: Request, res: Response) => {
   try {
+    if (req.params.id === (req as any).user.id) {
+      return res.status(400).json({ error: "You cannot remove your own administrator account" });
+    }
+    const activeAdminCount = await Admin.countDocuments({
+      $or: [
+        { status: "active" },
+        { status: { $exists: false }, password: { $exists: true, $ne: null } },
+        { status: null, password: { $exists: true, $ne: null } },
+      ],
+    });
+    if (activeAdminCount <= 1) {
+      return res.status(400).json({ error: "The final active administrator cannot be removed" });
+    }
     const result = await Admin.findByIdAndDelete(req.params.id);
     if (!result) return res.status(404).json({ error: "Admin not found" });
     res.json({ success: true });
@@ -137,7 +151,7 @@ router.delete("/:id", authMiddleware, async (req: Request, res: Response) => {
 });
 
 // PATCH change password
-router.patch("/change-password", authMiddleware, async (req: Request, res: Response) => {
+router.patch("/change-password", authMiddleware, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) {
@@ -160,7 +174,7 @@ router.patch("/change-password", authMiddleware, async (req: Request, res: Respo
 });
 
 // PATCH update notification preferences for the logged-in admin
-router.patch("/preferences", authMiddleware, async (req: Request, res: Response) => {
+router.patch("/preferences", authMiddleware, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { emailNotifications, donationAlerts, userReportAlerts } = req.body;
 

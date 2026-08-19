@@ -1,5 +1,7 @@
 const express = require("express");
 const router = express.Router();
+const { verifyToken } = require("../middleware/authMiddleware");
+const requireAdmin = require("../middleware/requireAdmin");
 import {
   getAllUsers,
   getGeneralUsers,
@@ -7,6 +9,8 @@ import {
   getUserDocuments,
   updateUserStatus,
 } from "../controllers/usersManagementController";
+
+router.use(verifyToken, requireAdmin);
 
 // Unified users list (all roles)
 router.get("/all", getAllUsers);

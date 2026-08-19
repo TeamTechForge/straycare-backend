@@ -1,6 +1,7 @@
 const express = require("express");
 const authMiddleware = require("../middleware/authMiddleware");
 const router = express.Router();
+const requireAdmin = require("../middleware/requireAdmin");
 
 import { donationController } from "../controllers/donationController";
 import type { Request, Response } from "express";
@@ -36,6 +37,6 @@ router.get("/received/:orgId", donationController.getReceivedByOrg);
 router.get("/received", authMiddleware, donationController.getReceivedDonations);
 
 // Get all donations (admin dashboard)
-router.get("/", authMiddleware, donationController.getAllDonations);
+router.get("/", authMiddleware, requireAdmin, donationController.getAllDonations);
 
 module.exports = router;

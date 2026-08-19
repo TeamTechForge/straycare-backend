@@ -9,6 +9,8 @@ declare namespace NodeJS {
     BACKEND_URL?: string;
     EMAIL_USER?: string;
     EMAIL_PASS?: string;
+    BREVO_API_KEY?: string;
+    EMAIL_FROM?: string;
     FIREBASE_PROJECT_ID?: string;
     CLOUDINARY_CLOUD_NAME?: string;
     CLOUDINARY_API_KEY?: string;

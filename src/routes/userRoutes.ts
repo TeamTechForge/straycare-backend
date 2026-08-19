@@ -13,6 +13,7 @@ const {
   toggleBlockUser,
 } = require("../controllers/userController");
 const { verifyToken } = require("../middleware/authMiddleware");
+const requireAdmin = require("../middleware/requireAdmin");
 
 // Router for user profile endpoints
 const userRouter = express.Router();
@@ -33,8 +34,8 @@ reportRouter.post("/user", verifyToken, createUserReport);
 
 // Router for admin endpoints
 const adminRouter = express.Router();
-adminRouter.get("/user-reports", verifyToken, getUserReportsAdmin);
-adminRouter.patch("/approve-user/:userId", verifyToken, approveUser);
+adminRouter.get("/user-reports", verifyToken, requireAdmin, getUserReportsAdmin);
+adminRouter.patch("/approve-user/:userId", verifyToken, requireAdmin, approveUser);
 
 module.exports = {
   userRouter,
