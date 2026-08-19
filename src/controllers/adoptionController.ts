@@ -1,6 +1,29 @@
 import { Request, Response } from "express";
 import AdoptionPost from "../models/AdoptionPost";
 
+const normalizePostPayload = (body: any, partial = false) => {
+  const payload = { ...body };
+  if (!partial || body.age !== undefined || body.ageValue !== undefined || body.ageUnit !== undefined) {
+    const legacyMatch = typeof body.age === "string"
+      ? body.age.trim().match(/^(\d+(?:\.\d+)?)\s*(months?|years?)$/i)
+      : null;
+    const ageValue = Number(body.ageValue ?? legacyMatch?.[1]);
+    const rawUnit = String(body.ageUnit ?? legacyMatch?.[2] ?? "").toLowerCase();
+    const ageUnit = rawUnit.startsWith("month") ? "Months" : rawUnit.startsWith("year") ? "Years" : "";
+    if (!Number.isFinite(ageValue) || ageValue <= 0 || !ageUnit) {
+      throw new Error("Age must be a positive number with Months or Years selected");
+    }
+    payload.ageValue = ageValue;
+    payload.ageUnit = ageUnit;
+    payload.age = `${ageValue} ${ageUnit}`;
+  }
+
+  if (body.images !== undefined && !Array.isArray(body.images)) {
+    throw new Error("Images must be an array");
+  }
+  return payload;
+};
+
 // GET /api/adoption
 export const getAllPosts = async (_req: Request, res: Response): Promise<void> => {
   try {
@@ -38,10 +61,10 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
       res.status(401).json({ error: "User authentication required" });
       return;
     }
-    const post = await AdoptionPost.create({ ...req.body, userId: typeofReq.user.id });
+    const post = await AdoptionPost.create({ ...normalizePostPayload(req.body), userId: typeofReq.user.id });
     res.status(201).json(post);
-  } catch (err) {
-    res.status(400).json({ error: "Invalid data", details: err });
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || "Invalid data" });
   }
 };
 
@@ -68,13 +91,13 @@ export const updatePost = async (req: Request, res: Response): Promise<void> => 
     }
 
     delete req.body.userId;
-    const updated = await AdoptionPost.findByIdAndUpdate(req.params.postId, req.body, {
+    const updated = await AdoptionPost.findByIdAndUpdate(req.params.postId, normalizePostPayload(req.body, true), {
       new: true,
       runValidators: true,
     });
     res.json(updated);
-  } catch (error) {
-    res.status(500).json({ error: "Server error" });
+  } catch (error: any) {
+    res.status(400).json({ error: error?.message || "Invalid data" });
   }
 };
 
