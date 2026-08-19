@@ -175,7 +175,7 @@ const getMyProfile = catchAsync(async (req: Request, res: Response, next: NextFu
 
 const updateGeneralProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const userId = req.user!.id;
-  const { name, location, bio, profileImage } = req.body;
+  const { name, phone, location, bio, profileImage } = req.body;
 
   const profile = await GeneralUserProfile.findOneAndUpdate(
     { userId },
@@ -189,7 +189,8 @@ const updateGeneralProfile = catchAsync(async (req: Request, res: Response, next
   }
 
   const userUpdates: any = { profileImage: profile.profileImage || "" };
-  if (name) userUpdates.name = name;
+  if (name !== undefined) userUpdates.name = name;
+  if (phone !== undefined) userUpdates.phone = phone;
   await User.findByIdAndUpdate(userId, userUpdates);
 
   res.status(200).json({ message: "Profile updated successfully", profile });
@@ -197,7 +198,7 @@ const updateGeneralProfile = catchAsync(async (req: Request, res: Response, next
 
 const updateVolunteerProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const userId = req.user!.id;
-  const { name, location, bio, profileImage } = req.body;
+  const { name, phone, location, bio, profileImage } = req.body;
 
   const profile = await VolunteerProfile.findOneAndUpdate(
     { userId },
@@ -211,7 +212,8 @@ const updateVolunteerProfile = catchAsync(async (req: Request, res: Response, ne
   }
 
   const userUpdates: any = { profileImage: profile.profileImage || "" };
-  if (name) userUpdates.name = name;
+  if (name !== undefined) userUpdates.name = name;
+  if (phone !== undefined) userUpdates.phone = phone;
   await User.findByIdAndUpdate(userId, userUpdates);
 
   res.status(200).json({ message: "Profile updated successfully", profile });
@@ -219,7 +221,7 @@ const updateVolunteerProfile = catchAsync(async (req: Request, res: Response, ne
 
 const updateNGOProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const userId = req.user!.id;
-  const { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret, payHereAppId, payHereAppSecret } = req.body;
+  const { phone, orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret, payHereAppId, payHereAppSecret } = req.body;
 
   const ngoUpdates: any = { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret };
   if (payHereAppId) ngoUpdates.payHereAppId = String(payHereAppId).trim();
@@ -236,14 +238,16 @@ const updateNGOProfile = catchAsync(async (req: Request, res: Response, next: Ne
     return;
   }
 
-  await User.findByIdAndUpdate(userId, { profileImage: profile.profileImage || "" });
+  const userUpdates: any = { profileImage: profile.profileImage || "" };
+  if (phone !== undefined) userUpdates.phone = phone;
+  await User.findByIdAndUpdate(userId, userUpdates);
 
   res.status(200).json({ message: "Profile updated successfully", profile });
 });
 
 const updateVetProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const userId = req.user!.id;
-  const { name, primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret, payHereAppId, payHereAppSecret } = req.body;
+  const { name, phone, primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret, payHereAppId, payHereAppSecret } = req.body;
 
   const vetUpdates: any = { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret };
   if (payHereAppId) vetUpdates.payHereAppId = String(payHereAppId).trim();
@@ -261,7 +265,8 @@ const updateVetProfile = catchAsync(async (req: Request, res: Response, next: Ne
   }
 
   const userUpdates: any = { profileImage: profile.profileImage || "" };
-  if (name) userUpdates.name = name;
+  if (name !== undefined) userUpdates.name = name;
+  if (phone !== undefined) userUpdates.phone = phone;
   await User.findByIdAndUpdate(userId, userUpdates);
 
   res.status(200).json({ message: "Profile updated successfully", profile });

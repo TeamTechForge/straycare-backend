@@ -200,7 +200,7 @@ const buildReportPayload = (
     payload.caseId = `CASE-${timestamp}-${randomSuffix}`;
   }
 
-  if (!payload.anonymous && req.user && req.user.id) {
+  if (req.user && req.user.id) {
     payload.reporterUserId = req.user.id;
   } else {
     delete payload.reporterUserId;

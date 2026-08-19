@@ -133,12 +133,12 @@ class CallLogService {
         caller: {
           userId: callerId,
           name: log.callerNameOverride || log.caller?.name || "Deleted User",
-          profileImage: log.callerNameOverride ? "https://ui-avatars.com/api/?name=Case+Chat&background=FEB94B&color=fff" : (log.caller?.profileImage || ""),
+          profileImage: log.callerNameOverride ? `https://ui-avatars.com/api/?name=${encodeURIComponent(log.callerNameOverride.split(' (')[0])}&background=FEB94B&color=fff` : (log.caller?.profileImage || ""),
         },
         receiver: {
           userId: receiverId,
           name: log.receiverNameOverride || log.receiver?.name || "Deleted User",
-          profileImage: log.receiverNameOverride ? "https://ui-avatars.com/api/?name=Case+Chat&background=FEB94B&color=fff" : (log.receiver?.profileImage || ""),
+          profileImage: log.receiverNameOverride ? `https://ui-avatars.com/api/?name=${encodeURIComponent(log.receiverNameOverride.split(' (')[0])}&background=FEB94B&color=fff` : (log.receiver?.profileImage || ""),
         },
         status: log.status,
         direction: isIncoming ? CallDirection.INCOMING : CallDirection.OUTGOING,

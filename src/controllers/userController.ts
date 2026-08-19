@@ -308,12 +308,7 @@ exports.searchUsers = catchAsync(async (req: Request, res: Response, next: NextF
         {
           $and: [
             { role: { $ne: "ngo" } },
-            {
-              $or: [
-                { name: { $regex: query, $options: "i" } },
-                { email: { $regex: query, $options: "i" } },
-              ],
-            },
+            { name: { $regex: query, $options: "i" } },
             {
               $or: [
                 { role: { $nin: ["ngo", "vet"] } },
