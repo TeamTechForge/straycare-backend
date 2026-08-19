@@ -9,10 +9,18 @@ jest.mock("../../../src/utils/catchAsync", () => ({
 jest.mock("../../../src/models/Rescuer", () => ({
   findOne: jest.fn(),
   findById: jest.fn(),
+  find: jest.fn(),
+}));
+jest.mock("../../../src/models/User", () => ({
+  findOne: jest.fn(),
+  findById: jest.fn(),
+  find: jest.fn(),
 }));
 jest.mock("../../../src/models/RescueRequest", () => ({
   findById: jest.fn(),
   findOne: jest.fn(),
+  find: jest.fn(),
+  create: jest.fn(),
 }));
 jest.mock("../../../src/models/RescueHistory", () => ({
   findById: jest.fn(),
@@ -22,15 +30,34 @@ jest.mock("../../../src/models/RescueHistory", () => ({
 jest.mock("../../../src/models/StrayReport", () => ({
   findOne: jest.fn(),
 }));
+jest.mock("../../../src/models/Notification", () => ({
+  deleteMany: jest.fn().mockResolvedValue({ deletedCount: 2 }),
+}));
 jest.mock("../../../src/services/notificationService", () => ({
   NotificationService: { sendNotification: jest.fn() },
 }));
+jest.mock("../../../src/services/rescueService", () => ({
+  RescueService: {
+    findNearestRescuer: jest.fn(),
+    createRescueRequest: jest.fn(),
+  },
+}));
 
 const Rescuer = require("../../../src/models/Rescuer");
+const User = require("../../../src/models/User");
 const RescueRequest = require("../../../src/models/RescueRequest");
 const RescueHistory = require("../../../src/models/RescueHistory");
 const StrayReport = require("../../../src/models/StrayReport");
-const { markRescueFailed, updateRescueDetails, respondToRescueRequest } = require("../../../src/controllers/rescueController");
+const Notification = require("../../../src/models/Notification");
+const { RescueService } = require("../../../src/services/rescueService");
+const {
+  markRescueFailed,
+  updateRescueDetails,
+  respondToRescueRequest,
+  cancelRescueRequest,
+  acceptFromMap,
+  getLiveTracking,
+} = require("../../../src/controllers/rescueController");
 
 describe("Rescue controller actions", () => {
   const userId = new mongoose.Types.ObjectId().toString();
@@ -41,7 +68,21 @@ describe("Rescue controller actions", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    req = mockRequest({ user: { id: userId } } as any);
+    (User.findById as jest.Mock).mockReturnValue({
+      select: jest.fn().mockResolvedValue(null),
+    });
+    req = mockRequest({
+      user: { id: userId },
+      app: {
+        get: jest.fn().mockReturnValue({
+          of: jest.fn().mockReturnValue({
+            to: jest.fn().mockReturnValue({
+              emit: jest.fn(),
+            }),
+          }),
+        }),
+      },
+    } as any);
     res = mockResponse();
   });
 
@@ -55,8 +96,6 @@ describe("Rescue controller actions", () => {
     const request = {
       _id: requestId,
       rescueRequestId: "RR-123",
-      // Find-rescuer requests created by older clients store the account ID
-      // instead of the Rescuer profile ID.
       rescuerId: userId,
       status: "accepted",
       caseId: "SC-123",
@@ -146,54 +185,212 @@ describe("Rescue controller actions", () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
 
-  it("updates StrayReport status to Under Rescue and sets assignedRescuerId when rescuer accepts request", async () => {
-    const rescuerProfileId = new mongoose.Types.ObjectId().toString();
-    const request = {
-      _id: requestId,
-      rescueRequestId: "RR-789",
-      rescuerId: rescuerProfileId,
-      status: "pending",
-      caseId: "SC-789",
-      animalType: "Dog",
-      userId: new mongoose.Types.ObjectId().toString(),
-      rescuerName: "Kasun",
-      save: jest.fn().mockResolvedValue(undefined),
-    };
-    const report = {
-      caseId: "SC-789",
-      anonymous: false,
-      reporterUserId: request.userId,
-      animalType: "Dog",
-      status: "Needs Help",
-      assignedRescuerId: undefined,
-      timeline: [],
-      save: jest.fn().mockResolvedValue(undefined),
-    };
+  describe("respondToRescueRequest (Accept / Reject / Validation flows)", () => {
+    it("updates StrayReport status to Under Rescue and sets assignedRescuerId when rescuer accepts request", async () => {
+      const rescuerProfileId = new mongoose.Types.ObjectId().toString();
+      const otherReporterId = new mongoose.Types.ObjectId().toString();
+      const request = {
+        _id: requestId,
+        rescueRequestId: "RR-789",
+        rescuerId: rescuerProfileId,
+        status: "pending",
+        caseId: "SC-789",
+        animalType: "Dog",
+        userId: otherReporterId,
+        rescuerName: "Kasun",
+        save: jest.fn().mockResolvedValue(undefined),
+      };
+      const report = {
+        caseId: "SC-789",
+        anonymous: false,
+        reporterUserId: otherReporterId,
+        animalType: "Dog",
+        status: "Needs Help",
+        assignedRescuerId: undefined,
+        timeline: [],
+        save: jest.fn().mockResolvedValue(undefined),
+      };
 
-    (RescueRequest.findById as jest.Mock).mockResolvedValue(request);
-    (StrayReport.findOne as jest.Mock).mockResolvedValue(report);
-    (Rescuer.findById as jest.Mock).mockResolvedValue({ _id: rescuerProfileId, name: "Kasun" });
-    req.params = { id: requestId };
-    req.body = { action: "accept" };
+      (RescueRequest.findById as jest.Mock).mockResolvedValue(request);
+      (StrayReport.findOne as jest.Mock).mockResolvedValue(report);
+      (Rescuer.findById as jest.Mock).mockResolvedValue({ _id: rescuerProfileId, name: "Kasun" });
+      req.params = { id: requestId };
+      req.body = { action: "accept" };
 
-    await respondToRescueRequest(req, res);
+      await respondToRescueRequest(req, res);
 
-    expect(request.status).toBe("accepted");
-    expect(request.save).toHaveBeenCalled();
-    expect(report.status).toBe("Under Rescue");
-    expect(report.assignedRescuerId).toBe(rescuerProfileId);
-    expect(report.timeline).toEqual([
-      expect.objectContaining({
-        status: "Under Rescue",
-        message: "Case accepted by rescuer: Kasun",
-      }),
-    ]);
-    expect(report.save).toHaveBeenCalled();
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({
-        success: true,
-        request: expect.objectContaining({ status: "accepted" }),
-      })
-    );
+      expect(request.status).toBe("accepted");
+      expect(request.save).toHaveBeenCalled();
+      expect(report.status).toBe("Under Rescue");
+      expect(report.assignedRescuerId).toBe(rescuerProfileId);
+      expect(report.timeline).toEqual([
+        expect.objectContaining({
+          status: "Under Rescue",
+          message: "Case accepted by rescuer: Kasun",
+        }),
+      ]);
+      expect(report.save).toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          request: expect.objectContaining({ status: "accepted" }),
+        })
+      );
+    });
+
+    it("prevents a user from accepting a rescue request for a report they submitted themselves", async () => {
+      const request = {
+        _id: requestId,
+        userId: userId, // Same as logged in user (reporter)
+        status: "pending",
+        caseId: "SC-SELF",
+        save: jest.fn(),
+      };
+
+      (RescueRequest.findById as jest.Mock).mockResolvedValue(request);
+      req.params = { id: requestId };
+      req.body = { action: "accept" };
+
+      await respondToRescueRequest(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: "You cannot accept or take a rescue request for a case you reported yourself.",
+        })
+      );
+      expect(request.save).not.toHaveBeenCalled();
+    });
+
+    it("sets status to rejected when rescuer declines request and triggers circular fallback", async () => {
+      const otherReporterId = new mongoose.Types.ObjectId().toString();
+      const request = {
+        _id: requestId,
+        caseId: "SC-REJECT",
+        userId: otherReporterId,
+        rescuerId: rescuerId,
+        status: "pending",
+        rescueLocation: { latitude: 6.9271, longitude: 79.8612 },
+        save: jest.fn().mockResolvedValue(undefined),
+      };
+
+      (RescueRequest.findById as jest.Mock).mockResolvedValue(request);
+      (RescueRequest.find as jest.Mock).mockResolvedValue([{ rescuerId }]);
+      (RescueService.findNearestRescuer as jest.Mock).mockResolvedValue(null);
+
+      const report = {
+        caseId: "SC-REJECT",
+        status: "Pending Rescue",
+        timeline: [],
+        save: jest.fn().mockResolvedValue(undefined),
+      };
+      (StrayReport.findOne as jest.Mock).mockResolvedValue(report);
+
+      req.params = { id: requestId };
+      req.body = { action: "reject" };
+
+      await respondToRescueRequest(req, res);
+
+      expect(request.status).toBe("rejected");
+      expect(request.save).toHaveBeenCalled();
+      expect(report.status).toBe("Needs Help");
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          request: expect.objectContaining({ status: "rejected" }),
+        })
+      );
+    });
+  });
+
+  describe("cancelRescueRequest & Notification Removal", () => {
+    it("cancels rescue request, deletes related notifications, and emits socket event", async () => {
+      const request = {
+        _id: requestId,
+        caseId: "SC-CANCEL",
+        status: "pending",
+        save: jest.fn().mockResolvedValue(undefined),
+      };
+
+      (RescueRequest.findById as jest.Mock).mockReturnValue(mockQuery(request));
+      req.params = { id: requestId };
+
+      await cancelRescueRequest(req, res);
+
+      expect(request.status).toBe("cancelled");
+      expect(request.save).toHaveBeenCalled();
+      expect(Notification.deleteMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          $or: expect.arrayContaining([
+            { rescueRequestId: String(requestId) },
+            { caseId: "SC-CANCEL" },
+          ]),
+        })
+      );
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          request: expect.objectContaining({ status: "cancelled" }),
+        })
+      );
+    });
+  });
+
+  describe("acceptFromMap - Prevention of accepting own report", () => {
+    it("rejects attempt by reporter to accept their own case from the map", async () => {
+      (Rescuer.findOne as jest.Mock).mockResolvedValue({ _id: rescuerId, name: "Rescuer Name" });
+      (StrayReport.findOne as jest.Mock).mockResolvedValue({
+        caseId: "SC-MAP-SELF",
+        reporterUserId: userId, // Same as logged in user
+        status: "Needs Help",
+      });
+
+      req.body = { caseId: "SC-MAP-SELF" };
+
+      await acceptFromMap(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: "You cannot accept or take a rescue request for a case you reported yourself.",
+        })
+      );
+    });
+  });
+
+  describe("getLiveTracking - Navigation & Real-Time Tracking Payload", () => {
+    it("returns tracking details including reporter location, rescuer location, distance and ETA", async () => {
+      const request = {
+        _id: requestId,
+        caseId: "SC-TRACK",
+        status: "accepted",
+        animalType: "Dog",
+        rescueLocation: { latitude: 6.9271, longitude: 79.8612, address: "Colombo" },
+        reporterLocation: { latitude: 6.9280, longitude: 79.8620 },
+        distanceKm: 1.2,
+        etaMinutes: 8,
+        rescuerId: {
+          _id: rescuerId,
+          name: "Active Rescuer",
+          location: { latitude: 6.9250, longitude: 79.8600 },
+        },
+      };
+
+      (RescueRequest.findById as jest.Mock).mockReturnValue(mockQuery(request));
+      (StrayReport.findOne as jest.Mock).mockResolvedValue(null);
+
+      req.params = { requestId };
+
+      await getLiveTracking(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          caseId: "SC-TRACK",
+          distanceKm: expect.any(Number),
+          etaMinutes: expect.any(Number),
+          location: expect.objectContaining({ latitude: 6.9271, longitude: 79.8612 }),
+        })
+      );
+    });
   });
 });

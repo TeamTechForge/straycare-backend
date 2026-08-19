@@ -80,6 +80,14 @@ describe("Community Feed integration", () => {
     expect(comment.body.commentCount).toBe(1);
     expect(await CommunityComment.countDocuments({ postId })).toBe(1);
     expect(await Notification.countDocuments({ postId, type: "post_comment" })).toBe(1);
+    const commentId = comment.body.data._id;
+
+    const thirdUser = await register("Third User", "third-user@test.com");
+    const unauthorizedCommentDelete = await request(app)
+      .delete(`/api/community/${postId}/comments/${commentId}`)
+      .set("Authorization", `Bearer ${thirdUser.token}`);
+    expect(unauthorizedCommentDelete.status).toBe(403);
+    expect(await CommunityComment.countDocuments({ postId })).toBe(1);
 
     await request(app).post(`/api/community/${postId}/save`)
       .set("Authorization", `Bearer ${visitor.token}`);
