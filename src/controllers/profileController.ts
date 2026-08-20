@@ -56,7 +56,11 @@ const createVolunteerProfile = catchAsync(async (req: Request, res: Response, ne
 });
 
 const createNGOProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  const { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret } = req.body;
+  const {
+    orgName, contactPerson, regNumber, foundedYear, location, bio,
+    profileImage, verificationDocument, merchantId, merchantSecret,
+    payHereAppId, payHereAppSecret,
+  } = req.body;
   const userId = req.user!.id;
 
   const profile = await NGOProfile.findOneAndUpdate(
@@ -72,6 +76,8 @@ const createNGOProfile = catchAsync(async (req: Request, res: Response, next: Ne
       verificationDocument,
       merchantId,
       merchantSecret,
+      payHereAppId: String(payHereAppId || "").trim(),
+      payHereAppSecret: String(payHereAppSecret || "").trim(),
     },
     { new: true, upsert: true, runValidators: true }
   );
@@ -99,7 +105,11 @@ const createNGOProfile = catchAsync(async (req: Request, res: Response, next: Ne
 });
 
 const createVetProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  const { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret } = req.body;
+  const {
+    primaryLocation, bio, clinicName, clinicAddress, licenseNumber,
+    yearsOfExperience, profileImage, licenseDocument, merchantId,
+    merchantSecret, payHereAppId, payHereAppSecret,
+  } = req.body;
   const userId = req.user!.id;
 
   const profile = await VetProfile.findOneAndUpdate(
@@ -115,6 +125,8 @@ const createVetProfile = catchAsync(async (req: Request, res: Response, next: Ne
       licenseDocument,
       merchantId,
       merchantSecret,
+      payHereAppId: String(payHereAppId || "").trim(),
+      payHereAppSecret: String(payHereAppSecret || "").trim(),
     },
     { new: true, upsert: true, runValidators: true }
   );
