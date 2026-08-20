@@ -154,14 +154,15 @@ class CallSignallingService {
     io.of("/call").to(`user:${payload.callerId}`).emit(CallEvents.WEBRTC_ANSWER, payload);
   }
 
-  public async handleIceCandidate(io: Server, payload: IIceCandidateDTO) {
+  public async handleIceCandidate(io: Server, payload: IIceCandidateDTO, senderId?: string) {
     if (!(await this.verifyActiveSession(payload.callerId, payload.calleeId))) {
       logger.warn(`[CallSignalling] Security block: Unauthorized WEBRTC_ICE_CANDIDATE from ${payload.callerId} to ${payload.calleeId}`);
       return;
     }
     // Relay candidate to the other peer
-    logger.info(`[CallSignalling] ICE Candidate from ${payload.callerId} to ${payload.calleeId}`);
-    io.of("/call").to(`user:${payload.calleeId}`).emit(CallEvents.WEBRTC_ICE_CANDIDATE, payload);
+    const targetId = senderId === payload.callerId ? payload.calleeId : payload.callerId;
+    logger.info(`[CallSignalling] ICE Candidate from ${senderId} to ${targetId}`);
+    io.of("/call").to(`user:${targetId}`).emit(CallEvents.WEBRTC_ICE_CANDIDATE, payload);
   }
 
   public handleCallDecline(io: Server, payload: ICallDeclineDTO) {
