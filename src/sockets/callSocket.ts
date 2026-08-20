@@ -58,7 +58,7 @@ module.exports = (io: Server) => {
     });
 
     socket.on(CallEvents.WEBRTC_ICE_CANDIDATE, (payload) => {
-      CallSignallingService.handleIceCandidate(io, payload);
+      CallSignallingService.handleIceCandidate(io, payload, socket.userId);
     });
 
     socket.on("disconnect", () => {
