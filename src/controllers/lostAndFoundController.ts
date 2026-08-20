@@ -119,8 +119,8 @@ export class LostFoundService {
     const ownerId = (post.userId as any)?._id
       ? (post.userId as any)._id.toString()
       : post.userId
-      ? post.userId.toString()
-      : null;
+        ? post.userId.toString()
+        : null;
 
     const isOwner = ownerId === user.id;
     const isAdmin = user.role === "admin";
@@ -162,8 +162,8 @@ export class LostFoundService {
     const ownerId = (post.userId as any)?._id
       ? (post.userId as any)._id.toString()
       : post.userId
-      ? post.userId.toString()
-      : null;
+        ? post.userId.toString()
+        : null;
 
     const isOwner = ownerId === user.id;
     const isAdmin = user.role === "admin";

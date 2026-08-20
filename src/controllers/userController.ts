@@ -38,6 +38,12 @@ exports.getPublicProfile = catchAsync(async (req: Request, res: Response, next: 
     }
 
     const isSelf = String(currentUserId) === String(userId);
+    
+    if (!isSelf && user.blockedUsers && user.blockedUsers.map((id: any) => id.toString()).includes(String(currentUserId))) {
+      res.status(403).json({ message: "You are not authorized to view this profile." });
+      return;
+    }
+
     const { profileData, stats } = await ProfileStatsService.getProfileAndStats(userId as string, user.role, isSelf);
     
     const messagePermission = await PrivacyService.canMessage(currentUserId, userId as string);

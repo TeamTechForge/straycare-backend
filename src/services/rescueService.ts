@@ -77,22 +77,38 @@ export class RescueService {
       return null;
     }
 
-    // Filter out unapproved Vets/NGOs and suspended users
+    // Filter out unapproved Vets/NGOs, suspended users, and blocked users
     const User = require("../models/User");
     const rescuerUserIds = rescuers.map((r: any) => r.userId).filter(Boolean);
     const userMap = new Map();
     if (rescuerUserIds.length > 0) {
-      const users = await User.find({ _id: { $in: rescuerUserIds } }).select("role isApproved accountStatus").lean();
+      const users = await User.find({ _id: { $in: rescuerUserIds } }).select("role isApproved accountStatus blockedUsers").lean();
       if (users && Array.isArray(users)) {
         users.forEach((u: any) => userMap.set(u._id.toString(), u));
       }
     }
 
+    let reporterBlockedIds: string[] = [];
+    if (reporterUserId && mongoose.Types.ObjectId.isValid(reporterUserId)) {
+      const reporterUser = await User.findById(reporterUserId).select("blockedUsers").lean();
+      if (reporterUser && reporterUser.blockedUsers) {
+        reporterBlockedIds = reporterUser.blockedUsers.map((id: any) => id.toString());
+      }
+    }
+
     const eligibleRescuers = rescuers.filter((rescuer: any) => {
       if (rescuer.userId) {
-        const u = userMap.get(String(rescuer.userId));
+        const rescuerUserIdStr = String(rescuer.userId);
+        const u = userMap.get(rescuerUserIdStr);
         if (!u) return false;
         if (u.accountStatus === "Suspended") return false;
+        
+        // 1. Did the reporter block this rescuer?
+        if (reporterBlockedIds.includes(rescuerUserIdStr)) return false;
+        
+        // 2. Did this rescuer block the reporter?
+        if (reporterUserId && u.blockedUsers && u.blockedUsers.some((id: any) => id.toString() === reporterUserId.toString())) return false;
+
         if (["vet", "ngo"].includes(u.role)) {
           return u.isApproved === true;
         }
