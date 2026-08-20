@@ -870,23 +870,24 @@ exports.respondToRescueRequest = catchAsync(async (req: Request, res: Response, 
       console.error("[RESCUE] Failed to update StrayReport status on accept:", err.message || err);
     }
 
+    const targetReporterId = acceptedReport?.reporterUserId || request.userId;
     if (
       acceptedReport &&
       !acceptedReport.anonymous &&
-      request.userId &&
-      mongoose.Types.ObjectId.isValid(request.userId)
+      targetReporterId &&
+      mongoose.Types.ObjectId.isValid(targetReporterId)
     ) {
       try {
         const rescuer = await Rescuer.findById(request.rescuerId);
         const rescuerName = rescuer?.name || request.rescuerName || "A rescuer";
         const animalType = acceptedReport.animalType || request.animalType || "animal";
         await NotificationService.sendNotification(
-          String(request.userId),
-          `Case ${request.caseId} Accepted`,
-          `Your ${animalType} rescue case ${request.caseId} was accepted by ${rescuerName}. Rescue is under way.`,
+          String(targetReporterId),
+          `Case ${request.caseId || acceptedReport.caseId} Accepted`,
+          `Your ${animalType} rescue case ${request.caseId || acceptedReport.caseId} was accepted by ${rescuerName}. Rescue is under way.`,
           "success",
           String(request._id),
-          request.caseId || "",
+          request.caseId || acceptedReport.caseId || "",
           {
             event: "rescue_accepted",
             status: "Under Rescue",
