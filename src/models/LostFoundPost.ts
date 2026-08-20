@@ -9,6 +9,8 @@ export interface ILostFoundPost extends Document {
   name?: string;
   description: string;
   location: string;
+  latitude?: number | null;
+  longitude?: number | null;
   date?: string;
   contactName?: string;
   contactNumber?: string;
@@ -57,6 +59,18 @@ const LostFoundPostSchema = new Schema<ILostFoundPost>(
       type: String,
       required: true,
       trim: true,
+    },
+    latitude: {
+      type: Number,
+      min: -90,
+      max: 90,
+      default: null,
+    },
+    longitude: {
+      type: Number,
+      min: -180,
+      max: 180,
+      default: null,
     },
     date: {
       type: String,
