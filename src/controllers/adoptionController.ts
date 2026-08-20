@@ -1,6 +1,31 @@
 import { Request, Response } from "express";
 import AdoptionPost from "../models/AdoptionPost";
 
+const normalizePostPayload = (body: any) => {
+  const payload = { ...body };
+  const hasLatitude = body.latitude !== undefined && body.latitude !== null && body.latitude !== "";
+  const hasLongitude = body.longitude !== undefined && body.longitude !== null && body.longitude !== "";
+  if (hasLatitude !== hasLongitude) {
+    throw new Error("Latitude and longitude must be provided together");
+  }
+  if (hasLatitude && hasLongitude) {
+    const latitude = Number(body.latitude);
+    const longitude = Number(body.longitude);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+      throw new Error("Latitude must be between -90 and 90");
+    }
+    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      throw new Error("Longitude must be between -180 and 180");
+    }
+    payload.latitude = latitude;
+    payload.longitude = longitude;
+  }
+  if (body.images !== undefined && !Array.isArray(body.images)) {
+    throw new Error("Images must be an array");
+  }
+  return payload;
+};
+
 // GET /api/adoption
 export const getAllPosts = async (_req: Request, res: Response): Promise<void> => {
   try {
@@ -38,10 +63,10 @@ export const createPost = async (req: Request, res: Response): Promise<void> => 
       res.status(401).json({ error: "User authentication required" });
       return;
     }
-    const post = await AdoptionPost.create({ ...req.body, userId: typeofReq.user.id });
+    const post = await AdoptionPost.create({ ...normalizePostPayload(req.body), userId: typeofReq.user.id });
     res.status(201).json(post);
-  } catch (err) {
-    res.status(400).json({ error: "Invalid data", details: err });
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || "Invalid data" });
   }
 };
 
@@ -68,13 +93,13 @@ export const updatePost = async (req: Request, res: Response): Promise<void> => 
     }
 
     delete req.body.userId;
-    const updated = await AdoptionPost.findByIdAndUpdate(req.params.postId, req.body, {
+    const updated = await AdoptionPost.findByIdAndUpdate(req.params.postId, normalizePostPayload(req.body), {
       new: true,
       runValidators: true,
     });
     res.json(updated);
-  } catch (error) {
-    res.status(500).json({ error: "Server error" });
+  } catch (error: any) {
+    res.status(400).json({ error: error?.message || "Invalid data" });
   }
 };
 
