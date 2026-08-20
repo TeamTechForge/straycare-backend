@@ -768,9 +768,17 @@ exports.respondToRescueRequest = catchAsync(async (req: Request, res: Response, 
     return;
   }
 
-  if (action === "accept" && request.userId && req.user?.id && String(request.userId) === String(req.user.id)) {
-    res.status(403).json({ error: "You cannot accept or take a rescue request for a case you reported yourself." });
-    return;
+  if (action === "accept" && req.user?.id) {
+    const StrayReport = require("../models/StrayReport");
+    const reportForCase = request.caseId ? await StrayReport.findOne({ caseId: request.caseId }) : null;
+    const isReporterUser = Boolean(
+      (request.userId && String(request.userId) === String(req.user.id)) ||
+      (reportForCase?.reporterUserId && String(reportForCase.reporterUserId) === String(req.user.id))
+    );
+    if (isReporterUser) {
+      res.status(403).json({ error: "You cannot accept or take a rescue request for a case you reported yourself." });
+      return;
+    }
   }
 
   request.status = action === "accept" ? "accepted" : "rejected";
