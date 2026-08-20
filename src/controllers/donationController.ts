@@ -333,6 +333,10 @@ export class DonationController {
       await Donation.updateOne(
         { orderId: installmentOrderId },
         {
+          $set: {
+            recurringOrderId: recurring.orderId,
+            subscriptionId: subscription_id || recurring.subscriptionId,
+          },
           $setOnInsert: {
             orderId: installmentOrderId,
             amount: Number.parseFloat(payhere_amount),
@@ -348,6 +352,13 @@ export class DonationController {
         },
         { upsert: true }
       );
+
+      // Count verified payment records rather than callback events. PayHere can
+      // notify us more than once while a recurring payment is being processed.
+      recurring.installmentsPaid = await Donation.countDocuments({
+        recurringOrderId: recurring.orderId,
+        status: "SUCCESS",
+      });
     }
 
     await recurring.save();
@@ -369,10 +380,38 @@ export class DonationController {
 
   public getRecurringDonations = catchAsync(async (req: Request, res: Response): Promise<void> => {
     const recurringDonations = await RecurringDonation.find({ donorId: req.user?.id })
-      .select("orderId subscriptionId status statusMessage installmentsPaid plan recurrence amount currency organization createdAt")
-      .sort({ createdAt: -1 });
+      .select("orderId subscriptionId status statusMessage installmentsPaid lastPaymentId plan recurrence amount currency organization createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
 
-    res.json(recurringDonations);
+    const recurringOrderIds = recurringDonations.map((item: any) => item.orderId);
+    const paymentRecords = await Donation.find({
+      donorId: req.user?.id,
+      frequency: "Recurring",
+      status: "SUCCESS",
+      $or: [
+        { recurringOrderId: { $in: recurringOrderIds } },
+        // Supports recurring payments stored before recurringOrderId was added.
+        { orderId: { $in: recurringDonations
+          .map((item: any) => item.lastPaymentId ? `PAYHERE-${item.lastPaymentId}` : null)
+          .filter(Boolean) } },
+      ],
+    }).sort({ timestamp: -1 }).lean();
+
+    const result = recurringDonations.map((item: any) => {
+      const payments = paymentRecords.filter((payment: any) =>
+        payment.recurringOrderId === item.orderId ||
+        (item.lastPaymentId && payment.orderId === `PAYHERE-${item.lastPaymentId}`)
+      );
+
+      return {
+        ...item,
+        installmentsPaid: payments.length || (item.lastPaymentId ? 1 : 0),
+        latestPayment: payments[0] || null,
+      };
+    });
+
+    res.json(result);
   });
 
   public cancelRecurringDonation = catchAsync(async (req: Request, res: Response): Promise<void> => {

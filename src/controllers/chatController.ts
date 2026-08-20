@@ -49,7 +49,7 @@ const getConversations = catchAsync(async (req: Request, res: Response, next: Ne
       participants: userId,
       deletedFor: { $ne: userId },
     })
-      .populate("participants", "name email role profileCompleted profileImage avatar")
+      .populate("participants", "name email role profileCompleted profileImage avatar blockedUsers")
       .sort({ "lastMessage.createdAt": -1, updatedAt: -1 })
       .lean();
 
@@ -67,6 +67,14 @@ const getConversations = catchAsync(async (req: Request, res: Response, next: Ne
               p.name = profile.orgName;
             }
           }
+          
+          // Check if this participant has blocked the current user
+          p.isBlockingMe = false;
+          if (p.blockedUsers && p.blockedUsers.some((id: any) => id.toString() === userId.toString())) {
+            p.isBlockingMe = true;
+          }
+          // Remove blockedUsers from the response for privacy
+          delete p.blockedUsers;
         }
       }
 

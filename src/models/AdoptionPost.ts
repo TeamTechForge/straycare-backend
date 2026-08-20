@@ -14,6 +14,8 @@ export interface IAdoptionPost extends Document {
   traits: string[];
   images: string[];
   location: string;
+  latitude?: number;
+  longitude?: number;
   posterName: string;
   contact: string;
   notes?: string;
@@ -45,6 +47,8 @@ const AdoptionPostSchema = new Schema<IAdoptionPost>(
     traits: [{ type: String }],
     images: [{ type: String }],
     location: { type: String, required: true },
+    latitude: { type: Number, min: -90, max: 90 },
+    longitude: { type: Number, min: -180, max: 180 },
     posterName: { type: String, required: true },
     contact: { type: String, required: true },
     notes: { type: String },

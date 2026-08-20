@@ -7,6 +7,8 @@ interface IDonation extends mongoose.Document {
   organization: string;
   organizationId?: string | null;
   donorId?: string | null;
+  recurringOrderId?: string | null;
+  subscriptionId?: string | null;
   frequency: string;
   plan: string;
   status: string;
@@ -20,6 +22,8 @@ const DonationSchema = new mongoose.Schema({
   organization: { type: String, default: "StrayCare" },
   organizationId: { type: String, default: null },
   donorId: { type: String, default: null },
+  recurringOrderId: { type: String, default: null, index: true },
+  subscriptionId: { type: String, default: null, index: true },
   frequency: { type: String, default: "One-time" },
   plan: { type: String, default: "" },
   status: { type: String, default: "SUCCESS" },
