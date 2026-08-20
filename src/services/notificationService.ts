@@ -111,7 +111,13 @@ export class NotificationService {
       // Send Expo Push Notification if recipient has registered a pushToken
       try {
         const user = await User.findById(userId);
-        if (user && user.pushToken) {
+        if (!user) {
+          Logger.warn(`Push recipient user not found: ${userId}`, { service: "NotificationService" });
+        } else if (!user.pushToken) {
+          // Keep the in-app notification, but make the missing device token
+          // explicit so push-registration problems are diagnosable.
+          Logger.warn(`No push token registered for user ${userId}`, { service: "NotificationService" });
+        } else {
           const result = await sendPushNotification(user.pushToken, title, message, {
             type,
             rescueRequestId,
@@ -124,6 +130,8 @@ export class NotificationService {
             Logger.warn(`Removed invalid Expo push token for user ${userId}`, { service: "NotificationService" });
           } else if (result === "sent") {
             Logger.info(`Sent Expo push notification to user ${userId}`, { service: "NotificationService" });
+          } else {
+            Logger.warn(`Expo push delivery was not confirmed for user ${userId}`, { service: "NotificationService" });
           }
         }
       } catch (pushErr: any) {

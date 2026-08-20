@@ -497,10 +497,15 @@ exports.listCompletedRescues = catchAsync(async (req: Request, res: Response, ne
   res.json(historyEntries.map((history: any) => formatCaseRecord({ request: history, history })));
 });
 
+exports.listFailedRescues = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const historyEntries = await RescueHistory.find({ status: RescueStatus.FAILED }).sort({ completedAt: -1, createdAt: -1 });
+  res.json(historyEntries.map((history: any) => formatCaseRecord({ request: history, history })));
+});
+
 exports.listAllRescues = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const [pending, completed] = await Promise.all([
     RescueRequest.find({ status: { $in: [RescueStatus.PENDING, RescueStatus.ACCEPTED] } }).sort({ createdAt: -1 }).populate("rescuerId"),
-    RescueHistory.find({ status: RescueStatus.COMPLETED }).sort({ completedAt: -1, createdAt: -1 }),
+    RescueHistory.find({ status: { $in: [RescueStatus.COMPLETED, RescueStatus.FAILED] } }).sort({ completedAt: -1, createdAt: -1 }),
   ]);
 
   const all = [
@@ -1076,27 +1081,35 @@ exports.updateRescueDetails = catchAsync(async (req: Request, res: Response, nex
   if (activeDoc) {
     await activeDoc.save();
 
-    if (
-      status === "Completed" &&
-      strayReport &&
-      !strayReport.anonymous &&
-      strayReport.reporterUserId &&
-      mongoose.Types.ObjectId.isValid(strayReport.reporterUserId)
-    ) {
-      const rescuerName = activeDoc.rescuerName || "the assigned rescuer";
-      try {
-        await NotificationService.sendNotification(
-          String(strayReport.reporterUserId),
-          `Rescue Completed • ${activeDoc.caseId}`,
-          `The rescue for case ${activeDoc.caseId} has been completed by ${rescuerName}.`,
-          "success",
-          String(activeDoc.rescueRequestId || activeDoc._id || ""),
-          activeDoc.caseId || "",
-          {
-            event: "rescue_completed",
-            status: "Completed",
-            animalType: strayReport.animalType || activeDoc.animalType || "animal",
-            assignedRescuerName: rescuerName,
+      const reporterUserId = strayReport?.reporterUserId || activeDoc.userId;
+      if (
+        status &&
+        strayReport &&
+        !strayReport.anonymous &&
+        reporterUserId &&
+        mongoose.Types.ObjectId.isValid(String(reporterUserId))
+      ) {
+        const statusMessages: Record<string, string> = {
+          "Under Rescue": "A rescuer has accepted your case and is working on it.",
+          Treated: "The animal in your case is now under treatment.",
+          "Ready for Adoption": "The animal in your case is now ready for adoption.",
+          Completed: "The rescue for your case has been completed.",
+        };
+        const statusMessage = statusMessages[status] || `Your case status was updated to ${status}.`;
+        const rescuerName = activeDoc.rescuerName || "the assigned rescuer";
+        try {
+          await NotificationService.sendNotification(
+            String(reporterUserId),
+            `Case Updated • ${activeDoc.caseId}`,
+            `${statusMessage} Updated by ${rescuerName}.`,
+            status === "Completed" || status === "Ready for Adoption" ? "success" : "info",
+            String(activeDoc.rescueRequestId || activeDoc._id || ""),
+            activeDoc.caseId || "",
+            {
+              event: status === "Completed" ? "rescue_completed" : "case_status_updated",
+              status,
+              animalType: strayReport.animalType || activeDoc.animalType || "animal",
+              assignedRescuerName: rescuerName,
             action: "view_case",
             categoryId: "case_update",
           }
@@ -1182,6 +1195,7 @@ exports.markRescueFailed = catchAsync(async (req: Request, res: Response, next: 
   const StrayReport = require("../models/StrayReport");
   const report = await StrayReport.findOne({ caseId: request.caseId });
   if (report) {
+    report.status = "Failed";
     if (!report.timeline) report.timeline = [];
     report.timeline.push({
       status: "Rescue Failed",

@@ -3,6 +3,7 @@ const express = require("express");
 const {
   listPendingRescues,
   listCompletedRescues,
+  listFailedRescues,
   listAllRescues,
   listUserRescues,
   getRescueById,
@@ -18,6 +19,7 @@ const router = express.Router();
 
 router.get("/pending", listPendingRescues);
 router.get("/completed", listCompletedRescues);
+router.get("/failed", listFailedRescues);
 router.get("/all", listAllRescues);
 router.get("/my-rescues", listUserRescues);
 router.get("/user/:userId", listUserRescues);
