@@ -336,6 +336,8 @@ export const createAnimalPost = async (req: AuthenticatedRequest, res: Response)
       name,
       description,
       location,
+      latitude,
+      longitude,
       date,
       contactName,
       contactNumber,
@@ -362,6 +364,17 @@ export const createAnimalPost = async (req: AuthenticatedRequest, res: Response)
       return;
     }
 
+    const parsedLatitude = latitude == null ? null : Number(latitude);
+    const parsedLongitude = longitude == null ? null : Number(longitude);
+    if (
+      (parsedLatitude == null) !== (parsedLongitude == null) ||
+      (parsedLatitude != null && (!Number.isFinite(parsedLatitude) || parsedLatitude < -90 || parsedLatitude > 90)) ||
+      (parsedLongitude != null && (!Number.isFinite(parsedLongitude) || parsedLongitude < -180 || parsedLongitude > 180))
+    ) {
+      res.status(400).json({ message: "Location coordinates are invalid" });
+      return;
+    }
+
     // Process image uploads
     const { imageUrl, images } = await processUploadedImages(req);
 
@@ -373,6 +386,8 @@ export const createAnimalPost = async (req: AuthenticatedRequest, res: Response)
       name: name ? String(name).trim() : undefined,
       description: description.trim(),
       location: location.trim(),
+      latitude: parsedLatitude,
+      longitude: parsedLongitude,
       date: date ? String(date).trim() : undefined,
       contactName: contactName ? String(contactName).trim() : undefined,
       contactNumber: contactNumber ? String(contactNumber).trim() : undefined,
@@ -428,6 +443,23 @@ export const updateAnimalPost = async (req: AuthenticatedRequest, res: Response)
       return;
     }
 
+    const hasLatitude = req.body.latitude !== undefined;
+    const hasLongitude = req.body.longitude !== undefined;
+    if (hasLatitude || hasLongitude) {
+      const parsedLatitude = req.body.latitude == null ? null : Number(req.body.latitude);
+      const parsedLongitude = req.body.longitude == null ? null : Number(req.body.longitude);
+      if (
+        (parsedLatitude == null) !== (parsedLongitude == null) ||
+        (parsedLatitude != null && (!Number.isFinite(parsedLatitude) || parsedLatitude < -90 || parsedLatitude > 90)) ||
+        (parsedLongitude != null && (!Number.isFinite(parsedLongitude) || parsedLongitude < -180 || parsedLongitude > 180))
+      ) {
+        res.status(400).json({ message: "Location coordinates are invalid" });
+        return;
+      }
+      req.body.latitude = parsedLatitude;
+      req.body.longitude = parsedLongitude;
+    }
+
     const updateData: Partial<ILostFoundPost> = {};
     const allowedFields = [
       "status",
@@ -437,6 +469,8 @@ export const updateAnimalPost = async (req: AuthenticatedRequest, res: Response)
       "name",
       "description",
       "location",
+      "latitude",
+      "longitude",
       "date",
       "contactName",
       "contactNumber",
