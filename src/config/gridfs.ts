@@ -35,7 +35,7 @@ interface GridFSUploadResult {
   filename: string;
 }
 
-const uploadSingleFileToGridFs = (bucket: any, file: Express.Multer.File): Promise<GridFSUploadResult> =>
+const uploadSingleFileToGridFs = (bucket: any, file: any): Promise<GridFSUploadResult> =>
   new Promise((resolve, reject) => {
     const filename = createUploadFilename(file.originalname);
     const uploadStream = bucket.openUploadStream(filename, {

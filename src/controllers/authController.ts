@@ -1,4 +1,12 @@
 import { catchAsync } from "../utils/catchAsync";
+import { Role } from "../enums/Role.enum";
+import { AuthValidator } from "../validators/authValidator";
+import { JwtService } from "../services/jwtService";
+import { PasswordService } from "../services/passwordService";
+import { NotificationService } from "../services/notificationService";
+
+import type { Request, Response, NextFunction } from "express";
+
 const crypto = require("crypto");
 const admin = require("../config/firebase");
 const User = require("../models/User");
@@ -6,15 +14,9 @@ const NGOProfile = require("../models/NGOProfile");
 const VolunteerProfile = require("../models/VolunteerProfile");
 const VetProfile = require("../models/VetProfile");
 const GeneralUserProfile = require("../models/GeneralUserProfile");
-
-import { Role } from "../enums/Role.enum";
-import { AuthValidator } from "../validators/authValidator";
-import { JwtService } from "../services/jwtService";
-import { PasswordService } from "../services/passwordService";
-import { NotificationService } from "../services/notificationService";
-const { sendPasswordResetCodeEmail } = require("../utils/emailService");
-import type { Request, Response, NextFunction } from "express";
 const Notification = require("../models/Notification");
+
+const { sendPasswordResetCodeEmail } = require("../utils/emailService");
 
 export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   let user: any;
@@ -51,7 +53,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
     await NotificationService.sendNotification(
       String(user._id),
       "Welcome to StrayCare!",
-      `Hi ${name}, welcome to our community! Together we can save more stray animals. ðŸ¾`,
+      `Hi ${name}, welcome to our community! Together we can save more stray animals.`,
       "welcome"
     );
 
