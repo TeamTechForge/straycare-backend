@@ -8,6 +8,7 @@ import { JwtService } from "../services/jwtService";
 import { PasswordService } from "../services/passwordService";
 import type { Request, Response } from "express";
 
+// Validate admin credentials and issue an eight-hour JWT.
 exports.login = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { email, password } = req.body;
 
@@ -23,6 +24,7 @@ exports.login = catchAsync(async (req: Request, res: Response, next: NextFunctio
       return;
     }
 
+    // The token identifies the admin on later protected requests.
     const token = JwtService.generateToken(
       { id: admin._id, role: "admin", username: admin.username },
       "8h"
@@ -31,6 +33,7 @@ exports.login = catchAsync(async (req: Request, res: Response, next: NextFunctio
     res.json({ token, admin: { id: admin._id, username: admin.username, email: admin.email } });
   });;
 
+// Create a short-lived reset code without revealing whether an email exists.
 exports.forgotPassword = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { email } = req.body;
 
@@ -42,6 +45,7 @@ exports.forgotPassword = catchAsync(async (req: Request, res: Response, next: Ne
     }
 
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    // Store only the code hash so the original code is not readable in MongoDB.
     const hashedCode = crypto.createHash('sha256').update(resetCode).digest('hex');
 
     admin.resetToken = hashedCode;
@@ -57,6 +61,7 @@ exports.forgotPassword = catchAsync(async (req: Request, res: Response, next: Ne
     res.json({ message: "If this email exists, a 6-digit reset code has been sent." });
   });;
 
+// Replace the password after validating the reset code and expiry time.
 exports.resetPassword = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { token, newPassword } = req.body;
 

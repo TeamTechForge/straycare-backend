@@ -4,6 +4,7 @@ const express = require("express");
 const router = express.Router();
 const { login, forgotPassword, resetPassword } = require("../controllers/adminAuthController");
 
+// These routes must remain public so an admin can log in or recover access.
 // POST /api/admin/login
 router.post("/login", login);
 

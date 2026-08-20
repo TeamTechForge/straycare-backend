@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 
 const requireAdmin = (req: Request, res: Response, next: NextFunction): void => {
+  // Authentication runs first and places the decoded role on req.user.
   if (req.user?.role !== "admin") {
     res.status(403).json({ message: "Administrator access required." });
     return;
