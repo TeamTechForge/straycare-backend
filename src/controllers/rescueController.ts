@@ -398,6 +398,25 @@ exports.sendRescueRequest = catchAsync(async (req: Request, res: Response, next:
 
   const isAnon = stray?.anonymous || req.body.anonymous === true || req.body.anonymous === "true";
 
+  // --- BLOCK CHECK ---
+  if (reporterUser && rescuer.userId) {
+    const rescuerUserIdStr = String(rescuer.userId);
+    const reporterUserIdStr = String(reporterUserId);
+
+    // 1. Did the reporter block the rescuer?
+    if (reporterUser.blockedUsers && reporterUser.blockedUsers.some((id: any) => id.toString() === rescuerUserIdStr)) {
+      res.status(403).json({ error: "You cannot send a rescue request to this user." });
+      return;
+    }
+
+    // 2. Did the rescuer block the reporter?
+    const rescuerUserModel = await User.findById(rescuerUserIdStr).select("blockedUsers").lean();
+    if (rescuerUserModel?.blockedUsers && rescuerUserModel.blockedUsers.some((id: any) => id.toString() === reporterUserIdStr)) {
+      res.status(403).json({ error: "This rescuer is unavailable." });
+      return;
+    }
+  }
+
   const payload = {
     userId: reporterUserId || "logged-in-user",
     caseId: caseId || "",
@@ -1081,35 +1100,35 @@ exports.updateRescueDetails = catchAsync(async (req: Request, res: Response, nex
   if (activeDoc) {
     await activeDoc.save();
 
-      const reporterUserId = strayReport?.reporterUserId || activeDoc.userId;
-      if (
-        status &&
-        strayReport &&
-        !strayReport.anonymous &&
-        reporterUserId &&
-        mongoose.Types.ObjectId.isValid(String(reporterUserId))
-      ) {
-        const statusMessages: Record<string, string> = {
-          "Under Rescue": "A rescuer has accepted your case and is working on it.",
-          Treated: "The animal in your case is now under treatment.",
-          "Ready for Adoption": "The animal in your case is now ready for adoption.",
-          Completed: "The rescue for your case has been completed.",
-        };
-        const statusMessage = statusMessages[status] || `Your case status was updated to ${status}.`;
-        const rescuerName = activeDoc.rescuerName || "the assigned rescuer";
-        try {
-          await NotificationService.sendNotification(
-            String(reporterUserId),
-            `Case Updated • ${activeDoc.caseId}`,
-            `${statusMessage} Updated by ${rescuerName}.`,
-            status === "Completed" || status === "Ready for Adoption" ? "success" : "info",
-            String(activeDoc.rescueRequestId || activeDoc._id || ""),
-            activeDoc.caseId || "",
-            {
-              event: status === "Completed" ? "rescue_completed" : "case_status_updated",
-              status,
-              animalType: strayReport.animalType || activeDoc.animalType || "animal",
-              assignedRescuerName: rescuerName,
+    const reporterUserId = strayReport?.reporterUserId || activeDoc.userId;
+    if (
+      status &&
+      strayReport &&
+      !strayReport.anonymous &&
+      reporterUserId &&
+      mongoose.Types.ObjectId.isValid(String(reporterUserId))
+    ) {
+      const statusMessages: Record<string, string> = {
+        "Under Rescue": "A rescuer has accepted your case and is working on it.",
+        Treated: "The animal in your case is now under treatment.",
+        "Ready for Adoption": "The animal in your case is now ready for adoption.",
+        Completed: "The rescue for your case has been completed.",
+      };
+      const statusMessage = statusMessages[status] || `Your case status was updated to ${status}.`;
+      const rescuerName = activeDoc.rescuerName || "the assigned rescuer";
+      try {
+        await NotificationService.sendNotification(
+          String(reporterUserId),
+          `Case Updated • ${activeDoc.caseId}`,
+          `${statusMessage} Updated by ${rescuerName}.`,
+          status === "Completed" || status === "Ready for Adoption" ? "success" : "info",
+          String(activeDoc.rescueRequestId || activeDoc._id || ""),
+          activeDoc.caseId || "",
+          {
+            event: status === "Completed" ? "rescue_completed" : "case_status_updated",
+            status,
+            animalType: strayReport.animalType || activeDoc.animalType || "animal",
+            assignedRescuerName: rescuerName,
             action: "view_case",
             categoryId: "case_update",
           }
