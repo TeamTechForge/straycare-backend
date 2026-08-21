@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 const bcrypt = require("bcrypt");
 
+// Admin accounts are separate from mobile user accounts.
 interface IAdmin extends mongoose.Document {
   username: string;
   email: string;

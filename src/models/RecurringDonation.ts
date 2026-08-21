@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+// A recurring record stores the plan while Donation stores each payment.
 const RecurringDonationSchema = new mongoose.Schema(
   {
     orderId: { type: String, required: true, unique: true, index: true },
@@ -13,6 +14,7 @@ const RecurringDonationSchema = new mongoose.Schema(
     plan: { type: String, required: true },
     recurrence: { type: String, required: true },
     duration: { type: String, default: "Forever" },
+    // The status is updated from PayHere notifications and cancellation calls.
     status: {
       type: String,
       enum: ["PENDING", "ACTIVE", "FAILED", "CANCELLED", "COMPLETED"],

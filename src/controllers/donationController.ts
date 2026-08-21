@@ -33,8 +33,10 @@ export interface IDonationSaveRequest {
 }
 
 export class DonationController {
+  // Public URLs sent to PayHere must point back to the hosted backend.
   private static readonly baseUrl: string = process.env.BACKEND_URL || "https://straycare-backend-69nd.onrender.com";
 
+  // Prepare a signed PayHere request for the selected organization.
   public initiateDonation = catchAsync(async (req: Request<{}, {}, IDonationInitiateRequest>, res: Response, next: NextFunction): Promise<void> => {
     const db = mongoose.connection.db;
     if (!db) {
@@ -42,6 +44,7 @@ export class DonationController {
       return;
     }
 
+    // Use organization credentials when available, otherwise use the fallback merchant.
     let merchant_id = process.env.PAYHERE_MERCHANT_ID;
     let merchant_secret = process.env.PAYHERE_MERCHANT_SECRET;
     let recurringManagementReady = !req.body.organizationId && Boolean(
@@ -58,12 +61,11 @@ export class DonationController {
           merchant_id = org.merchantId.trim();
           merchant_secret = org.merchantSecret.trim();
           recurringManagementReady = Boolean(org.payHereAppId?.trim() && org.payHereAppSecret?.trim());
-          console.log("USING ORG MERCHANT ID:", merchant_id);
         } else {
-          console.log("NO MERCHANT ID FOUND FOR ORG, USING FALLBACK");
+          console.warn("Organization payment credentials were not found; using the configured fallback merchant.");
         }
       } catch (err: any) {
-        console.log("Error fetching org merchant ID, using fallback:", err.message);
+        console.error("Unable to load organization payment credentials; using the configured fallback merchant:", err.message);
       }
     }
 
@@ -81,6 +83,7 @@ export class DonationController {
     const amount = amountValue.toFixed(2);
     const currency = "LKR";
     const order_id = "ORDER-" + Date.now();
+    // Limit checkout to the payment methods supported by this integration.
     const allowedPaymentMethods = ["VISA", "MASTER", "AMEX"] as const;
     const payment_method = req.body.paymentMethod;
     const isRecurring = req.body.frequency === "Recurring";
@@ -111,6 +114,7 @@ export class DonationController {
         return;
       }
 
+      // Create a pending plan before the donor is redirected to PayHere.
       await RecurringDonation.create({
         orderId: order_id,
         donorId: req.user.id,
@@ -161,6 +165,7 @@ export class DonationController {
     });
   });
 
+  // Render the HTML form that submits the signed values to PayHere.
   public getPayCheckout = (req: Request, res: Response): void => {
     const {
       merchant_id,
@@ -212,6 +217,7 @@ export class DonationController {
     res.send(formHtml);
   };
 
+  // Store the final result of a one-time donation.
   public saveDonation = catchAsync(async (req: Request<{}, {}, IDonationSaveRequest>, res: Response, next: NextFunction): Promise<void> => {
     const { orderId, amount, category, organization, organizationId, frequency, plan, status } = req.body;
     const donorId = req.user?.id || null;
@@ -238,6 +244,7 @@ export class DonationController {
     res.json({ success: true, donation });
   });
 
+  // Process the server-to-server payment confirmation sent by PayHere.
   public notifyPayhere = catchAsync(async (req: Request, res: Response): Promise<void> => {
     const {
       merchant_id, order_id, payment_id, payhere_amount, payhere_currency,
@@ -333,6 +340,10 @@ export class DonationController {
       await Donation.updateOne(
         { orderId: installmentOrderId },
         {
+          $set: {
+            recurringOrderId: recurring.orderId,
+            subscriptionId: subscription_id || recurring.subscriptionId,
+          },
           $setOnInsert: {
             orderId: installmentOrderId,
             amount: Number.parseFloat(payhere_amount),
@@ -348,12 +359,20 @@ export class DonationController {
         },
         { upsert: true }
       );
+
+      // Count verified payment records rather than callback events. PayHere can
+      // notify us more than once while a recurring payment is being processed.
+      recurring.installmentsPaid = await Donation.countDocuments({
+        recurringOrderId: recurring.orderId,
+        status: "SUCCESS",
+      });
     }
 
     await recurring.save();
     res.sendStatus(200);
   });
 
+  // Return the status of a recurring order owned by the logged-in donor.
   public getRecurringStatus = catchAsync(async (req: Request, res: Response): Promise<void> => {
     const recurring = await RecurringDonation.findOne({
       orderId: req.params.orderId,
@@ -367,14 +386,44 @@ export class DonationController {
     res.json(recurring);
   });
 
+  // List recurring plans and their latest completed payment.
   public getRecurringDonations = catchAsync(async (req: Request, res: Response): Promise<void> => {
     const recurringDonations = await RecurringDonation.find({ donorId: req.user?.id })
-      .select("orderId subscriptionId status statusMessage installmentsPaid plan recurrence amount currency organization createdAt")
-      .sort({ createdAt: -1 });
+      .select("orderId subscriptionId status statusMessage installmentsPaid lastPaymentId plan recurrence amount currency organization createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
 
-    res.json(recurringDonations);
+    const recurringOrderIds = recurringDonations.map((item: any) => item.orderId);
+    const paymentRecords = await Donation.find({
+      donorId: req.user?.id,
+      frequency: "Recurring",
+      status: "SUCCESS",
+      $or: [
+        { recurringOrderId: { $in: recurringOrderIds } },
+        // Supports recurring payments stored before recurringOrderId was added.
+        { orderId: { $in: recurringDonations
+          .map((item: any) => item.lastPaymentId ? `PAYHERE-${item.lastPaymentId}` : null)
+          .filter(Boolean) } },
+      ],
+    }).sort({ timestamp: -1 }).lean();
+
+    const result = recurringDonations.map((item: any) => {
+      const payments = paymentRecords.filter((payment: any) =>
+        payment.recurringOrderId === item.orderId ||
+        (item.lastPaymentId && payment.orderId === `PAYHERE-${item.lastPaymentId}`)
+      );
+
+      return {
+        ...item,
+        installmentsPaid: payments.length || (item.lastPaymentId ? 1 : 0),
+        latestPayment: payments[0] || null,
+      };
+    });
+
+    res.json(result);
   });
 
+  // Cancel the donor's plan through the organization's PayHere API account.
   public cancelRecurringDonation = catchAsync(async (req: Request, res: Response): Promise<void> => {
     const recurringId = String(req.params.recurringId);
     if (!mongoose.Types.ObjectId.isValid(recurringId)) {
@@ -471,12 +520,14 @@ export class DonationController {
     });
   });
 
+  // Return donation records created by the logged-in donor.
   public getHistory = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const donorId = req.user?.id;
     const donations = await Donation.find({ donorId }).sort({ timestamp: -1 });
     res.json(donations);
   });
 
+  // Calculate the successful donation total for a public organization profile.
   public getTotalForOrg = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { orgId } = req.params;
     const result = await Donation.aggregate([
@@ -493,6 +544,7 @@ export class DonationController {
     res.json(donations);
   });
 
+  // Return received donations with readable donor names for vets and NGOs.
   public getReceivedDonations = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const userId = req.user?.id;
     const role = req.user?.role;
@@ -518,6 +570,7 @@ export class DonationController {
     res.json(enriched);
   });
 
+  // Supply all donation records to the protected Admin Dashboard.
   public getAllDonations = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const donations = await Donation.find().sort({ timestamp: -1 });
     res.json(donations);

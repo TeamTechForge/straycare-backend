@@ -17,7 +17,7 @@ const ROLE_COLLECTIONS: RoleCollection[] = [
   { collection: "vetprofiles", role: "Vet" },
 ];
 
-// Find which collection a user belongs to, and return their record
+// Locate a reported account across the supported role collections.
 async function findUserAcrossCollections(db: any, userId: string): Promise<{ user: any; collection: string; role: string } | null> {
   const objectId = new mongoose.Types.ObjectId(userId);
   for (const { collection, role } of ROLE_COLLECTIONS) {
@@ -27,14 +27,14 @@ async function findUserAcrossCollections(db: any, userId: string): Promise<{ use
   return null;
 }
 
-// GET /api/moderation/user/:id - find a reported user's details + role
+// Return the reported user's details and detected role.
 router.get("/user/:id", async (req: Request, res: Response) => {
   try {
     const db = mongoose.connection.client.db("straycare");
     const result = await findUserAcrossCollections(db, String(req.params.id));
     if (!result) return res.status(404).json({ error: "User not found in any collection" });
 
-    // Don't send password hash to frontend
+    // Never send a password hash to the dashboard.
     const { password, ...safeUser } = result.user;
     res.json({ ...result, user: safeUser });
   } catch (err: any) {
@@ -42,10 +42,10 @@ router.get("/user/:id", async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /api/moderation/user/:id/action - apply Dismiss/Warn/Suspend
+// Apply the selected moderation action and resolve the reviewed report.
 router.patch("/user/:id/action", async (req: Request, res: Response) => {
   try {
-    const { action, reportId } = req.body; // action: "Dismiss" | "Warn" | "Suspend"
+    const { action, reportId } = req.body;
     const db = mongoose.connection.client.db("straycare");
 
     if (action === "Warn" || action === "Suspend") {
@@ -59,6 +59,7 @@ router.patch("/user/:id/action", async (req: Request, res: Response) => {
       );
     }
 
+    // Mark the report resolved after the admin completes the review.
     if (reportId) {
       await db.collection("userreports").updateOne(
         { _id: new mongoose.Types.ObjectId(reportId) },

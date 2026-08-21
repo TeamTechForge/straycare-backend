@@ -1,48 +1,49 @@
-# 🐾 StrayCare
+# StrayCare Backend
 
-StrayCare is a comprehensive platform designed to bridge the gap between compassionate individuals, veterinary professionals, and NGOs to provide better care for stray animals. 
+The StrayCare backend is a TypeScript API built with Express. It provides authentication, profiles, rescue workflows, community features, donations, file uploads, notifications, and real-time chat and calls through Socket.IO.
 
-Whether it's reporting an animal in need of rescue, seeking medical help, or coordinating donations, StrayCare provides the necessary tools to make a positive impact on animal welfare.
+## Requirements
 
-## 🌟 Key Features
+- Node.js 20 LTS (supported range: `>=20 <23`)
+- MongoDB, or the repository's test database setup
 
-- **Role-Based Profiles:** Tailored experiences for General Users, NGOs, and Vets.
-- **Rescue Reporting:** Users can quickly report stray animals in need of medical attention or rescue.
-- **Real-Time Communication:** Integrated Socket.IO chat allows seamless communication between users, NGOs, and Vets.
-- **Donation Management:** Facilitates donations to verified NGOs to support rescue efforts.
-- **Community Forum:** A space for users to discuss, share advice, and build a supportive community.
-- **In-App Notifications:** Real-time updates on rescue status, profile verification, and messages.
+## Setup
 
-## 🏗️ Project Structure
-
-The project is divided into a Node.js backend and a React Native mobile application.
-
-### Backend (`straycare-backend`)
-- **Tech Stack:** Node.js, Express, TypeScript, MongoDB (Mongoose), Socket.IO.
-- **Responsibilities:** Handles API requests, user authentication, role management, real-time web sockets for chat/notifications, and database operations.
-
-### Frontend (`straycare-frontend-mobile`)
-- **Tech Stack:** React Native, Expo, TypeScript.
-- **Responsibilities:** Delivers a smooth, cross-platform mobile experience for users to interact with the StrayCare ecosystem.
-
-## 🚀 Getting Started
-
-### 1. Backend Setup
-Navigate to the backend directory, install dependencies, and start the development server:
 ```bash
-cd straycare-backend
 npm install
-npm run dev
-```
-*(Make sure to set up your `.env` file based on `.env.example` before running)*
-
-### 2. Frontend Setup
-Navigate to the frontend directory, install dependencies, and start Expo:
-```bash
-cd straycare-frontend-mobile
-npm install
-npx expo start
+copy .env.example .env
 ```
 
-## 🤝 Contributing
-Contributions, issues, and feature requests are welcome! Let's work together to make the world a better place for our furry friends.
+Fill in `.env` before starting the server. `MESSAGE_ENCRYPTION_KEY` must be a 64-character hexadecimal value. `MONGO_URI` is required for normal development; the server can fall back to an in-memory database when it is absent.
+
+## Scripts
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the TypeScript server with watch mode |
+| `npm run build` | Compile TypeScript to `dist/` |
+| `npm start` | Run the compiled server |
+| `npm test` | Run Jest tests |
+| `npm run test:coverage` | Generate a Jest coverage report |
+| `npm run kill-port` | Free the configured development port |
+
+The server uses port `5000` by default and automatically tries the next available ports. Check the health endpoint at `http://localhost:5000/ping`.
+
+## Main directories
+
+- `src/routes` - Express route modules
+- `src/controllers` - Request handlers
+- `src/services` - Application and integration services
+- `src/models` - Mongoose models
+- `src/sockets` - Socket.IO event handlers
+- `tests` - Integration and end-to-end tests
+
+## Testing
+
+Run the test suite with:
+
+```bash
+npm test
+```
+
+Keep credentials, Firebase service-account files, and production secrets out of version control.

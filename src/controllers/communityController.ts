@@ -285,7 +285,7 @@ export const createCommunityComment = async (req: Request, res: Response): Promi
         const content = typeof req.body.content === "string" ? req.body.content.trim() : "";
         const parentCommentId =
             typeof req.body.parentCommentId === "string" &&
-            mongoose.Types.ObjectId.isValid(req.body.parentCommentId)
+                mongoose.Types.ObjectId.isValid(req.body.parentCommentId)
                 ? new mongoose.Types.ObjectId(req.body.parentCommentId)
                 : null;
 

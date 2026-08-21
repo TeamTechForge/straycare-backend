@@ -9,10 +9,10 @@ import type { Request, Response } from "express";
 const Notification = require("../models/Notification");
 const User = require("../models/User");
 
+// Every route in this file requires a verified administrator.
 router.use(verifyToken, requireAdmin);
 
-// GET all admin notifications
-
+// Return previously sent dashboard announcements, newest first.
 router.get("/", async (req: Request, res: Response) => {
   try {
     const db = mongoose.connection.client.db("straycare");
@@ -29,8 +29,7 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-//POST create new admin notification
-
+// Store an announcement and deliver it to the selected user roles.
 router.post("/", async (req: Request, res: Response) => {
   try {
     const { title, audience, message } = req.body;
@@ -40,7 +39,7 @@ router.post("/", async (req: Request, res: Response) => {
 
     const audienceRoles: string[] = Array.isArray(audience) ? audience : [];
 
-    // Log the admin's broadcast for the "Previously Sent" history list
+    // Keep one dashboard record for the Previously Sent list.
     const db = mongoose.connection.client.db("straycare");
     const newNotification = {
       title,
@@ -51,12 +50,11 @@ router.post("/", async (req: Request, res: Response) => {
 
     const result = await db.collection("admin_notifications").insertOne(newNotification);
 
-    // Find every user who should receive this notification
+    // An empty audience means all user roles.
     const userQuery = audienceRoles.length > 0 ? { role: { $in: audienceRoles } } : {};
     const targetUsers = await User.find(userQuery).select("_id");
 
-    // Create one personal Notification document per matching user,
-    // so it shows up in their existing Notifications screen on the mobile app.
+    // Create a personal notification for each matching mobile user.
     if (targetUsers.length > 0) {
       const notificationDocs = targetUsers.map((u: any) => ({
         userId: u._id,
