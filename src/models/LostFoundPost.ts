@@ -21,6 +21,7 @@ export interface ILostFoundPost extends Document {
   updatedAt: Date;
 }
 
+// A single collection holds both lost and found reports; `status` distinguishes the workflows.
 const LostFoundPostSchema = new Schema<ILostFoundPost>(
   {
     userId: {
@@ -84,6 +85,7 @@ const LostFoundPostSchema = new Schema<ILostFoundPost>(
       type: String,
       trim: true,
     },
+    // `imageUrl` supports older clients while `images` supports the current multi-image form.
     imageUrl: {
       type: String,
       trim: true,
@@ -102,6 +104,7 @@ const LostFoundPostSchema = new Schema<ILostFoundPost>(
   { timestamps: true, collection: "animalposts" }
 );
 
+// Optimize the main feed query, which filters by status and shows newest reports first.
 LostFoundPostSchema.index({ status: 1, createdAt: -1 });
 
 export default mongoose.models.LostFoundPost ||

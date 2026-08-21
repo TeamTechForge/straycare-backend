@@ -6,8 +6,10 @@ const requireAdmin = require("../middleware/requireAdmin");
 
 import type { Request, Response } from "express";
 
+// Protect all reported-user data with admin authentication.
 router.use(verifyToken, requireAdmin);
 
+// Return newest reports first for review in the dashboard.
 router.get("/reported-users", async (req: Request, res: Response) => {
   try {
     const db = mongoose.connection.client.db("straycare");

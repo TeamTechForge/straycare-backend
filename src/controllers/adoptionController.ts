@@ -58,6 +58,7 @@ export const getPostById = async (req: Request, res: Response): Promise<void> =>
 // POST /api/adoption
 export const createPost = async (req: Request, res: Response): Promise<void> => {
   try {
+    // Authentication middleware adds `user` at runtime, but Express's base Request type does not include it.
     const typeofReq = req as any;
     if (!typeofReq.user || !typeofReq.user.id) {
       res.status(401).json({ error: "User authentication required" });
@@ -84,6 +85,7 @@ export const updatePost = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    // Owners manage their own listings; administrators can moderate any listing.
     const ownerId = post.userId ? post.userId.toString() : null;
     const isOwner = ownerId && ownerId === typeofReq.user.id;
     const isAdmin = typeofReq.user?.role === "admin";
@@ -92,6 +94,7 @@ export const updatePost = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    // Never allow an update payload to transfer ownership to another user.
     delete req.body.userId;
     const updated = await AdoptionPost.findByIdAndUpdate(req.params.postId, normalizePostPayload(req.body), {
       new: true,
@@ -117,6 +120,7 @@ export const deletePost = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    // Apply the same ownership policy used by updates before deleting the document.
     const ownerId = post.userId ? post.userId.toString() : null;
     const isOwner = ownerId && ownerId === typeofReq.user.id;
     const isAdmin = typeofReq.user?.role === "admin";
@@ -162,6 +166,7 @@ export const toggleLikePost = async (req: Request, res: Response): Promise<void>
       return;
     }
 
+    // Treat the endpoint as a toggle so repeated taps produce the expected UI state.
     const likesArray = post.likes || [];
     const isLiked = likesArray.some((id: any) => id.toString() === userId);
 

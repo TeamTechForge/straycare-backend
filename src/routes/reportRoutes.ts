@@ -16,6 +16,7 @@ const {
   acceptReportFromMap,
   getUserNotifications,
   markNotificationRead,
+  deleteReport,
 } = require("../controllers/reportController");
 const {
   autocompletePlaces,
@@ -82,6 +83,9 @@ router.get("/places/details", verifyToken, getPlaceDetails);
 // Update the status of a report.Controller also appends a new timeline entry.
 // 🔒 Requires authentication - only rescuers can update
 router.patch("/report/:caseId/status", verifyToken, updateCaseStatus);
+
+// Delete a stray report. Allowed only for reporter before rescuer acceptance.
+router.delete("/report/:caseId", verifyToken, deleteReport);
 
 // Get user's notifications (reporter updates)
 router.get("/notifications", verifyToken, getUserNotifications);

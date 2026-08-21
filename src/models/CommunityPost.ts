@@ -70,6 +70,7 @@ const communityPostSchema =
                 trim: true,
             },
 
+            // Kept separately from timestamps for compatibility with existing feed ordering.
             submittedAt: {
                 type: Date,
                 required: true,

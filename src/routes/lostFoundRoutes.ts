@@ -13,10 +13,12 @@ const { verifyToken } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
+// Browsing reports and opening their details does not require an account.
 router.get("/", getAnimalPosts);
 
 router.get("/:id", getAnimalPostById);
 
+// Creation, ownership-sensitive changes, and reporting require a verified identity.
 router.post("/", verifyToken, createAnimalPost);
 
 router.put("/:id", verifyToken, updateAnimalPost);

@@ -24,6 +24,7 @@ export interface IAdoptionPost extends Document {
   updatedAt: Date;
 }
 
+// The enum values mirror the fixed choices presented by the adoption form.
 const AdoptionPostSchema = new Schema<IAdoptionPost>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -52,6 +53,7 @@ const AdoptionPostSchema = new Schema<IAdoptionPost>(
     posterName: { type: String, required: true },
     contact: { type: String, required: true },
     notes: { type: String },
+    // Store user references rather than a counter so the API can determine who liked the post.
     likes: [{ type: Schema.Types.ObjectId, ref: "User", default: [] }],
   },
   { timestamps: true }

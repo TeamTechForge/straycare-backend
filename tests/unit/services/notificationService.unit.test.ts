@@ -1,3 +1,4 @@
+jest.unmock("../../../src/services/notificationService");
 jest.mock("../../../src/models/Notification", () => ({ create: jest.fn() }));
 jest.mock("../../../src/models/User", () => ({
   findById: jest.fn(),
