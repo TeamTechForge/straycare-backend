@@ -12,14 +12,20 @@ import { Logger } from "../utils/logger";
 const Notification = require("../models/Notification");
 const User = require("../models/User");
 
-// Regex pattern to verify that a token is a valid Expo push token format
-// Example: ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]
+/** Regex pattern for validating Expo Push Tokens (e.g. ExponentPushToken[...] or ExpoPushToken[...]) */
 const EXPO_PUSH_TOKEN_PATTERN = /^(ExponentPushToken|ExpoPushToken)\[[^\]]+\]$/;
 
+/** Result status for push notification dispatch attempts */
 type PushSendResult = "sent" | "invalid-token" | "failed";
 
 /**
- * Sends a push notification to a user's mobile device using the Expo Push API.
+ * Sends a remote push notification to an Expo Push Token via HTTP POST to Expo's Push API.
+ * 
+ * @param pushToken - Expo Push Token registered by the target mobile device.
+ * @param title - Notification title string.
+ * @param message - Notification body text string.
+ * @param data - Optional key-value payload attached to the push message.
+ * @returns Status of the push delivery request: "sent", "invalid-token", or "failed".
  */
 const sendPushNotification = async (
   pushToken: string,
@@ -29,7 +35,7 @@ const sendPushNotification = async (
 ): Promise<PushSendResult> => {
   // Validate token structure before making an external HTTP request
   if (!EXPO_PUSH_TOKEN_PATTERN.test(pushToken)) {
-    Logger.warn("Skipping invalid Expo push token", { service: "NotificationService" });
+    Logger.warn("Skipping invalid Expo push token format", { service: "NotificationService" });
     return "invalid-token";
   }
 
@@ -57,12 +63,12 @@ const sendPushNotification = async (
     });
 
     if (!response.ok) {
-      console.error("[PUSH] Expo push service error:", response.status);
+      Logger.error(`Expo push HTTP request failed with status: ${response.status}`, new Error("HTTP error"));
       return "failed";
     }
 
     type ExpoPushTicket = { status?: string; details?: { error?: string } };
-    const payload = await response.json() as {
+    const payload = (await response.json()) as {
       data?: ExpoPushTicket | ExpoPushTicket[];
     };
     const ticket = Array.isArray(payload.data) ? payload.data[0] : payload.data;
@@ -79,39 +85,44 @@ const sendPushNotification = async (
 
     return ticket?.status === "ok" ? "sent" : "failed";
   } catch (error) {
-    console.error("[PUSH] Failed to send push notification:", error);
+    Logger.error("Failed to send push notification HTTP request", error);
     return "failed";
   }
 };
 
+/**
+ * Service for managing in-app notifications and pushing real-time alerts via Expo.
+ */
 export class NotificationService {
   /**
-   * Safely creates an in-app notification in MongoDB and sends a push notification to the user's device.
+   * Safely creates and dispatches an in-app notification and remote push notification to a user.
+   * First persists a Notification document in MongoDB, then attempts delivery via Expo Push API if pushToken exists.
+   * Automatically strips invalid or unregistered push tokens upon failure.
    * 
-   * @param userId - MongoDB ObjectId of the recipient user.
-   * @param title - Short title for the notification.
-   * @param message - Detailed message body.
-   * @param type - Notification type (info, success, warning, error, welcome).
-   * @param rescueRequestId - Associated rescue request ID.
-   * @param caseId - Associated case ID.
-   * @param pushData - Additional metadata (event name, animalType, rescuer info, etc.)
+   * @param userId - The MongoDB ObjectId string of the recipient user.
+   * @param title - Short descriptive headline for the notification.
+   * @param message - Detailed body text for the notification.
+   * @param type - Notification category ("info" | "success" | "warning" | "error" | "welcome"). Defaults to "info".
+   * @param rescueRequestId - Optional rescue request ID reference.
+   * @param caseId - Optional public case ID reference.
+   * @param pushData - Additional key-value metadata payload (e.g. event, status, animalType, assignedRescuerName, action).
    */
   public static async sendNotification(
-    userId: string, 
-    title: string, 
-    message: string, 
+    userId: string,
+    title: string,
+    message: string,
     type: "info" | "success" | "warning" | "error" | "welcome" = "info",
     rescueRequestId: string = "",
     caseId: string = "",
     pushData: Record<string, any> = {}
   ): Promise<void> {
-    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    if (!userId || !mongoose.isValidObjectId(userId)) {
       Logger.warn(`Invalid or missing userId: ${userId}`, { service: "NotificationService" });
       return;
     }
 
     try {
-      // 1. Create the persistent in-app notification in MongoDB
+      // 1. Create in-app Notification document in database
       await Notification.create({
         userId,
         title,
@@ -127,7 +138,7 @@ export class NotificationService {
       });
       Logger.info(`Created '${type}' notification for user ${userId}: ${title}`, { service: "NotificationService" });
 
-      // 2. Fetch the user to get their registered Expo push token
+      // 2. Dispatch Expo Push Notification if recipient has a registered device pushToken
       try {
         const user = await User.findById(userId);
         if (!user) {
@@ -154,10 +165,10 @@ export class NotificationService {
           }
         }
       } catch (pushErr: any) {
-        Logger.error("Failed to send push notification:", pushErr);
+        Logger.error("Failed to process push notification dispatch", pushErr);
       }
     } catch (err: any) {
-      Logger.error("Failed to create notification:", err);
+      Logger.error("Failed to create in-app notification document", err);
     }
   }
 }
