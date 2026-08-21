@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { setupTestDB } from '../setupIntegration';
-import User from '../../src/models/User';
+const User = require('../../src/models/User');
 const NGOProfile = require('../../src/models/NGOProfile');
 const VetProfile = require('../../src/models/VetProfile');
 

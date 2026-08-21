@@ -270,25 +270,6 @@ export const getAnimalPosts = async (req: Request, res: Response): Promise<void>
   }
 };
 
-/**
- * GET /api/animals/user/:userId
- * Fetch posts created by a specific user
- */
-export const getAnimalPostsByUser = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const userId = req.params.userId as string;
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      res.status(400).json({ message: "Invalid user ID format" });
-      return;
-    }
-
-    const posts = await LostFoundService.getPosts({ userId });
-    res.status(200).json(posts);
-  } catch (error: any) {
-    console.error("[getAnimalPostsByUser error]:", error);
-    res.status(500).json({ message: error.message || "Failed to retrieve user posts" });
-  }
-};
 
 /**
  * GET /api/animals/:id
@@ -581,23 +562,3 @@ export const reportAnimalPost = async (req: Request, res: Response): Promise<voi
   }
 };
 
-// ─── Legacy / Compatibility Exports ──────────────────────────────────────────
-export const getLostAnimals = async (req: Request, res: Response): Promise<void> => {
-  req.query.status = "lost";
-  return getAnimalPosts(req, res);
-};
-
-export const createLostAnimal = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  req.body.status = "lost";
-  return createAnimalPost(req, res);
-};
-
-export const getFoundAnimals = async (req: Request, res: Response): Promise<void> => {
-  req.query.status = "found";
-  return getAnimalPosts(req, res);
-};
-
-export const createFoundAnimal = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  req.body.status = "found";
-  return createAnimalPost(req, res);
-};
