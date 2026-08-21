@@ -25,6 +25,7 @@ const communityLikeSchema = new Schema<ICommunityLike>(
   { timestamps: true }
 );
 
+// Enforce one like per user/post pair at the database level.
 communityLikeSchema.index({ postId: 1, userId: 1 }, { unique: true });
 
 export default mongoose.models.CommunityLike ||

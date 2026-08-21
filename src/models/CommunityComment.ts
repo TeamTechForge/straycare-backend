@@ -23,6 +23,7 @@ const communityCommentSchema = new Schema<ICommunityComment>(
       required: true,
       index: true,
     },
+    // A nullable self-reference represents a top-level comment or one nested reply.
     parentCommentId: {
       type: Schema.Types.ObjectId,
       ref: "CommunityComment",
@@ -39,6 +40,7 @@ const communityCommentSchema = new Schema<ICommunityComment>(
   { timestamps: true }
 );
 
+// Supports chronological thread retrieval without an in-memory sort.
 communityCommentSchema.index({ postId: 1, createdAt: 1 });
 
 export default mongoose.models.CommunityComment ||
