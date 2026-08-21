@@ -9,7 +9,7 @@ const { sendAdminInviteEmail } = require("../utils/emailService");
 
 import type { Request, Response } from "express";
 
-// GET all admins (active + those with no status but have password)
+// Return active administrators without exposing password hashes.
 router.get("/", authMiddleware, requireAdmin, async (req: Request, res: Response) => {
   try {
     const admins = await Admin.find(
@@ -28,7 +28,7 @@ router.get("/", authMiddleware, requireAdmin, async (req: Request, res: Response
   }
 });
 
-// GET the currently logged-in admin's own info (including preferences)
+// Return the account linked to the verified JWT.
 router.get("/me", authMiddleware, requireAdmin, async (req: Request, res: Response) => {
   try {
     const admin = await Admin.findById((req as any).user.id, { password: 0 });
@@ -56,7 +56,7 @@ router.post("/migrate", authMiddleware, requireAdmin, async (req: Request, res: 
   }
 });
 
-// POST invite new admin
+// Send a time-limited password setup invitation to a new admin.
 router.post("/invite", authMiddleware, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { username, email } = req.body;
@@ -71,7 +71,7 @@ router.post("/invite", authMiddleware, requireAdmin, async (req: Request, res: R
         return res.status(400).json({ error: "An active admin with this email already exists" });
       }
 
-      // If pending, resend the invite with a fresh token
+      // Pending accounts receive a new token when the invite is resent.
       if (existing.status === "pending") {
         const token = JwtService.generateToken({ email }, "1h");
         existing.invitationToken = token;
@@ -82,7 +82,7 @@ router.post("/invite", authMiddleware, requireAdmin, async (req: Request, res: R
       }
     }
 
-    // New admin
+    // Keep the account pending until the recipient creates a password.
     const token = JwtService.generateToken({ email }, "1h");
     const admin = new Admin({
       username, email, role: "admin",
@@ -98,7 +98,7 @@ router.post("/invite", authMiddleware, requireAdmin, async (req: Request, res: R
   }
 });
 
-// POST accept invitation
+// Activate a pending account after validating its invitation token.
 router.post("/accept-invite", async (req: Request, res: Response) => {
   try {
     const { token, newPassword } = req.body;
@@ -126,9 +126,10 @@ router.post("/accept-invite", async (req: Request, res: Response) => {
   }
 });
 
-// DELETE remove admin
+// Remove another admin while preserving at least one active account.
 router.delete("/:id", authMiddleware, requireAdmin, async (req: Request, res: Response) => {
   try {
+    // Administrators cannot remove the account they are currently using.
     if (req.params.id === (req as any).user.id) {
       return res.status(400).json({ error: "You cannot remove your own administrator account" });
     }
@@ -150,7 +151,7 @@ router.delete("/:id", authMiddleware, requireAdmin, async (req: Request, res: Re
   }
 });
 
-// PATCH change password
+// Verify the current password before accepting a replacement.
 router.patch("/change-password", authMiddleware, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { currentPassword, newPassword } = req.body;

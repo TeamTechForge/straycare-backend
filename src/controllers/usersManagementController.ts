@@ -7,8 +7,10 @@ const NGOProfile = require("../models/NGOProfile");
 const VetProfile = require("../models/VetProfile");
 const { sendOrganizationVerificationEmail } = require("../utils/emailService");
 
+// Build the combined user list used by the Admin Dashboard.
 export const getAllUsers = async (req: Request, res: Response) => {
   try {
+    // Load account and role-specific profile data in parallel.
     const [accounts, admins, volunteers, ngos, vets] = await Promise.all([
       User.find({}).select("-password -resetPasswordToken -resetPasswordExpires").lean(),
       Admin.find({
@@ -23,6 +25,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
       VetProfile.find({}).lean(),
     ]);
 
+    // Index profiles by account ID for quick lookups below.
     const byUserId = (records: any[]) =>
       new Map(records.filter((record) => record.userId).map((record) => [String(record.userId), record]));
 
@@ -59,6 +62,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
       };
     });
 
+    // Admin accounts are stored separately from mobile user accounts.
     const adminUsers = admins.map((admin: any) => ({
       _id: admin._id,
       name: admin.username,
@@ -85,6 +89,7 @@ export const getGeneralUsers = async (req: Request, res: Response) => {
   }
 };
 
+// Combine vet and NGO profiles for the Organizations table.
 export const getVetsAndNgos = async (req: Request, res: Response) => {
   try {
     const ngos = await NGOProfile.find({}).lean();
@@ -124,6 +129,7 @@ export const getVetsAndNgos = async (req: Request, res: Response) => {
   }
 };
 
+// Return the selected organization's details and verification document.
 export const getUserDocuments = async (req: Request, res: Response) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -179,10 +185,12 @@ export const getUserDocuments = async (req: Request, res: Response) => {
   }
 };
 
+// Verify or reject an organization and report the email result separately.
 export const updateUserStatus = async (req: Request, res: Response) => {
   try {
     const { status, rejectionReason } = req.body;
 
+    // Restrict rejections to the reasons offered by the dashboard.
     const allowedRejectionReasons = [
       "Registration or license details could not be verified",
       "Submitted document is unclear, expired, or incomplete",
@@ -219,13 +227,14 @@ export const updateUserStatus = async (req: Request, res: Response) => {
     }
 
     if (updated) {
-      // BUG FIX: Ensure the main User document's `isApproved` flag stays in sync
+      // Keep the main account approval flag in sync with its profile.
       const isApproved = status === "Verified";
       await User.updateOne(
         { _id: updated.userId },
         { $set: { isApproved } }
       );
 
+      // The status update remains valid even if email delivery fails.
       let emailSent = false;
       const account = await User.findById(updated.userId).lean();
       if (account?.email) {

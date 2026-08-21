@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 
+// A Donation represents one completed or failed payment attempt.
 interface IDonation extends mongoose.Document {
   orderId: string;
   amount: number;
@@ -22,6 +23,7 @@ const DonationSchema = new mongoose.Schema({
   organization: { type: String, default: "StrayCare" },
   organizationId: { type: String, default: null },
   donorId: { type: String, default: null },
+  // These fields connect an installment to its recurring plan.
   recurringOrderId: { type: String, default: null, index: true },
   subscriptionId: { type: String, default: null, index: true },
   frequency: { type: String, default: "One-time" },
