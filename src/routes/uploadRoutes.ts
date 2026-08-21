@@ -64,7 +64,7 @@ router.post(
 router.post(
   "/cloudinary",
   upload.single("file"),
-  async (req: Request, res: Response) => {
+  async (req: Request & { file?: Express.Multer.File }, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({

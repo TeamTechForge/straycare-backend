@@ -1,4 +1,4 @@
-import { encryptMessage, decryptMessage } from "../services/messageEncryptionService";
+import { encryptMessage, decryptMessage } from "../../../src/services/messageEncryptionService";
 
 describe("messageEncryptionService", () => {
   const mockKey = "6ea429d1f4e6d5ae68a08fc6ec92c659c141c68bf4bef8eba322da5ea0de646c";

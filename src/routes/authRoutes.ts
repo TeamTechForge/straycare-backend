@@ -14,16 +14,20 @@ router.get("/test", (req: Request, res: Response) => {
   res.send("Auth test working");
 });
 
+// Public authentication routes.
+// These do not require a JWT because the user may not be logged in yet.
 router.post("/register", register);
 router.post("/login", login);
 router.post("/Login", login);
 router.post("/google", googleAuth);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
+
+// Protected routes.
+// verifyToken checks the JWT before allowing the controller to run.
 router.put("/select-role", verifyToken, selectRole);
 router.get("/me", verifyToken, getMe);
 router.delete("/me", verifyToken, deleteAccount);
-
-router.post("/forgot-password", forgotPassword);
-router.post("/reset-password", resetPassword);
 router.put("/change-password", verifyToken, changePassword);
 
 module.exports = router;
