@@ -15,6 +15,7 @@ const savedCommunityPostSchema = new Schema<ISavedCommunityPost>(
   { timestamps: true }
 );
 
+// A user can bookmark a post only once; controllers can therefore use idempotent upserts.
 savedCommunityPostSchema.index({ userId: 1, postId: 1 }, { unique: true });
 
 export default mongoose.models.SavedCommunityPost ||

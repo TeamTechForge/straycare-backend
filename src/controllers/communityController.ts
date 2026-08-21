@@ -33,6 +33,7 @@ const profileModels: Record<string, any> = {
     ngo: NGOProfile,
 };
 
+// Resolve avatars from role-specific profiles, falling back to the base user record.
 const getAuthorDetails = async (authorUserId?: unknown) => {
     if (!authorUserId || !mongoose.Types.ObjectId.isValid(String(authorUserId))) {
         return null;
@@ -55,6 +56,7 @@ const getAuthorDetails = async (authorUserId?: unknown) => {
     return { username: user.name, profileImage };
 };
 
+// Enrich stored post data with relationship counts and viewer-specific UI flags.
 const serializePost = async (post: any, currentUserId?: string) => {
     const plain = typeof post.toObject === "function" ? post.toObject() : post;
     const authorId = plain.authorUserId ? String(plain.authorUserId) : null;
@@ -86,6 +88,7 @@ const serializePost = async (post: any, currentUserId?: string) => {
     };
 };
 
+// Centralize authentication validation for handlers that only need the user ID.
 const getAuthenticatedUserId = (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
@@ -114,6 +117,7 @@ export const getSavedCommunityPosts = async (req: Request, res: Response): Promi
         const saved = await SavedCommunityPost.find({ userId }).sort({ createdAt: -1 }).lean();
         const postIds = saved.map((item: any) => item.postId);
         const posts = await CommunityPost.find({ _id: { $in: postIds } });
+        // `$in` does not preserve bookmark order, so rebuild the list from saved IDs.
         const byId = new Map(posts.map((post) => [String(post._id), post]));
         const orderedPosts = postIds.map((postId: any) => byId.get(String(postId))).filter(Boolean);
         res.status(200).json({ success: true, data: await Promise.all(orderedPosts.map((post) => serializePost(post, userId))) });
@@ -128,6 +132,7 @@ export const saveCommunityPost = async (req: Request, res: Response): Promise<vo
         const context = await getValidatedPostAndUser(req, res);
         if (!context) return;
         const { postId, userId } = context;
+        // Upsert makes saving idempotent and works with the model's unique user/post index.
         await SavedCommunityPost.updateOne(
             { postId, userId },
             { $setOnInsert: { postId, userId } },
@@ -171,6 +176,7 @@ export const updateCommunityPost = async (req: Request, res: Response): Promise<
             return;
         }
 
+        // A replacement upload wins over the explicit remove-image flag.
         const uploadRequest = req as UploadRequest;
         const file = uploadRequest.file ||
             (uploadRequest.files && Array.isArray(uploadRequest.files) ? uploadRequest.files[0] : null);
@@ -201,6 +207,7 @@ export const deleteCommunityPost = async (req: Request, res: Response): Promise<
             return;
         }
 
+        // Remove dependent interaction records because these models do not use cascade deletes.
         await Promise.all([
             CommunityLike.deleteMany({ postId }),
             CommunityComment.deleteMany({ postId }),
@@ -215,6 +222,7 @@ export const deleteCommunityPost = async (req: Request, res: Response): Promise<
     }
 };
 
+// Comment authors may delete their own comments; post owners may moderate their threads.
 const serializeComment = async (comment: any, currentUserId?: string, postAuthorId?: string) => {
     const plain = typeof comment.toObject === "function" ? comment.toObject() : comment;
     const commenter = await getAuthorDetails(plain.userId);
@@ -294,6 +302,7 @@ export const createCommunityComment = async (req: Request, res: Response): Promi
         const comment = await CommunityComment.create({ postId, userId, parentCommentId, content });
         const ownerId = post.authorUserId ? String(post.authorUserId) : null;
 
+        // Avoid notifying users when they comment on their own post.
         if (ownerId && ownerId !== userId) {
             const preview = content.length > 60 ? `${content.slice(0, 60)}…` : content;
             try {
@@ -392,6 +401,7 @@ export const deleteCommunityComment = async (req: Request, res: Response): Promi
     }
 };
 
+// Shared guard for interaction endpoints that require both a real user and a real post.
 const getValidatedPostAndUser = async (req: Request, res: Response) => {
     const postId = req.params.id;
     const userId = req.user?.id;
@@ -427,6 +437,7 @@ export const likeCommunityPost = async (req: Request, res: Response): Promise<vo
         if (!context) return;
 
         const { postId, userId, post, user } = context;
+        // The compound unique index plus upsert prevents duplicate likes during retries.
         const likeResult = await CommunityLike.updateOne(
             { postId, userId },
             { $setOnInsert: { postId, userId } },
