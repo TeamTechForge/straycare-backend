@@ -1,6 +1,14 @@
 import mongoose from "mongoose";
 import { Logger } from "../utils/logger";
 
+// notificationService.ts
+//
+// Central notification service for StrayCare.
+// Responsible for:
+// 1. Storing in-app notification records in MongoDB.
+// 2. Dispatching push notifications to physical mobile devices via Expo Push Service.
+// 3. Handling invalid/expired device tokens and automatic cleanup.
+
 const Notification = require("../models/Notification");
 const User = require("../models/User");
 
@@ -25,6 +33,7 @@ const sendPushNotification = async (
   message: string,
   data?: Record<string, any>
 ): Promise<PushSendResult> => {
+  // Validate token structure before making an external HTTP request
   if (!EXPO_PUSH_TOKEN_PATTERN.test(pushToken)) {
     Logger.warn("Skipping invalid Expo push token format", { service: "NotificationService" });
     return "invalid-token";
@@ -32,6 +41,8 @@ const sendPushNotification = async (
 
   try {
     const { categoryId, ...notificationData } = data || {};
+
+    // POST request to Expo's push notification service
     const response = await fetch("https://exp.host/--/api/v2/push/send", {
       method: "POST",
       headers: {
@@ -43,7 +54,7 @@ const sendPushNotification = async (
         to: pushToken,
         sound: "default",
         priority: "high",
-        channelId: "rescue-alerts",
+        channelId: "rescue-alerts", // Dedicated Android notification channel for rescue alerts
         title,
         body: message,
         ...(typeof categoryId === "string" && categoryId ? { categoryId } : {}),
@@ -63,10 +74,12 @@ const sendPushNotification = async (
     const ticket = Array.isArray(payload.data) ? payload.data[0] : payload.data;
     const errorCode = ticket?.details?.error;
 
+    // Check if Expo reported a delivery error
     if (ticket?.status === "error") {
       Logger.warn(`Expo rejected push notification: ${errorCode || "unknown error"}`, {
         service: "NotificationService",
       });
+      // DeviceNotRegistered means app was uninstalled or token expired
       return errorCode === "DeviceNotRegistered" ? "invalid-token" : "failed";
     }
 
@@ -133,6 +146,7 @@ export class NotificationService {
         } else if (!user.pushToken) {
           Logger.warn(`No push token registered for user ${userId}`, { service: "NotificationService" });
         } else {
+          // 3. Send the push notification to the device
           const result = await sendPushNotification(user.pushToken, title, message, {
             type,
             rescueRequestId,
@@ -140,6 +154,7 @@ export class NotificationService {
             ...pushData,
           });
 
+          // 4. If token is invalid or unregistered, clean it up from the database
           if (result === "invalid-token") {
             await User.findByIdAndUpdate(userId, { $unset: { pushToken: 1 } });
             Logger.warn(`Removed invalid Expo push token for user ${userId}`, { service: "NotificationService" });
@@ -157,3 +172,4 @@ export class NotificationService {
     }
   }
 }
+

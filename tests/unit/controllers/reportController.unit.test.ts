@@ -12,7 +12,7 @@ jest.mock("../../../src/services/notificationService", () => ({
   NotificationService: { sendNotification: jest.fn().mockResolvedValue(true) },
 }));
 
-const { createReport, acceptReportFromMap, updateCaseStatus, getReportByCaseId } = require("../../../src/controllers/reportController");
+const { createReport, acceptReportFromMap, updateCaseStatus, getReportByCaseId, deleteReport } = require("../../../src/controllers/reportController");
 const StrayReport = require("../../../src/models/StrayReport");
 const User = require("../../../src/models/User");
 const Rescuer = require("../../../src/models/Rescuer");
@@ -68,7 +68,7 @@ describe("Report controller reporting workflow", () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           caseId: "SC-100",
-          permissions: { canAccept: false, canUpdate: true },
+          permissions: expect.objectContaining({ canAccept: false, canUpdate: true }),
         })
       );
     });
@@ -104,7 +104,43 @@ describe("Report controller reporting workflow", () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           caseId: "SC-101",
-          permissions: { canAccept: false, canUpdate: true },
+          permissions: expect.objectContaining({ canAccept: false, canUpdate: true }),
+        })
+      );
+    });
+
+    it("sets permissions.canAccept to false when the requesting user is the case reporter", async () => {
+      req.user = { id: "reporter-user" };
+      req.params = { caseId: "SC-102" };
+      const reportDoc = {
+        _doc: {
+          caseId: "SC-102",
+          animalType: "Dog",
+          status: "Needs Help",
+          reporterUserId: "reporter-user",
+          photos: [],
+          timeline: [],
+        },
+        caseId: "SC-102",
+        animalType: "Dog",
+        status: "Needs Help",
+        reporterUserId: "reporter-user",
+        photos: [],
+        timeline: [],
+      };
+      StrayReport.findOne.mockResolvedValue(reportDoc);
+      RescueRequest.findOne.mockResolvedValue(null);
+      Rescuer.findOne.mockReturnValue({
+        select: jest.fn().mockResolvedValue({ _id: "rescuer-reporter-doc" }),
+      });
+      User.findById.mockReturnValue(selectResult({ role: "volunteer" }));
+
+      await getReportByCaseId(req, res, next);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          caseId: "SC-102",
+          permissions: expect.objectContaining({ canAccept: false, canUpdate: false, isSelfReported: true }),
         })
       );
     });
@@ -194,6 +230,7 @@ describe("Report controller reporting workflow", () => {
       req.params = { caseId: "SC-123" };
       User.findById.mockReturnValue(selectResult({ name: "Nimal", role: "rescuer" }));
       Rescuer.findOne.mockResolvedValue({ _id: "rescuer-1", name: "Nimal" });
+      StrayReport.findOne.mockResolvedValue(acceptedReport);
       StrayReport.findOneAndUpdate.mockResolvedValue(acceptedReport);
       RescueRequest.create.mockResolvedValue({ _id: "request-1" });
 
@@ -223,12 +260,30 @@ describe("Report controller reporting workflow", () => {
       expect(res.status).toHaveBeenCalledWith(201);
     });
 
+    it("rejects attempt to accept a case reported by the rescuer themselves", async () => {
+      req.user = { id: "reporter-1" };
+      req.params = { caseId: "SC-123" };
+      User.findById.mockReturnValue(selectResult({ name: "ReporterRescuer", role: "rescuer" }));
+      Rescuer.findOne.mockResolvedValue({ _id: "rescuer-reporter-1", name: "ReporterRescuer" });
+      StrayReport.findOne.mockResolvedValue(acceptedReport); // reporterUserId: "reporter-1"
+
+      await acceptReportFromMap(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        message: "You cannot accept or take a rescue request for a case you reported yourself.",
+      }));
+      expect(StrayReport.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
     it("does not notify the reporter when the accepted report is anonymous", async () => {
       req.user = { id: "rescuer-user" };
       req.params = { caseId: "SC-123" };
       User.findById.mockReturnValue(selectResult({ name: "Nimal", role: "rescuer" }));
       Rescuer.findOne.mockResolvedValue({ _id: "rescuer-1", name: "Nimal" });
-      StrayReport.findOneAndUpdate.mockResolvedValue({ ...acceptedReport, anonymous: true, reporterUserId: undefined });
+      const anonReport = { ...acceptedReport, anonymous: true, reporterUserId: undefined };
+      StrayReport.findOne.mockResolvedValue(anonReport);
+      StrayReport.findOneAndUpdate.mockResolvedValue(anonReport);
       RescueRequest.create.mockResolvedValue({ _id: "request-1" });
 
       await acceptReportFromMap(req, res);
@@ -241,6 +296,7 @@ describe("Report controller reporting workflow", () => {
       req.params = { caseId: "SC-123" };
       User.findById.mockReturnValue(selectResult({ name: "Nimal", role }));
       Rescuer.findOne.mockResolvedValue({ _id: `${role}-rescuer`, name: "Nimal" });
+      StrayReport.findOne.mockResolvedValue(acceptedReport);
       StrayReport.findOneAndUpdate.mockResolvedValue(acceptedReport);
       RescueRequest.create.mockResolvedValue({ _id: `${role}-request` });
 
@@ -257,6 +313,7 @@ describe("Report controller reporting workflow", () => {
       User.findById.mockReturnValue(selectResult({ name: "Dr. Nimal", role: "vet" }));
       Rescuer.findOne.mockResolvedValue(null);
       Rescuer.create.mockResolvedValue({ _id: "new-rescuer", name: "Dr. Nimal" });
+      StrayReport.findOne.mockResolvedValue(acceptedReport);
       StrayReport.findOneAndUpdate.mockResolvedValue(acceptedReport);
       RescueRequest.create.mockResolvedValue({ _id: "request-1" });
 
@@ -384,6 +441,59 @@ describe("Report controller reporting workflow", () => {
       expect(res.json).toHaveBeenCalledWith({ message: "Status cannot change from Under Rescue to Ready for Adoption." });
       expect(RescueRequest.findOne).not.toHaveBeenCalled();
       expect(NotificationService.sendNotification).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("deleteReport", () => {
+    it("deletes report successfully when requested by reporter for unassigned Needs Help case", async () => {
+      req.user = { id: "reporter-user-1" };
+      req.params = { caseId: "SC-999" };
+      StrayReport.findOne.mockResolvedValue({
+        caseId: "SC-999",
+        reporterUserId: "reporter-user-1",
+        status: "Needs Help",
+      });
+      RescueRequest.findOne.mockResolvedValue(null);
+      RescueRequest.deleteMany.mockResolvedValue({ deletedCount: 1 });
+      StrayReport.deleteOne.mockResolvedValue({ deletedCount: 1 });
+
+      await deleteReport(req, res, next);
+
+      expect(StrayReport.deleteOne).toHaveBeenCalledWith({ caseId: "SC-999" });
+      expect(RescueRequest.deleteMany).toHaveBeenCalledWith({ caseId: "SC-999" });
+      expect(res.json).toHaveBeenCalledWith({ message: "Report deleted successfully" });
+    });
+
+    it("rejects deletion attempt if user is not the case reporter", async () => {
+      req.user = { id: "other-user" };
+      req.params = { caseId: "SC-999" };
+      StrayReport.findOne.mockResolvedValue({
+        caseId: "SC-999",
+        reporterUserId: "reporter-user-1",
+        status: "Needs Help",
+      });
+
+      await deleteReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(StrayReport.deleteOne).not.toHaveBeenCalled();
+    });
+
+    it("rejects deletion attempt if a rescuer has already accepted the case", async () => {
+      req.user = { id: "reporter-user-1" };
+      req.params = { caseId: "SC-999" };
+      StrayReport.findOne.mockResolvedValue({
+        caseId: "SC-999",
+        reporterUserId: "reporter-user-1",
+        status: "Under Rescue",
+        assignedRescuerId: "rescuer-1",
+      });
+
+      await deleteReport(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ message: "Cannot delete this report because a rescuer has already accepted it." });
+      expect(StrayReport.deleteOne).not.toHaveBeenCalled();
     });
   });
 });

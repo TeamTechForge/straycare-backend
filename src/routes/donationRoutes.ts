@@ -6,7 +6,7 @@ const requireAdmin = require("../middleware/requireAdmin");
 import { donationController } from "../controllers/donationController";
 import type { Request, Response } from "express";
 
-// Initiate a donation
+// Mobile donation endpoints require a logged-in user.
 router.post("/initiate", authMiddleware, donationController.initiateDonation);
 
 // Redirect to PayHere checkout
@@ -15,7 +15,7 @@ router.get("/pay", donationController.getPayCheckout);
 // Save successful donation
 router.post("/save", authMiddleware, donationController.saveDonation);
 
-// PayHere notify callback
+// PayHere calls this endpoint directly, so it does not use the app JWT.
 router.post("/notify", donationController.notifyPayhere);
 
 // Check a recurring donation after returning from PayHere. Ownership is enforced.
@@ -36,7 +36,7 @@ router.get("/received/:orgId", donationController.getReceivedByOrg);
 // Get donations received by the logged-in vet/NGO, with donor names attached
 router.get("/received", authMiddleware, donationController.getReceivedDonations);
 
-// Get all donations (admin dashboard)
+// Only administrators can retrieve the complete donation collection.
 router.get("/", authMiddleware, requireAdmin, donationController.getAllDonations);
 
 module.exports = router;
