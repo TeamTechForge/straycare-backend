@@ -331,6 +331,69 @@ export const createCommunityComment = async (req: Request, res: Response): Promi
     }
 };
 
+export const updateCommunityComment = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const postId = req.params.id;
+        const commentId = req.params.commentId;
+        const userId = req.user?.id;
+        const content = typeof req.body.content === "string" ? req.body.content.trim() : "";
+
+        if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+            res.status(401).json({ success: false, message: "Authentication required" });
+            return;
+        }
+        if (
+            typeof postId !== "string" ||
+            typeof commentId !== "string" ||
+            !mongoose.Types.ObjectId.isValid(postId) ||
+            !mongoose.Types.ObjectId.isValid(commentId)
+        ) {
+            res.status(400).json({ success: false, message: "Invalid post or comment ID" });
+            return;
+        }
+        if (!content) {
+            res.status(400).json({ success: false, message: "Comment content is required" });
+            return;
+        }
+        if (content.length > 1000) {
+            res.status(400).json({ success: false, message: "Comment cannot exceed 1000 characters" });
+            return;
+        }
+
+        const [post, comment] = await Promise.all([
+            CommunityPost.findById(postId),
+            CommunityComment.findOne({ _id: commentId, postId }),
+        ]);
+        if (!post) {
+            res.status(404).json({ success: false, message: "Post not found" });
+            return;
+        }
+        if (!comment) {
+            res.status(404).json({ success: false, message: "Comment not found" });
+            return;
+        }
+        if (String(comment.userId) !== String(userId)) {
+            res.status(403).json({ success: false, message: "Only the comment author can edit this comment" });
+            return;
+        }
+
+        comment.content = content;
+        await comment.save();
+        res.status(200).json({
+            success: true,
+            message: "Comment updated successfully",
+            data: await serializeComment(
+                comment,
+                userId,
+                post.authorUserId ? String(post.authorUserId) : undefined
+            ),
+        });
+    } catch (error) {
+        console.error("Update community comment error:", error);
+        res.status(500).json({ success: false, message: "Failed to update comment" });
+    }
+};
+
 export const deleteCommunityComment = async (req: Request, res: Response): Promise<void> => {
     try {
         const postId = req.params.id;
@@ -353,7 +416,7 @@ export const deleteCommunityComment = async (req: Request, res: Response): Promi
 
         const [post, comment] = await Promise.all([
             CommunityPost.findById(postId),
-            CommunityComment.findById(commentId),
+            CommunityComment.findOne({ _id: commentId, postId }),
         ]);
 
         if (!post) {
