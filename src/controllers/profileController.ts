@@ -8,6 +8,25 @@ const Rescuer = require("../models/Rescuer");
 import type { Request, Response, NextFunction } from "express";
 import { catchAsync } from "../utils/catchAsync";
 import { NotificationService } from "../services/notificationService";
+import { encryptMessage, decryptMessage } from "../services/messageEncryptionService";
+
+function encryptSecret(text: string | undefined): string {
+  if (!text) return "";
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed.ciphertext && parsed.iv) return text;
+  } catch (e) {}
+  return JSON.stringify(encryptMessage(text));
+}
+
+function decryptSecret(text: string | undefined): string {
+  if (!text) return "";
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed.ciphertext && parsed.iv) return decryptMessage(parsed);
+  } catch (e) {}
+  return text;
+}
 
 const createGeneralProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { location, bio, profileImage, name } = req.body;
@@ -90,9 +109,9 @@ const createNGOProfile = catchAsync(async (req: Request, res: Response, next: Ne
       profileImage,
       verificationDocument,
       merchantId,
-      merchantSecret,
+      merchantSecret: encryptSecret(merchantSecret),
       payHereAppId: String(payHereAppId || "").trim(),
-      payHereAppSecret: String(payHereAppSecret || "").trim(),
+      payHereAppSecret: encryptSecret(String(payHereAppSecret || "").trim()),
     },
     { new: true, upsert: true, runValidators: true }
   );
@@ -139,9 +158,9 @@ const createVetProfile = catchAsync(async (req: Request, res: Response, next: Ne
       profileImage,
       licenseDocument,
       merchantId,
-      merchantSecret,
+      merchantSecret: encryptSecret(merchantSecret),
       payHereAppId: String(payHereAppId || "").trim(),
-      payHereAppSecret: String(payHereAppSecret || "").trim(),
+      payHereAppSecret: encryptSecret(String(payHereAppSecret || "").trim()),
     },
     { new: true, upsert: true, runValidators: true }
   );
@@ -190,6 +209,7 @@ const getMyProfile = catchAsync(async (req: Request, res: Response, next: NextFu
 
   const safeProfile: any = typeof profile.toObject === "function" ? profile.toObject() : { ...profile };
   if (role === "ngo" || role === "vet") {
+    safeProfile.merchantSecret = decryptSecret(safeProfile.merchantSecret);
     safeProfile.recurringPaymentsEnabled = Boolean(
       safeProfile.payHereAppId && safeProfile.payHereAppSecret
     );
@@ -266,9 +286,9 @@ const updateNGOProfile = catchAsync(async (req: Request, res: Response, next: Ne
   const userId = req.user!.id;
   const { phone, orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret, payHereAppId, payHereAppSecret, latitude, longitude } = req.body;
 
-  const ngoUpdates: any = { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret };
+  const ngoUpdates: any = { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret: merchantSecret ? encryptSecret(merchantSecret) : "" };
   if (payHereAppId) ngoUpdates.payHereAppId = String(payHereAppId).trim();
-  if (payHereAppSecret) ngoUpdates.payHereAppSecret = String(payHereAppSecret).trim();
+  if (payHereAppSecret) ngoUpdates.payHereAppSecret = encryptSecret(String(payHereAppSecret).trim());
 
   const profile = await NGOProfile.findOneAndUpdate(
     { userId },
@@ -308,9 +328,9 @@ const updateVetProfile = catchAsync(async (req: Request, res: Response, next: Ne
   const userId = req.user!.id;
   const { name, phone, primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret, payHereAppId, payHereAppSecret, latitude, longitude } = req.body;
 
-  const vetUpdates: any = { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret };
+  const vetUpdates: any = { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret: merchantSecret ? encryptSecret(merchantSecret) : "" };
   if (payHereAppId) vetUpdates.payHereAppId = String(payHereAppId).trim();
-  if (payHereAppSecret) vetUpdates.payHereAppSecret = String(payHereAppSecret).trim();
+  if (payHereAppSecret) vetUpdates.payHereAppSecret = encryptSecret(String(payHereAppSecret).trim());
 
   const profile = await VetProfile.findOneAndUpdate(
     { userId },
@@ -347,7 +367,8 @@ const updateVetProfile = catchAsync(async (req: Request, res: Response, next: Ne
   res.status(200).json({ message: "Profile updated successfully", profile });
 });
 
-module.exports = {
+export {
+  decryptSecret,
   createGeneralProfile,
   createVolunteerProfile,
   createNGOProfile,
