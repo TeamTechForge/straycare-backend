@@ -29,7 +29,7 @@ function decryptSecret(text: string | undefined): string {
 }
 
 const createGeneralProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  const { location, bio, profileImage, name } = req.body;
+  const { location, bio, profileImage, name, phone } = req.body;
   const userId = req.user!.id;
 
   const profile = await GeneralUserProfile.findOneAndUpdate(
@@ -38,7 +38,10 @@ const createGeneralProfile = catchAsync(async (req: Request, res: Response, next
     { new: true, upsert: true, runValidators: true }
   );
 
-  await User.findByIdAndUpdate(userId, { name, profileCompleted: true, profileImage: profile.profileImage || "" });
+  const userUpdates: any = { profileCompleted: true, profileImage: profile.profileImage || "" };
+  if (name !== undefined) userUpdates.name = name;
+  if (phone !== undefined) userUpdates.phone = phone;
+  await User.findByIdAndUpdate(userId, userUpdates);
 
   await NotificationService.sendNotification(
     String(userId),
@@ -51,7 +54,7 @@ const createGeneralProfile = catchAsync(async (req: Request, res: Response, next
 });
 
 const createVolunteerProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  const { location, bio, profileImage, name } = req.body;
+  const { location, bio, profileImage, name, phone } = req.body;
   const userId = req.user!.id;
 
   const profile = await VolunteerProfile.findOneAndUpdate(
@@ -60,7 +63,10 @@ const createVolunteerProfile = catchAsync(async (req: Request, res: Response, ne
     { new: true, upsert: true, runValidators: true }
   );
 
-  await User.findByIdAndUpdate(userId, { name, profileCompleted: true, profileImage: profile.profileImage || "" });
+  const userUpdates: any = { profileCompleted: true, profileImage: profile.profileImage || "" };
+  if (name !== undefined) userUpdates.name = name;
+  if (phone !== undefined) userUpdates.phone = phone;
+  await User.findByIdAndUpdate(userId, userUpdates);
 
   const user = await User.findById(userId);
   await Rescuer.findOneAndUpdate(
@@ -68,7 +74,7 @@ const createVolunteerProfile = catchAsync(async (req: Request, res: Response, ne
     {
       userId,
       name: user.name,
-      phone: user.phone || "",
+      phone: phone || user.phone || "",
       avatar: profile.profileImage || "",
       isAvailable: true,
       location: {
@@ -93,7 +99,7 @@ const createNGOProfile = catchAsync(async (req: Request, res: Response, next: Ne
   const {
     orgName, contactPerson, regNumber, foundedYear, location, bio,
     profileImage, verificationDocument, merchantId, merchantSecret,
-    payHereAppId, payHereAppSecret,
+    payHereAppId, payHereAppSecret, phone
   } = req.body;
   const userId = req.user!.id;
 
@@ -116,7 +122,9 @@ const createNGOProfile = catchAsync(async (req: Request, res: Response, next: Ne
     { new: true, upsert: true, runValidators: true }
   );
 
-  await User.findByIdAndUpdate(userId, { profileCompleted: true, profileImage: profile.profileImage || "" });
+  const userUpdates: any = { profileCompleted: true, profileImage: profile.profileImage || "" };
+  if (phone !== undefined) userUpdates.phone = phone;
+  await User.findByIdAndUpdate(userId, userUpdates);
 
   const user = await User.findById(userId);
   await Rescuer.findOneAndUpdate(
@@ -124,7 +132,7 @@ const createNGOProfile = catchAsync(async (req: Request, res: Response, next: Ne
     {
       userId,
       name: user.name || orgName || "NGO Rescuer",
-      phone: user.phone || "",
+      phone: phone || user.phone || "",
       avatar: profile.profileImage || "",
       isAvailable: true,
       location: {
@@ -142,7 +150,7 @@ const createVetProfile = catchAsync(async (req: Request, res: Response, next: Ne
   const {
     primaryLocation, bio, clinicName, clinicAddress, licenseNumber,
     yearsOfExperience, profileImage, licenseDocument, merchantId,
-    merchantSecret, payHereAppId, payHereAppSecret,
+    merchantSecret, payHereAppId, payHereAppSecret, name, phone
   } = req.body;
   const userId = req.user!.id;
 
@@ -165,7 +173,10 @@ const createVetProfile = catchAsync(async (req: Request, res: Response, next: Ne
     { new: true, upsert: true, runValidators: true }
   );
 
-  await User.findByIdAndUpdate(userId, { profileCompleted: true, profileImage: profile.profileImage || "" });
+  const userUpdates: any = { profileCompleted: true, profileImage: profile.profileImage || "" };
+  if (name !== undefined) userUpdates.name = name;
+  if (phone !== undefined) userUpdates.phone = phone;
+  await User.findByIdAndUpdate(userId, userUpdates);
 
   const user = await User.findById(userId);
   await Rescuer.findOneAndUpdate(
@@ -173,7 +184,7 @@ const createVetProfile = catchAsync(async (req: Request, res: Response, next: Ne
     {
       userId,
       name: user.name || clinicName || "Vet Rescuer",
-      phone: user.phone || "",
+      phone: phone || user.phone || "",
       avatar: profile.profileImage || "",
       isAvailable: true,
       location: {
