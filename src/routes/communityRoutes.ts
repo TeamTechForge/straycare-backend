@@ -10,6 +10,7 @@ import {
     unlikeCommunityPost,
     getCommunityComments,
     createCommunityComment,
+    updateCommunityComment,
     deleteCommunityComment,
     getMyCommunityPosts,
     getSavedCommunityPosts,
@@ -22,7 +23,7 @@ import {
 const { verifyToken, optionalToken } = require("../middleware/authMiddleware");
 const { upload } = require("../config/gridfs");
 
-const router = Router();
+const router: Router = Router();
 
 // Admin endpoints (MUST be defined before /:id parameter route)
 router.get("/admin/reports", verifyToken, getCommunityReports);         // GET   /api/community/admin/reports
@@ -38,6 +39,7 @@ router.post("/:id/like", verifyToken, likeCommunityPost);        // POST   /api/
 router.delete("/:id/like", verifyToken, unlikeCommunityPost);    // DELETE /api/community/:id/like
 router.get("/:id/comments", optionalToken, getCommunityComments); // GET    /api/community/:id/comments
 router.post("/:id/comments", verifyToken, createCommunityComment); // POST  /api/community/:id/comments
+router.put("/:id/comments/:commentId", verifyToken, updateCommunityComment); // PUT /api/community/:id/comments/:commentId
 router.delete("/:id/comments/:commentId", verifyToken, deleteCommunityComment); // DELETE /api/community/:id/comments/:commentId
 router.post("/:id/save", verifyToken, saveCommunityPost);        // POST   /api/community/:id/save
 router.delete("/:id/save", verifyToken, unsaveCommunityPost);    // DELETE /api/community/:id/save
