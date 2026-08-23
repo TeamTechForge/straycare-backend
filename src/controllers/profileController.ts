@@ -7,6 +7,7 @@ const Rescuer = require("../models/Rescuer");
 
 import type { Request, Response, NextFunction } from "express";
 import { catchAsync } from "../utils/catchAsync";
+import { NotificationService } from "../services/notificationService";
 
 const createGeneralProfile = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { location, bio, profileImage, name } = req.body;
@@ -19,6 +20,13 @@ const createGeneralProfile = catchAsync(async (req: Request, res: Response, next
   );
 
   await User.findByIdAndUpdate(userId, { name, profileCompleted: true, profileImage: profile.profileImage || "" });
+
+  await NotificationService.sendNotification(
+    String(userId),
+    "Welcome to StrayCare!",
+    `Hi ${name}, welcome to our community! Together we can save more stray animals. 🐾`,
+    "welcome"
+  );
 
   res.status(201).json({ message: "General profile created", profile });
 });
@@ -50,6 +58,13 @@ const createVolunteerProfile = catchAsync(async (req: Request, res: Response, ne
       },
     },
     { upsert: true, new: true }
+  );
+
+  await NotificationService.sendNotification(
+    String(userId),
+    "Welcome to StrayCare!",
+    `Hi ${user.name}, welcome to our community! Together we can save more stray animals. 🐾`,
+    "welcome"
   );
 
   res.status(201).json({ message: "Volunteer profile created", profile });
@@ -101,6 +116,13 @@ const createNGOProfile = catchAsync(async (req: Request, res: Response, next: Ne
     { upsert: true, new: true }
   );
 
+  await NotificationService.sendNotification(
+    String(userId),
+    "Welcome to StrayCare!",
+    `Hi ${user.name}, welcome to our community! Together we can save more stray animals. 🐾`,
+    "welcome"
+  );
+
   res.status(201).json({ message: "NGO profile created", profile });
 });
 
@@ -148,6 +170,13 @@ const createVetProfile = catchAsync(async (req: Request, res: Response, next: Ne
       },
     },
     { upsert: true, new: true }
+  );
+
+  await NotificationService.sendNotification(
+    String(userId),
+    "Welcome to StrayCare!",
+    `Hi ${user.name}, welcome to our community! Together we can save more stray animals. 🐾`,
+    "welcome"
   );
 
   res.status(201).json({ message: "Vet profile created", profile });

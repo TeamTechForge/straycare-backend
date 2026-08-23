@@ -48,13 +48,6 @@ export const register = async (req: Request, res: Response, next: NextFunction):
 
     const token = JwtService.generateToken({ id: user._id, role: user.role });
 
-    await NotificationService.sendNotification(
-      String(user._id),
-      "Welcome to StrayCare!",
-      `Hi ${name}, welcome to our community! Together we can save more stray animals. ðŸ¾`,
-      "welcome"
-    );
-
     res.status(201).json({
       message: "Account created successfully",
       token,
@@ -350,13 +343,6 @@ const googleAuth = catchAsync(async (req: Request, res: Response, next: NextFunc
       avatar: picture || "",
       role: "general_user",
     });
-
-    await NotificationService.sendNotification(
-      String(user._id),
-      "Welcome to StrayCare!",
-      `Hi ${user.name}, welcome to our community! Together we can save more stray animals. ðŸ¾`,
-      "welcome"
-    );
   }
 
   const token = JwtService.generateToken({ id: user._id, role: user.role });
