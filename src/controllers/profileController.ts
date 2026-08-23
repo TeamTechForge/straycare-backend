@@ -116,13 +116,6 @@ const createNGOProfile = catchAsync(async (req: Request, res: Response, next: Ne
     { upsert: true, new: true }
   );
 
-  await NotificationService.sendNotification(
-    String(userId),
-    "Welcome to StrayCare!",
-    `Hi ${user.name}, welcome to our community! Together we can save more stray animals. 🐾`,
-    "welcome"
-  );
-
   res.status(201).json({ message: "NGO profile created", profile });
 });
 
@@ -170,13 +163,6 @@ const createVetProfile = catchAsync(async (req: Request, res: Response, next: Ne
       },
     },
     { upsert: true, new: true }
-  );
-
-  await NotificationService.sendNotification(
-    String(userId),
-    "Welcome to StrayCare!",
-    `Hi ${user.name}, welcome to our community! Together we can save more stray animals. 🐾`,
-    "welcome"
   );
 
   res.status(201).json({ message: "Vet profile created", profile });
