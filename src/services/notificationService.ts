@@ -141,4 +141,35 @@ export class NotificationService {
       Logger.error("Failed to create notification:", err);
     }
   }
+
+  /**
+   * Sends a push notification without creating an in-app notification record.
+   * Useful for chat messages where the chat itself is the record.
+   */
+  public static async sendPushOnly(
+    userId: string,
+    title: string,
+    message: string,
+    data: Record<string, any> = {}
+  ): Promise<void> {
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) return;
+
+    try {
+      const user = await User.findById(userId);
+      if (!user || !user.pushToken) {
+        return;
+      }
+
+      const result = await sendPushNotification(user.pushToken, title, message, data);
+
+      if (result === "invalid-token") {
+        await User.findByIdAndUpdate(userId, { $unset: { pushToken: 1 } });
+        Logger.warn(`Removed invalid Expo push token for user ${userId}`, { service: "NotificationService" });
+      } else if (result === "sent") {
+        Logger.info(`Sent Expo push-only notification to user ${userId}`, { service: "NotificationService" });
+      }
+    } catch (err: any) {
+      Logger.error("Failed to send push-only notification:", err);
+    }
+  }
 }

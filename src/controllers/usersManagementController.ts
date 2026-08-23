@@ -6,6 +6,7 @@ const VolunteerProfile = require("../models/VolunteerProfile");
 const NGOProfile = require("../models/NGOProfile");
 const VetProfile = require("../models/VetProfile");
 const { sendOrganizationVerificationEmail } = require("../utils/emailService");
+import { NotificationService } from "../services/notificationService";
 
 export const getAllUsers = async (req: Request, res: Response) => {
   try {
@@ -228,6 +229,29 @@ export const updateUserStatus = async (req: Request, res: Response) => {
 
       let emailSent = false;
       const account = await User.findById(updated.userId).lean();
+
+      if (status === "Verified" && account) {
+        // Send Welcome notification for verified users
+        await NotificationService.sendNotification(
+          String(account._id),
+          "Welcome to StrayCare!",
+          `Hi ${account.name}, welcome to our community! Together we can save more stray animals. 🐾`,
+          "welcome"
+        );
+
+        // Emit real-time update via Socket.IO
+        const io = req.app.get("io");
+        if (io) {
+          io.of("/chat").to(`user:${account._id}`).emit("user:approved", {
+            notification: {
+              title: "Welcome to StrayCare!",
+              message: `Hi ${account.name}, welcome to our community! Together we can save more stray animals. 🐾`,
+              type: "welcome"
+            },
+          });
+        }
+      }
+
       if (account?.email) {
         try {
           await sendOrganizationVerificationEmail(
