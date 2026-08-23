@@ -113,7 +113,7 @@ const search = catchAsync(async (req: Request, res: Response, next: NextFunction
           specialization: { $ifNull: ["$specialization", ""] },
           type: { $literal: "Veterinarian" },
           profileImage: { $ifNull: ["$profileImage", ""] },
-          location: "$primaryLocation",
+          location: "$clinicAddress",
           bio: { $ifNull: ["$bio", ""] }
         }
       }

@@ -16,6 +16,9 @@ const { sendPasswordResetCodeEmail } = require("../utils/emailService");
 import type { Request, Response, NextFunction } from "express";
 const Notification = require("../models/Notification");
 
+/**
+ * Handles Registration
+ */
 export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   let user: any;
   try {
@@ -23,6 +26,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
 
     console.log("Register request received for:", req.body.email);
 
+    // Validate the registration data before creating the account.
     const validation = AuthValidator.validateRegistrationPayload(req.body);
     if (!validation.isValid) {
       res.status(400).json({ message: validation.message });
@@ -35,7 +39,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       res.status(400).json({ message: "Email already registered" });
       return;
     }
-
+    // Hash the password before storing it in the database.
     const hashedPassword = await PasswordService.hashPassword(password, 10);
 
     user = await User.create({
@@ -46,6 +50,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       role: Role.GENERAL_USER,
     });
 
+    // Generate a JWT for the newly registered user.
     const token = JwtService.generateToken({ id: user._id, role: user.role });
 
     res.status(201).json({
@@ -78,6 +83,9 @@ export const register = async (req: Request, res: Response, next: NextFunction):
   }
 };
 
+/**
+ * Handles Login
+ */
 const login = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { email, password } = req.body;
 
@@ -93,6 +101,7 @@ const login = catchAsync(async (req: Request, res: Response, next: NextFunction)
     return;
   }
 
+  // Compare the entered password with the stored hashed password.
   const isMatch = await PasswordService.comparePassword(password, user.password);
 
   if (!isMatch) {
@@ -100,7 +109,7 @@ const login = catchAsync(async (req: Request, res: Response, next: NextFunction)
     return;
   }
 
-  // ── Check account status (Suspended / Warned) ──────────────
+  // Check whether the user's account has been suspended or warned.
   let accountStatus: string | null = user.accountStatus || null;
 
   if (user.role === "vet") {
@@ -119,6 +128,7 @@ const login = catchAsync(async (req: Request, res: Response, next: NextFunction)
     return;
   }
 
+  // Generate a JWT after successful authentication.
   const token = JwtService.generateToken({ id: user._id, role: user.role });
 
   res.status(200).json({
@@ -151,6 +161,7 @@ const selectRole = catchAsync(async (req: Request, res: Response, next: NextFunc
     return;
   }
 
+  // Allow only the roles supported by the application.
   if (!allowedRoles.includes(role)) {
     res.status(400).json({ message: "Invalid role selected" });
     return;
@@ -167,6 +178,7 @@ const selectRole = catchAsync(async (req: Request, res: Response, next: NextFunc
     return;
   }
 
+  // Generate a new token containing the user's updated role.
   const token = JwtService.generateToken({ id: user._id, role: user.role });
 
   res.status(200).json({
@@ -177,12 +189,14 @@ const selectRole = catchAsync(async (req: Request, res: Response, next: NextFunc
 });
 
 const getMe = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Retrieve the authenticated user's data without exposing the password
   const user: any = await User.findById(req.user!.id).select("-password").lean();
   if (!user) {
     res.status(404).json({ message: "User not found" });
     return;
   }
 
+  // Add NGO-specific profile information when applicable.
   if (user.role === "ngo") {
     const ngoProfile = await NGOProfile.findOne({ userId: user._id });
     if (ngoProfile) {
@@ -193,6 +207,9 @@ const getMe = catchAsync(async (req: Request, res: Response, next: NextFunction)
   res.status(200).json(user);
 });
 
+/**
+ * Handles Forgot Password
+ */
 const forgotPassword = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { email } = req.body;
   const user = await User.findOne({ email });
@@ -200,6 +217,7 @@ const forgotPassword = catchAsync(async (req: Request, res: Response, next: Next
   // Generate a 6-digit code
 
   const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+  // Store only a hashed version of the reset code.
   const hashedCode = crypto.createHash('sha256').update(resetCode).digest('hex');
 
   if (user) {
@@ -222,7 +240,7 @@ const forgotPassword = catchAsync(async (req: Request, res: Response, next: Next
 
 const resetPassword = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { token, newPassword } = req.body;
-
+  // Hash the submitted code so it can be compared with the stored hash.
   const hashedCode = crypto.createHash('sha256').update(token).digest('hex');
 
   const user = await User.findOne({
@@ -237,6 +255,7 @@ const resetPassword = catchAsync(async (req: Request, res: Response, next: NextF
 
   const hashedPassword = await PasswordService.hashPassword(newPassword, 10);
   user.password = hashedPassword;
+  // Clear the reset credentials so the code cannot be reused.
   user.resetPasswordToken = undefined;
   user.resetPasswordExpires = undefined;
 
@@ -245,6 +264,9 @@ const resetPassword = catchAsync(async (req: Request, res: Response, next: NextF
   res.status(200).json({ message: "Password reset successful" });
 });
 
+/**
+ * Handles Change Password
+ */
 const changePassword = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { currentPassword, newPassword } = req.body;
   const userId = req.user!.id;
@@ -270,6 +292,9 @@ const changePassword = catchAsync(async (req: Request, res: Response, next: Next
   res.status(200).json({ message: "Password updated successfully" });
 });
 
+/**
+ * Handles Delete Account
+ */
 const deleteAccount = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const userId = req.user!.id;
   const user = await User.findById(userId);
@@ -278,7 +303,7 @@ const deleteAccount = catchAsync(async (req: Request, res: Response, next: NextF
     res.status(404).json({ message: "User not found" });
     return;
   }
-
+  // Delete the role-specific profile before removing the main user account.
   if (user.role === "ngo") {
     await NGOProfile.findOneAndDelete({ userId });
   } else if (user.role === "volunteer") {
@@ -291,11 +316,15 @@ const deleteAccount = catchAsync(async (req: Request, res: Response, next: NextF
 
   await User.findByIdAndDelete(userId);
 
+  // Remove notifications associated with the deleted account.
   await Notification.deleteMany({ userId });
 
   res.status(200).json({ message: "Account and associated data deleted successfully" });
 });
 
+/**
+ * Handles Google Authentication
+ */
 const googleAuth = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const { idToken } = req.body;
 
@@ -328,12 +357,12 @@ const googleAuth = catchAsync(async (req: Request, res: Response, next: NextFunc
   let isNewUser = false;
 
   if (user) {
-    // Existing user â€” update googleId and avatar if not already set
+    // Existing user - update googleId and avatar if not already set
     if (!user.googleId) user.googleId = uid;
     if (!user.avatar && picture) user.avatar = picture;
     await user.save();
   } else {
-    // New user â€” create account
+    // New user - create account
     isNewUser = true;
     user = await User.create({
       name: displayName || email.split("@")[0],
@@ -344,7 +373,7 @@ const googleAuth = catchAsync(async (req: Request, res: Response, next: NextFunc
       role: "general_user",
     });
   }
-
+  // Generate a StrayCare JWT for the authenticated Google user.
   const token = JwtService.generateToken({ id: user._id, role: user.role });
 
   res.status(200).json({
