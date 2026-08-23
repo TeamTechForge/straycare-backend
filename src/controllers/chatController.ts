@@ -1,18 +1,15 @@
 import { catchAsync } from "../utils/catchAsync";
-// src/controllers/chatController.ts
+import type { Request, Response, NextFunction } from "express";
+import PrivacyService from "../services/privacyService";
+import { encryptMessage, decryptMessage } from "../services/messageEncryptionService";
+import { Role } from "../enums/Role.enum";
+import { NotificationService } from "../services/notificationService";
+
 const Conversation = require("../models/Conversation");
 const Message = require("../models/Message");
 const User = require("../models/User");
 
-import type { Request, Response, NextFunction } from "express";
-
-import PrivacyService from "../services/privacyService";
-import { encryptMessage, decryptMessage } from "../services/messageEncryptionService";
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-import { Role } from "../enums/Role.enum";
-
+// Map each user role to its corresponding profile model.
 const profileModels: Record<string, any> = {
   [Role.GENERAL_USER]: require("../models/GeneralUserProfile"),
   [Role.VOLUNTEER]: require("../models/VolunteerProfile"),
@@ -20,6 +17,10 @@ const profileModels: Record<string, any> = {
   [Role.VET]: require("../models/VetProfile"),
 };
 
+/**
+ * Get the profile image for a user based on their role.
+ * Returns an empty string if the profile image cannot be found.
+ */
 const getProfileImageForUser = async (uId: string, role: string): Promise<string> => {
   try {
     const Model = profileModels[role];
@@ -33,182 +34,137 @@ const getProfileImageForUser = async (uId: string, role: string): Promise<string
     return "";
   }
 };
-
+/**
+ * Get the Socket.IO chat namespace from the Express application.
+ * Returns null if Socket.IO is not available.
+ */
 const getChatNamespace = (req: Request): any => {
   const io = req.app.get("io");
   return io ? io.of("/chat") : null;
 };
 
-// ─── GET /api/chat/conversations ─────────────────────────────────────────────
+//  GET /api/chat/conversations 
 // Lists all conversations for the authenticated user, sorted by latest activity.
 const getConversations = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const userId = req.user!.id;
-    console.log(`[chatController] 🔍 getConversations. User: ${userId}`);
+  const userId = req.user!.id;
+  console.log(`[chatController] getConversations. User: ${userId}`);
 
-    const conversations = await Conversation.find({
-      participants: userId,
-      deletedFor: { $ne: userId },
-    })
-      .populate("participants", "name email role profileCompleted profileImage avatar blockedUsers")
-      .sort({ "lastMessage.createdAt": -1, updatedAt: -1 })
-      .lean();
+  const conversations = await Conversation.find({
+    participants: userId,
+    deletedFor: { $ne: userId },
+  })
+    .populate("participants", "name email role profileCompleted profileImage avatar blockedUsers")
+    .sort({ "lastMessage.createdAt": -1, updatedAt: -1 })
+    .lean();
 
-    // Self-healing check and inject shelter name for NGOs
-    const NGOProfile = require("../models/NGOProfile");
-    for (let conv of conversations) {
-      if (conv.participants) {
-        for (let p of conv.participants as any[]) {
-          if (!p.profileImage) {
-            p.profileImage = p.avatar || "";
-          }
-          if (p.role === "ngo") {
-            const profile = await NGOProfile.findOne({ userId: p._id }).select("orgName").lean();
-            if (profile && profile.orgName) {
-              p.name = profile.orgName;
-            }
-          }
-          
-          // Check if this participant has blocked the current user
-          p.isBlockingMe = false;
-          if (p.blockedUsers && p.blockedUsers.some((id: any) => id.toString() === userId.toString())) {
-            p.isBlockingMe = true;
-          }
-          // Remove blockedUsers from the response for privacy
-          delete p.blockedUsers;
+  // Inject shelter name for NGOs
+  const NGOProfile = require("../models/NGOProfile");
+  for (let conv of conversations) {
+    if (conv.participants) {
+      for (let p of conv.participants as any[]) {
+        if (!p.profileImage) {
+          p.profileImage = p.avatar || "";
         }
-      }
+        // Display the NGO's organization name instead of the personal name.
+        if (p.role === "ngo") {
+          const profile = await NGOProfile.findOne({ userId: p._id }).select("orgName").lean();
+          if (profile && profile.orgName) {
+            p.name = profile.orgName;
+          }
+        }
 
-      if (conv.lastMessage?.isEncrypted && conv.lastMessage?.encryptedText) {
-        try {
-          conv.lastMessage.text = decryptMessage(conv.lastMessage.encryptedText);
-        } catch (err) {
-          console.error("Failed to decrypt lastMessage for conv:", conv._id, err);
-          conv.lastMessage.text = "Error decrypting message";
+        // Check if this participant has blocked the current user
+        p.isBlockingMe = false;
+        if (p.blockedUsers && p.blockedUsers.some((id: any) => id.toString() === userId.toString())) {
+          p.isBlockingMe = true;
         }
-        delete conv.lastMessage.encryptedText;
-      }
-      
-      // If the last message was sent before the user cleared the chat, hide it
-      if (conv.clearedAt && conv.clearedAt[userId] && conv.lastMessage?.createdAt) {
-        if (new Date(conv.lastMessage.createdAt) < new Date(conv.clearedAt[userId])) {
-          conv.lastMessage.text = "";
-        }
+        // Remove blockedUsers from the response for privacy
+        delete p.blockedUsers;
       }
     }
 
-    console.log(`[chatController] ✅ Found ${conversations.length} conversations for User: ${userId}`);
-    res.status(200).json(conversations);
+    // Decrypt the latest message only when it is stored in encrypted form.
+    if (conv.lastMessage?.isEncrypted && conv.lastMessage?.encryptedText) {
+      try {
+        conv.lastMessage.text = decryptMessage(conv.lastMessage.encryptedText);
+      } catch (err) {
+        console.error("Failed to decrypt lastMessage for conv:", conv._id, err);
+        conv.lastMessage.text = "Error decrypting message";
+      }
+      // Do not expose the encrypted value to the client.
+      delete conv.lastMessage.encryptedText;
+    }
+
+    // If the last message was sent before the user cleared the chat, hide it
+    if (conv.clearedAt && conv.clearedAt[userId] && conv.lastMessage?.createdAt) {
+      if (new Date(conv.lastMessage.createdAt) < new Date(conv.clearedAt[userId])) {
+        conv.lastMessage.text = "";
+      }
+    }
+  }
+
+  console.log(`[chatController] ✅ Found ${conversations.length} conversations for User: ${userId}`);
+  res.status(200).json(conversations);
 });
 
-// ─── POST /api/chat/conversations ────────────────────────────────────────────
+// POST /api/chat/conversations 
 // Finds an existing conversation between two users or creates a new one.
-// Body: { participantId, conversationType?, relatedEntity? }
 const getOrCreateConversation = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const userId = req.user!.id;
-    const { participantId, conversationType, relatedEntity } = req.body;
-    console.log(`[chatController] 🔍 getOrCreateConversation. User: ${userId}, Participant: ${participantId}, Type: ${conversationType}, Entity: ${JSON.stringify(relatedEntity)}`);
+  const userId = req.user!.id;
+  const { participantId, conversationType, relatedEntity } = req.body;
+  console.log(`[chatController]  getOrCreateConversation. User: ${userId}, Participant: ${participantId}, Type: ${conversationType}, Entity: ${JSON.stringify(relatedEntity)}`);
 
-    if (!participantId) {
-      res.status(400).json({ message: "participantId is required" });
-      return;
+  if (!participantId) {
+    res.status(400).json({ message: "participantId is required" });
+    return;
+  }
+
+  if (participantId === userId) {
+    res.status(400).json({ message: "Cannot start a conversation with yourself" });
+    return;
+  }
+
+  // Evaluate permissions without failing the request (so the UI can render gracefully)
+  const privacyResult = await PrivacyService.canMessage(userId, participantId);
+
+  // Build query to find existing conversation
+  let query: any = { participants: { $all: [userId, participantId], $size: 2 } };
+
+  // If a specific conversation type is requested, match it. 
+  // Otherwise default to finding a direct conversation.
+  if (conversationType && conversationType !== "direct") {
+    query.conversationType = conversationType;
+    if (relatedEntity && relatedEntity.item) {
+      query["relatedEntity.item"] = relatedEntity.item;
+    }
+  } else {
+    query.conversationType = { $in: ["direct", null, undefined] };
+  }
+
+  // Check for existing conversation between these two users matching the type
+  let conversation: any = await Conversation.findOne(query)
+    .populate("participants", "name email role profileCompleted profileImage avatar")
+    .lean();
+
+  if (conversation) {
+    // Reactivate conversation if it was soft-deleted by user, and update relatedEntity if needed
+    const updates: any = {};
+    if (conversation.deletedFor && conversation.deletedFor.includes(userId)) {
+      updates.$pull = { deletedFor: userId };
     }
 
-    if (participantId === userId) {
-      res.status(400).json({ message: "Cannot start a conversation with yourself" });
-      return;
+    // If the frontend passed a newer relatedEntity (like a nice caseId string), save it
+    if (relatedEntity && (relatedEntity.referenceId || (relatedEntity.kind && relatedEntity.kind.includes("_")))) {
+      updates.$set = { relatedEntity };
+      conversation.relatedEntity = relatedEntity;
     }
 
-    // Evaluate permissions without failing the request (so the UI can render gracefully)
-    const privacyResult = await PrivacyService.canMessage(userId, participantId);
-    
-    // Build query to find existing conversation
-    let query: any = { participants: { $all: [userId, participantId], $size: 2 } };
-    
-    // If a specific conversation type is requested, match it. 
-    // Otherwise default to finding a direct conversation.
-    if (conversationType && conversationType !== "direct") {
-      query.conversationType = conversationType;
-      if (relatedEntity && relatedEntity.item) {
-        query["relatedEntity.item"] = relatedEntity.item;
-      }
-    } else {
-      query.conversationType = { $in: ["direct", null, undefined] };
+    if (Object.keys(updates).length > 0) {
+      await Conversation.findByIdAndUpdate(conversation._id, updates);
     }
-
-    // Check for existing conversation between these two users matching the type
-    let conversation: any = await Conversation.findOne(query)
-      .populate("participants", "name email role profileCompleted profileImage avatar")
-      .lean();
-
-    if (conversation) {
-      // Reactivate conversation if it was soft-deleted by user, and update relatedEntity if needed
-      const updates: any = {};
-      if (conversation.deletedFor && conversation.deletedFor.includes(userId)) {
-        updates.$pull = { deletedFor: userId };
-      }
-      
-      // If the frontend passed a newer relatedEntity (like a nice caseId string), save it
-      if (relatedEntity && (relatedEntity.referenceId || (relatedEntity.kind && relatedEntity.kind.includes("_")))) {
-        updates.$set = { relatedEntity };
-        conversation.relatedEntity = relatedEntity;
-      }
-
-      if (Object.keys(updates).length > 0) {
-        await Conversation.findByIdAndUpdate(conversation._id, updates);
-      }
-      // Self-healing check and inject shelter name for NGOs
-      const NGOProfile = require("../models/NGOProfile");
-      if (conversation.participants) {
-        for (let p of conversation.participants) {
-          if (!p.profileImage) {
-            p.profileImage = p.avatar || "";
-          }
-          if (p.role === "ngo") {
-            const profile = await NGOProfile.findOne({ userId: p._id }).select("orgName").lean();
-            if (profile && profile.orgName) {
-              p.name = profile.orgName;
-            }
-          }
-        }
-      }
-
-      if (conversation.lastMessage?.isEncrypted && conversation.lastMessage?.encryptedText) {
-        try {
-          conversation.lastMessage.text = decryptMessage(conversation.lastMessage.encryptedText);
-        } catch (err) {
-          console.error("Failed to decrypt lastMessage for conv:", conversation._id, err);
-          conversation.lastMessage.text = "Error decrypting message";
-        }
-        delete conversation.lastMessage.encryptedText;
-      }
-
-      console.log(`[chatController] ✅ Found existing conversation: ${conversation._id}`);
-      res.status(200).json({
-        ...conversation,
-        permissions: { canMessage: privacyResult.allowed }
-      });
-      return;
-    }
-
-    // If no existing conversation AND privacy prevents messaging, we don't block creating it,
-    // but the UI will disable sending messages. This allows users to open chat and see "not accepting messages".
-    
-    // Create new conversation
-    console.log(`[chatController] 🆕 Creating new conversation session. User: ${userId}, Participant: ${participantId}`);
-    const newConversation = await Conversation.create({
-      participants: [userId, participantId],
-      conversationType: conversationType || "direct",
-      relatedEntity: relatedEntity || undefined,
-      unreadCounts: new Map(),
-    });
-
-    conversation = await Conversation.findById(newConversation._id)
-      .populate("participants", "name email role profileCompleted profileImage avatar")
-      .lean();
-
     // Self-healing check and inject shelter name for NGOs
     const NGOProfile = require("../models/NGOProfile");
-    if (conversation && conversation.participants) {
+    if (conversation.participants) {
       for (let p of conversation.participants) {
         if (!p.profileImage) {
           p.profileImage = p.avatar || "";
@@ -222,421 +178,483 @@ const getOrCreateConversation = catchAsync(async (req: Request, res: Response, n
       }
     }
 
-    console.log(`[chatController] ✅ Conversation created: ${conversation._id}`);
-    res.status(201).json({
+    if (conversation.lastMessage?.isEncrypted && conversation.lastMessage?.encryptedText) {
+      try {
+        conversation.lastMessage.text = decryptMessage(conversation.lastMessage.encryptedText);
+      } catch (err) {
+        console.error("Failed to decrypt lastMessage for conv:", conversation._id, err);
+        conversation.lastMessage.text = "Error decrypting message";
+      }
+      delete conversation.lastMessage.encryptedText;
+    }
+
+    console.log(`[chatController] Found existing conversation: ${conversation._id}`);
+    res.status(200).json({
       ...conversation,
       permissions: { canMessage: privacyResult.allowed }
     });
+    return;
+  }
+
+  // Create a new conversation even when messaging is restricted.
+  // The UI can use the permission result to disable message sending.
+  console.log(`[chatController] Creating new conversation session. User: ${userId}, Participant: ${participantId}`);
+  const newConversation = await Conversation.create({
+    participants: [userId, participantId],
+    conversationType: conversationType || "direct",
+    relatedEntity: relatedEntity || undefined,
+    unreadCounts: new Map(),
+  });
+
+  conversation = await Conversation.findById(newConversation._id)
+    .populate("participants", "name email role profileCompleted profileImage avatar")
+    .lean();
+
+  // Self-healing check and inject shelter name for NGOs
+  const NGOProfile = require("../models/NGOProfile");
+  if (conversation && conversation.participants) {
+    for (let p of conversation.participants) {
+      if (!p.profileImage) {
+        p.profileImage = p.avatar || "";
+      }
+      if (p.role === "ngo") {
+        const profile = await NGOProfile.findOne({ userId: p._id }).select("orgName").lean();
+        if (profile && profile.orgName) {
+          p.name = profile.orgName;
+        }
+      }
+    }
+  }
+
+  console.log(`[chatController] Conversation created: ${conversation._id}`);
+  res.status(201).json({
+    ...conversation,
+    permissions: { canMessage: privacyResult.allowed }
+  });
 });
 
-// ─── GET /api/chat/messages/:conversationId ──────────────────────────────────
-// Paginated messages for a conversation (cursor-based, newest first).
-// Query: ?before=<messageId>&limit=<number>
+// GET /api/chat/messages/:conversationId
+// Messages for a conversation (newest first).
 const getMessages = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const userId = req.user!.id;
-    const { conversationId } = req.params;
-    const { before, limit = 30 } = req.query;
-    console.log(`[chatController] 🔍 getMessages. User: ${userId}, Conversation: ${conversationId}, Limit: ${limit}`);
+  const userId = req.user!.id;
+  const { conversationId } = req.params;
+  const { before, limit = 30 } = req.query;
+  console.log(`[chatController] getMessages. User: ${userId}, Conversation: ${conversationId}, Limit: ${limit}`);
 
-    // Verify user is a participant
-    const conversation = await Conversation.findOne({
-      _id: conversationId,
-      participants: userId,
-    }).lean();
+  // Verify user is a participant
+  const conversation = await Conversation.findOne({
+    _id: conversationId,
+    participants: userId,
+  }).lean();
 
-    if (!conversation) {
-      console.warn(`[chatController] ❌ Conversation ${conversationId} not found or user is not a participant`);
-      res.status(404).json({ message: "Conversation not found" });
-      return;
+  if (!conversation) {
+    console.warn(`[chatController] Conversation ${conversationId} not found or user is not a participant`);
+    res.status(404).json({ message: "Conversation not found" });
+    return;
+  }
+
+  const query: any = {
+    conversationId,
+    deletedFor: { $ne: userId }
+  };
+  // Fetch only messages older than the cursor when loading older messages.
+  if (before) {
+    query._id = { $lt: before };
+  }
+
+  // Only fetch messages created after the user last cleared the chat
+  if (conversation.clearedAt && conversation.clearedAt[userId]) {
+    query.createdAt = { $gt: new Date(conversation.clearedAt[userId]) };
+  }
+
+  const messages = await Message.find(query)
+    .sort({ createdAt: -1 })
+    .limit(Number(limit))
+    .populate("sender", "name")
+    .lean();
+
+  const processedMessages = messages.map((msg: any) => {
+    // Replace content deleted for everyone with a placeholder.
+    if (msg.isDeletedForEveryone) {
+      return {
+        _id: msg._id,
+        conversationId: msg.conversationId,
+        sender: msg.sender,
+        type: "text",
+        text: "This message was deleted.",
+        readBy: msg.readBy,
+        createdAt: msg.createdAt,
+        updatedAt: msg.updatedAt,
+        isDeletedForEveryone: true,
+      };
     }
-
-    const query: any = { 
-      conversationId,
-      deletedFor: { $ne: userId }
-    };
-    if (before) {
-      query._id = { $lt: before };
-    }
-    
-    // Only fetch messages created after the user last cleared the chat
-    if (conversation.clearedAt && conversation.clearedAt[userId]) {
-      query.createdAt = { $gt: new Date(conversation.clearedAt[userId]) };
-    }
-
-    const messages = await Message.find(query)
-      .sort({ createdAt: -1 })
-      .limit(Number(limit))
-      .populate("sender", "name")
-      .lean();
-
-    const processedMessages = messages.map((msg: any) => {
-      if (msg.isDeletedForEveryone) {
-        return {
-          _id: msg._id,
-          conversationId: msg.conversationId,
-          sender: msg.sender,
-          type: "text",
-          text: "This message was deleted.",
-          readBy: msg.readBy,
-          createdAt: msg.createdAt,
-          updatedAt: msg.updatedAt,
-          isDeletedForEveryone: true,
-        };
+    if (msg.isEncrypted) {
+      if (msg.encryptedText) {
+        try {
+          msg.text = decryptMessage(msg.encryptedText);
+        } catch (err) {
+          console.error("Failed to decrypt message text:", msg._id, err);
+          msg.text = "Error decrypting message";
+        }
+        delete msg.encryptedText;
       }
-      if (msg.isEncrypted) {
-        if (msg.encryptedText) {
-          try {
-            msg.text = decryptMessage(msg.encryptedText);
-          } catch (err) {
-            console.error("Failed to decrypt message text:", msg._id, err);
-            msg.text = "Error decrypting message";
-          }
-          delete msg.encryptedText;
+      if (msg.encryptedImageUrl) {
+        try {
+          msg.imageUrl = decryptMessage(msg.encryptedImageUrl);
+        } catch (err) {
+          console.error("Failed to decrypt imageUrl:", msg._id, err);
         }
-        if (msg.encryptedImageUrl) {
-          try {
-            msg.imageUrl = decryptMessage(msg.encryptedImageUrl);
-          } catch (err) {
-            console.error("Failed to decrypt imageUrl:", msg._id, err);
-          }
-          delete msg.encryptedImageUrl;
-        }
-        if (msg.encryptedLocation) {
-          try {
-            msg.location = JSON.parse(decryptMessage(msg.encryptedLocation));
-          } catch (err) {
-            console.error("Failed to decrypt location:", msg._id, err);
-          }
-          delete msg.encryptedLocation;
-        }
+        delete msg.encryptedImageUrl;
       }
-      return msg;
-    });
+      if (msg.encryptedLocation) {
+        try {
+          msg.location = JSON.parse(decryptMessage(msg.encryptedLocation));
+        } catch (err) {
+          console.error("Failed to decrypt location:", msg._id, err);
+        }
+        delete msg.encryptedLocation;
+      }
+    }
+    return msg;
+  });
 
-    console.log(`[chatController] ✅ Found ${processedMessages.length} messages for Conversation: ${conversationId}`);
-    res.status(200).json(processedMessages);
+  console.log(`[chatController] Found ${processedMessages.length} messages for Conversation: ${conversationId}`);
+  res.status(200).json(processedMessages);
 });
 
-// ─── POST /api/chat/messages ─────────────────────────────────────────────────
-// Sends a new message. Body: { conversationId, text?, type?, imageUrl?, imagePublicId?, location? }
+// POST /api/chat/messages 
+// Sends a new message in an existingg conversation.
 const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const userId = req.user!.id;
-    const {
-      conversationId,
-      text,
-      type = "text",
-      imageUrl,
-      imagePublicId,
-      location,
-    } = req.body;
-    console.log(`[chatController] ✈️ sendMessage. User: ${userId}, Conversation: ${conversationId}, Type: ${type}`);
+  const userId = req.user!.id;
+  const {
+    conversationId,
+    text,
+    type = "text",
+    imageUrl,
+    imagePublicId,
+    location,
+  } = req.body;
+  console.log(`[chatController] sendMessage. User: ${userId}, Conversation: ${conversationId}, Type: ${type}`);
 
-    if (!conversationId) {
-      res.status(400).json({ message: "conversationId is required" });
+  if (!conversationId) {
+    res.status(400).json({ message: "conversationId is required" });
+    return;
+  }
+
+  // Verify user is a participant
+  const conversation = await Conversation.findOne({
+    _id: conversationId,
+    participants: userId,
+  });
+
+  if (!conversation) {
+    console.warn(`[chatController] Conversation ${conversationId} not found or user is not a participant`);
+    res.status(404).json({ message: "Conversation not found" });
+    return;
+  }
+
+  // Enforce privacy strictness on actual sending
+  const otherParticipantId = conversation.participants.find((p: any) => p.toString() !== userId);
+  if (otherParticipantId) {
+    const privacyResult = await PrivacyService.canMessage(userId, otherParticipantId.toString());
+    if (!privacyResult.allowed) {
+      console.warn(`[chatController] Message Blocked by Privacy: ${privacyResult.reason}`);
+      res.status(403).json({ message: privacyResult.reason });
       return;
     }
+  }
 
-    // Verify user is a participant
-    const conversation = await Conversation.findOne({
-      _id: conversationId,
-      participants: userId,
-    });
+  // Encrypt message content before storing it in the database.
+  let finalPayloadText = text || "";
+  let isEncrypted = false;
+  let encryptedText = undefined;
 
-    if (!conversation) {
-      console.warn(`[chatController] ❌ Conversation ${conversationId} not found or user is not a participant`);
-      res.status(404).json({ message: "Conversation not found" });
-      return;
+  if (finalPayloadText.trim().length > 0) {
+    isEncrypted = true;
+    encryptedText = encryptMessage(finalPayloadText);
+    finalPayloadText = ""; // don't save plaintext to DB
+  }
+
+  let finalImageUrl = imageUrl;
+  let encryptedImageUrl = undefined;
+  if (finalImageUrl) {
+    isEncrypted = true;
+    encryptedImageUrl = encryptMessage(finalImageUrl);
+    finalImageUrl = "";
+  }
+
+  let finalLocation = location;
+  let encryptedLocation = undefined;
+  if (finalLocation) {
+    isEncrypted = true;
+    encryptedLocation = encryptMessage(JSON.stringify(finalLocation));
+    finalLocation = undefined;
+  }
+
+  // Create the encrypted message record.
+  const message = await Message.create({
+    conversationId,
+    sender: userId,
+    text: finalPayloadText,
+    type,
+    imageUrl: finalImageUrl,
+    imagePublicId,
+    location: finalLocation,
+    readBy: [userId], // sender has "read" their own message
+    isEncrypted,
+    encryptedText,
+    encryptedImageUrl,
+    encryptedLocation,
+  });
+
+  // Update conversation's lastMessage snapshot
+  const lastMessagePreview =
+    type === "image" ? "📷 Photo" : type === "location" ? "📍 Location" : text || "";
+
+  let lastMessageIsEncrypted = false;
+  let lastMessageEncryptedText = undefined;
+  let finalLastMessageText = lastMessagePreview;
+
+  if (finalLastMessageText.trim().length > 0) {
+    lastMessageIsEncrypted = true;
+    lastMessageEncryptedText = encryptMessage(finalLastMessageText);
+    finalLastMessageText = "";
+  }
+
+  conversation.lastMessage = {
+    text: finalLastMessageText,
+    isEncrypted: lastMessageIsEncrypted,
+    encryptedText: lastMessageEncryptedText,
+    sender: userId,
+    type,
+    createdAt: message.createdAt,
+  };
+
+  // Increment unread count for all other participants
+  for (const pid of conversation.participants) {
+    const participantId = String(pid);
+    if (participantId !== userId) {
+      const current = conversation.unreadCounts.get(participantId) || 0;
+      conversation.unreadCounts.set(participantId, current + 1);
     }
+  }
 
-    // Enforce privacy strictness on actual sending
-    const otherParticipantId = conversation.participants.find((p: any) => p.toString() !== userId);
-    if (otherParticipantId) {
-      const privacyResult = await PrivacyService.canMessage(userId, otherParticipantId.toString());
-      if (!privacyResult.allowed) {
-        console.warn(`[chatController] ❌ Message Blocked by Privacy: ${privacyResult.reason}`);
-        res.status(403).json({ message: privacyResult.reason });
-        return;
+  conversation.deletedFor = []; // Reactivate conversation for all participants when a new message is sent
+
+  await conversation.save();
+  console.log(`[chatController] âœ… Message ${message._id} saved and conversation snapshot updated`);
+
+  // Populate sender info for the socket event
+  const populatedMessage = await Message.findById(message._id)
+    .populate("sender", "name")
+    .lean();
+
+  if (populatedMessage && populatedMessage.isEncrypted) {
+    if (populatedMessage.encryptedText) {
+      try {
+        populatedMessage.text = decryptMessage(populatedMessage.encryptedText);
+      } catch (err) {
+        console.error("Failed to decrypt text for socket payload:", populatedMessage._id, err);
+        populatedMessage.text = "Error decrypting message";
       }
+      delete populatedMessage.encryptedText;
     }
-
-    let finalPayloadText = text || "";
-    let isEncrypted = false;
-    let encryptedText = undefined;
-    
-    if (finalPayloadText.trim().length > 0) {
-      isEncrypted = true;
-      encryptedText = encryptMessage(finalPayloadText);
-      finalPayloadText = ""; // don't save plaintext to DB
+    if (populatedMessage.encryptedImageUrl) {
+      try {
+        populatedMessage.imageUrl = decryptMessage(populatedMessage.encryptedImageUrl);
+      } catch (err) {
+        console.error("Failed to decrypt imageUrl for socket payload:", populatedMessage._id, err);
+      }
+      delete populatedMessage.encryptedImageUrl;
     }
-
-    let finalImageUrl = imageUrl;
-    let encryptedImageUrl = undefined;
-    if (finalImageUrl) {
-      isEncrypted = true;
-      encryptedImageUrl = encryptMessage(finalImageUrl);
-      finalImageUrl = "";
+    if (populatedMessage.encryptedLocation) {
+      try {
+        populatedMessage.location = JSON.parse(decryptMessage(populatedMessage.encryptedLocation));
+      } catch (err) {
+        console.error("Failed to decrypt location for socket payload:", populatedMessage._id, err);
+      }
+      delete populatedMessage.encryptedLocation;
     }
+  }
 
-    let finalLocation = location;
-    let encryptedLocation = undefined;
-    if (finalLocation) {
-      isEncrypted = true;
-      encryptedLocation = encryptMessage(JSON.stringify(finalLocation));
-      finalLocation = undefined;
-    }
-
-    // Create the message
-    const message = await Message.create({
+  // Get the chat namespace and emit the new message to all participants. 
+  const chatNamespace = getChatNamespace(req);
+  if (chatNamespace) {
+    const payload = {
+      message: populatedMessage,
       conversationId,
-      sender: userId,
-      text: finalPayloadText,
-      type,
-      imageUrl: finalImageUrl,
-      imagePublicId,
-      location: finalLocation,
-      readBy: [userId], // sender has "read" their own message
-      isEncrypted,
-      encryptedText,
-      encryptedImageUrl,
-      encryptedLocation,
-    });
-
-    // Update conversation's lastMessage snapshot
-    const lastMessagePreview =
-      type === "image" ? "📷 Photo" : type === "location" ? "📍 Location" : text || "";
-
-    let lastMessageIsEncrypted = false;
-    let lastMessageEncryptedText = undefined;
-    let finalLastMessageText = lastMessagePreview;
-
-    if (finalLastMessageText.trim().length > 0) {
-       lastMessageIsEncrypted = true;
-       lastMessageEncryptedText = encryptMessage(finalLastMessageText);
-       finalLastMessageText = "";
-    }
-
-    conversation.lastMessage = {
-      text: finalLastMessageText,
-      isEncrypted: lastMessageIsEncrypted,
-      encryptedText: lastMessageEncryptedText,
-      sender: userId,
-      type,
-      createdAt: message.createdAt,
     };
 
-    // Increment unread count for all other participants
+    // Emit to the conversation room
+    chatNamespace.to(conversationId).emit("message:new", payload);
+
+    // Update each user's conversation list as well.
     for (const pid of conversation.participants) {
       const participantId = String(pid);
-      if (participantId !== userId) {
-        const current = conversation.unreadCounts.get(participantId) || 0;
-        conversation.unreadCounts.set(participantId, current + 1);
-      }
+      chatNamespace.to(`user:${participantId}`).emit("message:new", payload);
     }
 
-    conversation.deletedFor = []; // Reactivate conversation for all participants when a new message is sent
+    console.log(`[chatController] ✅ Emitted message:new to room ${conversationId} and ${conversation.participants.length} participant personal rooms`);
+  }
 
-    await conversation.save();
-    console.log(`[chatController] âœ… Message ${message._id} saved and conversation snapshot updated`);
+  // Send push notification to other participants
+  for (const pid of conversation.participants) {
+    const participantId = String(pid);
+    if (participantId !== userId) {
+      const senderName = (populatedMessage as any)?.sender?.name || "Someone";
+      const pushBody = type === "image" ? "📷 Sent a photo" : type === "location" ? "📍 Sent a location" : (populatedMessage as any)?.text || "New message";
+      
+      NotificationService.sendPushOnly(
+        participantId,
+        senderName,
+        pushBody,
+        { action: "chat", conversationId: conversationId.toString() }
+      ).catch(err => console.error("Push error in chat:", err));
+    }
+  }
 
-    // Populate sender info for the socket event
-    const populatedMessage = await Message.findById(message._id)
-      .populate("sender", "name")
-      .lean();
+  res.status(201).json(populatedMessage);
+});
 
-    if (populatedMessage && populatedMessage.isEncrypted) {
-      if (populatedMessage.encryptedText) {
-        try {
-          populatedMessage.text = decryptMessage(populatedMessage.encryptedText);
-        } catch (err) {
-          console.error("Failed to decrypt text for socket payload:", populatedMessage._id, err);
-          populatedMessage.text = "Error decrypting message";
-        }
-        delete populatedMessage.encryptedText;
-      }
-      if (populatedMessage.encryptedImageUrl) {
-        try {
-          populatedMessage.imageUrl = decryptMessage(populatedMessage.encryptedImageUrl);
-        } catch (err) {
-          console.error("Failed to decrypt imageUrl for socket payload:", populatedMessage._id, err);
-        }
-        delete populatedMessage.encryptedImageUrl;
-      }
-      if (populatedMessage.encryptedLocation) {
-        try {
-          populatedMessage.location = JSON.parse(decryptMessage(populatedMessage.encryptedLocation));
-        } catch (err) {
-          console.error("Failed to decrypt location for socket payload:", populatedMessage._id, err);
-        }
-        delete populatedMessage.encryptedLocation;
-      }
+// PUT /api/chat/messages/:conversationId/read
+// Marks all messages in a conversation as read by the authenticated user.
+const markAsRead = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const userId = req.user!.id;
+  const { conversationId } = req.params;
+  console.log(`[chatController] markAsRead. User: ${userId}, Conversation: ${conversationId}`);
+
+  // Verify user is a participant
+  const conversation = await Conversation.findOne({
+    _id: conversationId,
+    participants: userId,
+  });
+
+  if (!conversation) {
+    console.warn(`[chatController] âŒ Conversation ${conversationId} not found or user is not a participant`);
+    res.status(404).json({ message: "Conversation not found" });
+    return;
+  }
+
+  // Add userId to readBy for all unread messages in this conversation
+  const updateResult = await Message.updateMany(
+    {
+      conversationId,
+      readBy: { $ne: userId },
+    },
+    { $addToSet: { readBy: userId } }
+  );
+
+  // Reset unread count for this user
+  conversation.unreadCounts.set(userId, 0);
+  await conversation.save();
+  console.log(`[chatController] âœ… Marked messages as read. Updated ${updateResult.modifiedCount} messages for user: ${userId}`);
+
+  // Notify other participants via socket
+  const chatNamespace = getChatNamespace(req);
+  if (chatNamespace) {
+    chatNamespace.to(conversationId).emit("message:read-ack", {
+      conversationId,
+      readBy: userId,
+    });
+    console.log(`[chatController] âœ… Emitted message:read-ack to room ${conversationId}`);
+  }
+
+  res.status(200).json({ message: "Messages marked as read" });
+});
+
+//DELETE /api/chat/conversations/:conversationId 
+const deleteConversation = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const userId = req.user!.id;
+  const { conversationId } = req.params;
+
+  const conversation = await Conversation.findOneAndUpdate(
+    { _id: conversationId, participants: userId },
+    {
+      $addToSet: { deletedFor: userId },
+      $set: { [`clearedAt.${userId}`]: new Date() }
+    },
+    { new: true }
+  );
+
+  if (!conversation) {
+    res.status(404).json({ message: "Conversation not found or access denied" });
+    return;
+  }
+
+  console.log(`[chatController] Conversation ${conversationId} soft deleted for User: ${userId}`);
+  res.status(200).json({ message: "Conversation deleted successfully", conversationId });
+});
+
+// DELETE /api/chat/messages/:messageId 
+// Deletes a message (Delete for Me or Delete for Everyone).
+const deleteMessage = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const userId = req.user!.id;
+  const { messageId } = req.params;
+  const { type } = req.body; // "me" or "everyone"
+
+  const message = await Message.findById(messageId);
+  if (!message) {
+    res.status(404).json({ message: "Message not found" });
+    return;
+  }
+
+  // Verify participant
+  const conversation = await Conversation.findOne({
+    _id: message.conversationId,
+    participants: userId,
+  });
+  if (!conversation) {
+    res.status(403).json({ message: "Access denied" });
+    return;
+  }
+
+  if (type === "me") {
+    // Hide the message only for the current user.
+    await Message.findByIdAndUpdate(messageId, { $addToSet: { deletedFor: userId } });
+    console.log(`[chatController] Message ${messageId} deleted for user ${userId}`);
+  } else if (type === "everyone") {
+    // Only the original sender can delete a message for everyone.
+    if (message.sender.toString() !== userId) {
+      res.status(403).json({ message: "Cannot delete another user's message for everyone" });
+      return;
     }
 
-    // Emit real-time event to:
-    // 1. The conversation room (for users who have this chat screen open)
-    // 2. Each participant's personal room (for users on the chat list screen)
+    message.isDeletedForEveryone = true;
+    // Clear actual content for security/privacy
+    message.text = "This message was deleted.";
+    message.imageUrl = undefined;
+    message.imagePublicId = undefined;
+    message.location = undefined;
+    message.type = "text";
+    await message.save();
+
+    // If this message was the lastMessage preview on the conversation, update it
+    if (conversation.lastMessage && conversation.lastMessage.createdAt.getTime() === message.createdAt.getTime()) {
+      conversation.lastMessage.text = "This message was deleted.";
+      conversation.lastMessage.type = "text";
+      await conversation.save();
+    }
+
+    console.log(`[chatController]  Message ${messageId} deleted for everyone`);
+
+    // Notify other participant via socket about the deleted messege in real time.
     const chatNamespace = getChatNamespace(req);
     if (chatNamespace) {
       const payload = {
-        message: populatedMessage,
-        conversationId,
+        messageId: message._id,
+        conversationId: message.conversationId,
       };
-
-      // Emit to the conversation room
-      chatNamespace.to(conversationId).emit("message:new", payload);
-
-      // Also emit to each participant's personal room so their
-      // conversation list can update even if they haven't joined
-      // this specific conversation room.
+      chatNamespace.to(message.conversationId.toString()).emit("message:delete", payload);
       for (const pid of conversation.participants) {
-        const participantId = String(pid);
-        chatNamespace.to(`user:${participantId}`).emit("message:new", payload);
+        chatNamespace.to(`user:${pid}`).emit("message:delete", payload);
       }
-
-      console.log(`[chatController] âœ… Emitted message:new to room ${conversationId} and ${conversation.participants.length} participant personal rooms`);
     }
+  } else {
+    res.status(400).json({ message: "Invalid delete type" });
+    return;
+  }
 
-    res.status(201).json(populatedMessage);
-});
-
-// â”€â”€ PUT /api/chat/messages/:conversationId/read â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Marks all messages in a conversation as read by the authenticated user.
-const markAsRead = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const userId = req.user!.id;
-    const { conversationId } = req.params;
-    console.log(`[chatController] ðŸ“– markAsRead. User: ${userId}, Conversation: ${conversationId}`);
-
-    // Verify user is a participant
-    const conversation = await Conversation.findOne({
-      _id: conversationId,
-      participants: userId,
-    });
-
-    if (!conversation) {
-      console.warn(`[chatController] âŒ Conversation ${conversationId} not found or user is not a participant`);
-      res.status(404).json({ message: "Conversation not found" });
-      return;
-    }
-
-    // Add userId to readBy for all unread messages in this conversation
-    const updateResult = await Message.updateMany(
-      {
-        conversationId,
-        readBy: { $ne: userId },
-      },
-      { $addToSet: { readBy: userId } }
-    );
-
-    // Reset unread count for this user
-    conversation.unreadCounts.set(userId, 0);
-    await conversation.save();
-    console.log(`[chatController] âœ… Marked messages as read. Updated ${updateResult.modifiedCount} messages for user: ${userId}`);
-
-    // Notify other participants via socket
-    const chatNamespace = getChatNamespace(req);
-    if (chatNamespace) {
-      chatNamespace.to(conversationId).emit("message:read-ack", {
-        conversationId,
-        readBy: userId,
-      });
-      console.log(`[chatController] âœ… Emitted message:read-ack to room ${conversationId}`);
-    }
-
-    res.status(200).json({ message: "Messages marked as read" });
-});
-
-// â”€â”€ DELETE /api/chat/conversations/:conversationId â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const deleteConversation = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const userId = req.user!.id;
-    const { conversationId } = req.params;
-
-    const conversation = await Conversation.findOneAndUpdate(
-      { _id: conversationId, participants: userId },
-      { 
-        $addToSet: { deletedFor: userId },
-        $set: { [`clearedAt.${userId}`]: new Date() }
-      },
-      { new: true }
-    );
-
-    if (!conversation) {
-      res.status(404).json({ message: "Conversation not found or access denied" });
-      return;
-    }
-
-    console.log(`[chatController] ðŸ—‘ï¸ Conversation ${conversationId} soft deleted for User: ${userId}`);
-    res.status(200).json({ message: "Conversation deleted successfully", conversationId });
-});
-
-// â”€â”€ DELETE /api/chat/messages/:messageId â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Deletes a message (Delete for Me or Delete for Everyone).
-const deleteMessage = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const userId = req.user!.id;
-    const { messageId } = req.params;
-    const { type } = req.body; // "me" or "everyone"
-
-    const message = await Message.findById(messageId);
-    if (!message) {
-      res.status(404).json({ message: "Message not found" });
-      return;
-    }
-
-    // Verify participant
-    const conversation = await Conversation.findOne({
-      _id: message.conversationId,
-      participants: userId,
-    });
-    if (!conversation) {
-      res.status(403).json({ message: "Access denied" });
-      return;
-    }
-
-    if (type === "me") {
-      // Add user to deletedFor array
-      await Message.findByIdAndUpdate(messageId, { $addToSet: { deletedFor: userId } });
-      console.log(`[chatController] ðŸ—‘ï¸ Message ${messageId} deleted for user ${userId}`);
-    } else if (type === "everyone") {
-      // Verify that the sender is the one deleting for everyone
-      if (message.sender.toString() !== userId) {
-        res.status(403).json({ message: "Cannot delete another user's message for everyone" });
-        return;
-      }
-
-      message.isDeletedForEveryone = true;
-      // Clear actual content for security/privacy
-      message.text = "This message was deleted.";
-      message.imageUrl = undefined;
-      message.imagePublicId = undefined;
-      message.location = undefined;
-      message.type = "text";
-      await message.save();
-
-      // If this message was the lastMessage preview on the conversation, update it
-      if (conversation.lastMessage && conversation.lastMessage.createdAt.getTime() === message.createdAt.getTime()) {
-        conversation.lastMessage.text = "This message was deleted.";
-        conversation.lastMessage.type = "text";
-        await conversation.save();
-      }
-
-      console.log(`[chatController] ðŸ—‘ï¸ Message ${messageId} deleted for everyone`);
-
-      // Notify other participant via socket
-      const chatNamespace = getChatNamespace(req);
-      if (chatNamespace) {
-        const payload = {
-          messageId: message._id,
-          conversationId: message.conversationId,
-        };
-        chatNamespace.to(message.conversationId.toString()).emit("message:delete", payload);
-        for (const pid of conversation.participants) {
-          chatNamespace.to(`user:${pid}`).emit("message:delete", payload);
-        }
-      }
-    } else {
-      res.status(400).json({ message: "Invalid delete type" });
-      return;
-    }
-
-    res.status(200).json({ message: "Message deleted successfully", messageId });
+  res.status(200).json({ message: "Message deleted successfully", messageId });
 });
 
 module.exports = {
