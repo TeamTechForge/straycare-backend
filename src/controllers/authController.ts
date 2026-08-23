@@ -294,15 +294,81 @@ const changePassword = catchAsync(async (req: Request, res: Response, next: Next
 
 /**
  * Handles Delete Account
+ *
+ * Requires re-authentication before deletion:
+ * - local users:  must supply their current password in req.body.password
+ * - google users: must supply a fresh Firebase ID token in req.body.googleCredential
+ *
+ * The backend determines which verification to apply by reading
+ * user.authProvider from the database. The client cannot influence this.
  */
 const deleteAccount = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const userId = req.user!.id;
-  const user = await User.findById(userId);
+
+  // Fetch the user with the password hash included so we can verify it.
+  const user = await User.findById(userId).select("+password");
 
   if (!user) {
     res.status(404).json({ message: "User not found" });
     return;
   }
+
+  // ── Identity verification ────────────────────────────────────────────────
+  // The provider is read from the database, not from the request body.
+  // A google user cannot bypass this by sending { "password": "..." }.
+
+  if (user.authProvider === "local" || !user.authProvider) {
+    // ── Email / password users ──────────────────────────────────────────────
+    const { password } = req.body;
+
+    if (!password || typeof password !== "string" || password.trim() === "") {
+      res.status(400).json({ message: "Password is required to delete your account" });
+      return;
+    }
+
+    // user.password may be undefined for very old records that had no password set.
+    if (!user.password) {
+      res.status(400).json({ message: "Account has no password set. Contact support." });
+      return;
+    }
+
+    const isMatch = await PasswordService.comparePassword(password, user.password);
+    // Do not log the supplied password under any circumstances.
+    if (!isMatch) {
+      res.status(401).json({ message: "Incorrect password. Account not deleted." });
+      return;
+    }
+
+  } else if (user.authProvider === "google") {
+    // ── Google users ────────────────────────────────────────────────────────
+    const { googleCredential } = req.body;
+
+    if (!googleCredential || typeof googleCredential !== "string" || googleCredential.trim() === "") {
+      res.status(400).json({ message: "Google credential is required to delete your account" });
+      return;
+    }
+
+    let decodedToken: any;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(googleCredential);
+    } catch (err: any) {
+      res.status(401).json({ message: "Invalid or expired Google credential. Please sign in with Google again." });
+      return;
+    }
+
+    // The UID from the verified token must match what is stored in the database.
+    const firebaseUid: string | undefined = decodedToken.uid || decodedToken.sub;
+    if (!firebaseUid || firebaseUid !== user.googleId) {
+      res.status(401).json({ message: "Google account does not match. Account not deleted." });
+      return;
+    }
+
+  } else {
+    res.status(400).json({ message: "Unsupported authentication provider" });
+    return;
+  }
+
+  // ── Deletion (existing logic — unchanged) ────────────────────────────────
   // Delete the role-specific profile before removing the main user account.
   if (user.role === "ngo") {
     await NGOProfile.findOneAndDelete({ userId });
@@ -321,6 +387,7 @@ const deleteAccount = catchAsync(async (req: Request, res: Response, next: NextF
 
   res.status(200).json({ message: "Account and associated data deleted successfully" });
 });
+
 
 /**
  * Handles Google Authentication
