@@ -9,6 +9,7 @@ const Donation = require("../models/Donation");
 const RecurringDonation = require("../models/RecurringDonation");
 const VetProfile = require("../models/VetProfile");
 const NGOProfile = require("../models/NGOProfile");
+import { decryptSecret } from "./profileController";
 
 export interface IDonationInitiateRequest {
   amount: string;
@@ -56,8 +57,8 @@ export class DonationController {
         if (org?.merchantId) {
           // Trim to ensure no trailing/leading hidden characters break the hash match
           merchant_id = org.merchantId.trim();
-          merchant_secret = org.merchantSecret.trim();
-          recurringManagementReady = Boolean(org.payHereAppId?.trim() && org.payHereAppSecret?.trim());
+          merchant_secret = decryptSecret(org.merchantSecret?.trim());
+          recurringManagementReady = Boolean(org.payHereAppId?.trim() && decryptSecret(org.payHereAppSecret?.trim()));
           console.log("USING ORG MERCHANT ID:", merchant_id);
         } else {
           console.log("NO MERCHANT ID FOUND FOR ORG, USING FALLBACK");
@@ -266,7 +267,7 @@ export class DonationController {
       }
       const org: any = await db.collection("vetprofiles").findOne({ _id: new ObjectId(recurring.organizationId) }) ||
         await db.collection("ngoprofiles").findOne({ _id: new ObjectId(recurring.organizationId) });
-      merchantSecret = org?.merchantSecret?.trim();
+      merchantSecret = decryptSecret(org?.merchantSecret?.trim());
       if (org?.merchantId?.trim() !== merchant_id) {
         res.sendStatus(400);
         return;
@@ -459,7 +460,7 @@ export class DonationController {
         { projection: { payHereAppId: 1, payHereAppSecret: 1 } }
       );
       appId = organization?.payHereAppId?.trim();
-      appSecret = organization?.payHereAppSecret?.trim();
+      appSecret = decryptSecret(organization?.payHereAppSecret?.trim());
     }
 
     if (!appId || !appSecret) {
