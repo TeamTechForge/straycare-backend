@@ -60,7 +60,7 @@ const serializePost = async (post: any, currentUserId?: string) => {
     const authorId = plain.authorUserId ? String(plain.authorUserId) : null;
     const author = await getAuthorDetails(plain.authorUserId);
 
-    const [likeCount, commentCount, isLiked, isSaved] = await Promise.all([
+    const [likeCount, commentCount, isLiked, isSaved, isReported] = await Promise.all([
         CommunityLike.countDocuments({ postId: plain._id }),
         CommunityComment.countDocuments({ postId: plain._id }),
         currentUserId
@@ -68,6 +68,9 @@ const serializePost = async (post: any, currentUserId?: string) => {
             : Promise.resolve(null),
         currentUserId
             ? SavedCommunityPost.exists({ postId: plain._id, userId: currentUserId })
+            : Promise.resolve(null),
+        currentUserId
+            ? CommunityReport.exists({ postId: plain._id, reporterUserId: currentUserId })
             : Promise.resolve(null),
     ]);
 
@@ -82,6 +85,7 @@ const serializePost = async (post: any, currentUserId?: string) => {
         commentCount,
         isLiked: Boolean(isLiked),
         isSaved: Boolean(isSaved),
+        isReported: Boolean(isReported),
         isOwner: Boolean(currentUserId && authorId === currentUserId),
     };
 };
