@@ -33,10 +33,16 @@ class PrivacyService {
   }
 
   public async canMessage(senderId: string, recipientId: string): Promise<{ allowed: boolean; reason?: string }> {
-    const recipient = await User.findById(recipientId).select("messagingPrivacy blockedUsers").lean();
+    const recipient = await User.findById(recipientId).select("isDeleted messagingPrivacy blockedUsers").lean();
     const sender = await User.findById(senderId).select("blockedUsers").lean();
 
     if (!recipient || !sender) return { allowed: false, reason: "User not found" };
+
+    // Deleted/anonymized accounts cannot receive new messages.
+    // This covers adoption posts, lost & found posts, and direct chat initiation.
+    if (recipient.isDeleted === true) {
+      return { allowed: false, reason: "This account is no longer available." };
+    }
 
     if (sender.blockedUsers && sender.blockedUsers.map((id: any) => id.toString()).includes(recipientId.toString())) {
       return { allowed: false, reason: "You have blocked this user" };
@@ -77,10 +83,16 @@ class PrivacyService {
   }
 
   public async canCall(callerId: string, receiverId: string): Promise<{ allowed: boolean; reason?: string }> {
-    const receiver = await User.findById(receiverId).select("callingPrivacy blockedUsers").lean();
+    const receiver = await User.findById(receiverId).select("isDeleted callingPrivacy blockedUsers").lean();
     const caller = await User.findById(callerId).select("blockedUsers").lean();
 
     if (!receiver || !caller) return { allowed: false, reason: "User not found" };
+
+    // Deleted/anonymized accounts cannot receive calls.
+    // This covers adoption posts, lost & found posts, and direct call initiation.
+    if (receiver.isDeleted === true) {
+      return { allowed: false, reason: "This account is no longer available." };
+    }
 
     if (caller.blockedUsers && caller.blockedUsers.map((id: any) => id.toString()).includes(receiverId.toString())) {
       return { allowed: false, reason: "You have blocked this user" };

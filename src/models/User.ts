@@ -6,7 +6,8 @@ interface IUser extends mongoose.Document {
   phone?: string;
   password?: string;
   role: "general_user" | "volunteer" | "ngo" | "vet" | "admin";
-  authProvider: "local" | "google";
+  authProvider: "local" | "google" | "deleted";
+  isDeleted: boolean;
   googleId?: string;
   avatar?: string;
   profileCompleted: boolean;
@@ -63,8 +64,18 @@ const userSchema = new mongoose.Schema(
 
     authProvider: {
       type: String,
-      enum: ["local", "google"],
+      // "deleted" is set during account anonymization to permanently
+      // prevent all authentication paths from succeeding.
+      enum: ["local", "google", "deleted"],
       default: "local",
+    },
+
+    // Set to true after account anonymization. Used by authMiddleware
+    // to reject old JWTs that were issued before deletion.
+    isDeleted: {
+      type: Boolean,
+      default: false,
+      index: true,
     },
 
     googleId: {
