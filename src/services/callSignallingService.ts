@@ -6,6 +6,7 @@ import { ICallStartDTO, ICallOfferDTO, ICallAnswerDTO, IIceCandidateDTO, ICallEn
 import { CallStatus } from "../enums/CallStatus.enum";
 import { Logger as logger } from "../utils/logger";
 import callLogService from "./callLogService";
+import { NotificationService } from "./notificationService";
 
 class CallSignallingService {
   // Mapping of userId -> Set of socketIds in the /call namespace
@@ -73,20 +74,43 @@ class CallSignallingService {
 
     logger.info(`[CallSignalling] ${caller.userId} is calling ${calleeId}`);
     
-    // Mask caller identity if this is an anonymous report, to prevent reporters from leaking their real names
-    if (payload.receiverNameOverride && (payload.receiverNameOverride.includes("Anonymous Reporter") || payload.receiverNameOverride.includes("Anonymous Report"))) {
-      const caseIdMatch = payload.receiverNameOverride.match(/\((.*?)\)/);
-      const caseIdSuffix = caseIdMatch ? ` (${caseIdMatch[1]})` : "";
-      
-      const isCallerRescuer = payload.receiverNameOverride.includes("Anonymous Reporter");
-      const newCallerName = isCallerRescuer ? `Anonymous Report${caseIdSuffix}` : `Anonymous Reporter${caseIdSuffix}`;
+    // Check if this call is related to an anonymous rescue request
+    try {
+      const RescueRequest = require("../models/RescueRequest");
+      const activeRescue = await RescueRequest.findOne({
+        status: { $in: ["pending", "accepted", "in_progress"] },
+        $or: [
+          { userId: caller.userId, rescuerId: calleeId },
+          { userId: calleeId, rescuerId: caller.userId }
+        ]
+      }).lean();
 
-      payload.callerNameOverride = newCallerName;
-      payload.caller.name = newCallerName;
+      if (activeRescue && (activeRescue.anonymous || activeRescue.reporterName === "Anonymous Reporter")) {
+        const fullCaseId = activeRescue._id.toString();
+        const maskedName = `Anonymous Report (${fullCaseId})`;
+        
+        payload.callerNameOverride = maskedName;
+        payload.caller.name = maskedName;
+        
+        // Ensure receiverNameOverride is also consistent for the frontend
+        if (!payload.receiverNameOverride) {
+          payload.receiverNameOverride = `Anonymous Reporter (${fullCaseId})`;
+        }
+      }
+    } catch (error) {
+      logger.error(`[CallSignalling] Error checking anonymous rescue status`, error);
     }
 
     // We emit to the callee's room (using 'user:${calleeId}' room created on connection)
     io.of("/call").to(`user:${calleeId}`).emit(CallEvents.INCOMING, payload);
+
+    // Send push notification for incoming call
+    NotificationService.sendPushOnly(
+      calleeId,
+      payload.caller.name || "Someone",
+      "📞 Incoming call...",
+      { action: "call", callerId: caller.userId }
+    ).catch(err => logger.error(`[CallSignalling] Push error:`, err));
 
     // Issue 2: Call Ring Timeout (30 seconds)
     const key = this.getRingKey(caller.userId, calleeId);
