@@ -11,8 +11,9 @@ export class AuthValidator {
       return { isValid: false, message: "All fields are required" };
     }
 
-    if (password.length < 6) {
-      return { isValid: false, message: "Password must be at least 6 characters long" };
+    const passwordRegex = /^(?=.*[A-Z])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,15}$/;
+    if (!passwordRegex.test(password)) {
+      return { isValid: false, message: "Password must be 8-15 characters long, and contain at least one uppercase letter and one symbol" };
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
