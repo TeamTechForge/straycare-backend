@@ -12,7 +12,7 @@ import { AppError } from "../utils/appError";
 // Helper to retrieve user profile photo and role
 const getUserInfo = async (userId: string) => {
   if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-    return { avatar: "", role: "", name: "" };
+    return { avatar: "", role: "", name: "", exists: false };
   }
   try {
     const GeneralUserProfile = require("../models/GeneralUserProfile");
@@ -21,7 +21,7 @@ const getUserInfo = async (userId: string) => {
     const NGOProfile = require("../models/NGOProfile");
 
     const u = await User.findById(userId).select("profileImage avatar role name").lean();
-    if (!u) return { avatar: "", role: "", name: "" };
+    if (!u) return { avatar: "", role: "", name: "", exists: false };
 
     let avatar = u.profileImage || u.avatar || "";
     if (!avatar) {
@@ -39,9 +39,9 @@ const getUserInfo = async (userId: string) => {
         if (p?.profileImage) avatar = p.profileImage;
       }
     }
-    return { avatar: avatar || "", role: u.role || "", name: u.name || "" };
+    return { avatar: avatar || "", role: u.role || "", name: u.name || "", exists: true };
   } catch (err) {
-    return { avatar: "", role: "", name: "" };
+    return { avatar: "", role: "", name: "", exists: false };
   }
 };
 
@@ -93,9 +93,14 @@ exports.listPosts = catchAsync(async (req: Request, res: Response, next: NextFun
 
         if (!post.anonymous && post.userId) {
           const info = await getUserInfo(String(post.userId));
-          authorAvatar = info.avatar;
-          if (!authorName || authorName === "You" || authorName === "User") {
-            authorName = info.name || authorName;
+          if (!info.exists) {
+            authorName = "Deleted User";
+            authorAvatar = "";
+          } else {
+            authorAvatar = info.avatar;
+            if (!authorName || authorName === "You" || authorName === "User") {
+              authorName = info.name || authorName;
+            }
           }
         }
 
@@ -256,10 +261,16 @@ exports.getThread = catchAsync(async (req: Request, res: Response, next: NextFun
 
         if (comment.userId && comment.userId !== "guest" && comment.userId !== "forum-guest") {
           const info = await getUserInfo(String(comment.userId));
-          if (!commenterName && info.name) commenterName = info.name;
-          commenterAvatar = info.avatar || "";
-          if (info.role === "vet") commenterRole = "Vet";
-          else if (info.role === "ngo") commenterRole = "NGO";
+          if (!info.exists) {
+            commenterName = "Deleted User";
+            commenterAvatar = "";
+            commenterRole = "";
+          } else {
+            if (!commenterName && info.name) commenterName = info.name;
+            commenterAvatar = info.avatar || "";
+            if (info.role === "vet") commenterRole = "Vet";
+            else if (info.role === "ngo") commenterRole = "NGO";
+          }
         }
         if (!commenterName) commenterName = "User";
 
@@ -367,10 +378,16 @@ exports.addComment = catchAsync(async (req: Request, res: Response, next: NextFu
         let cRole = "";
         if (comment.userId && comment.userId !== "guest" && comment.userId !== "forum-guest") {
           const info = await getUserInfo(String(comment.userId));
-          if (!cName && info.name) cName = info.name;
-          cAvatar = info.avatar || "";
-          if (info.role === "vet") cRole = "Vet";
-          else if (info.role === "ngo") cRole = "NGO";
+          if (!info.exists) {
+            cName = "Deleted User";
+            cAvatar = "";
+            cRole = "";
+          } else {
+            if (!cName && info.name) cName = info.name;
+            cAvatar = info.avatar || "";
+            if (info.role === "vet") cRole = "Vet";
+            else if (info.role === "ngo") cRole = "NGO";
+          }
         }
         if (!cName) cName = "User";
 

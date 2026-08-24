@@ -2,6 +2,17 @@ import crypto from "crypto";
 import mongoose from "mongoose";
 import { ObjectId } from "mongodb";
 import type { Request, Response, NextFunction } from "express";
+
+/** Escapes special HTML characters to prevent XSS in server-rendered HTML. */
+const escHtml = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+};
 import { catchAsync } from "../utils/catchAsync";
 import { donorLookupService } from "../services/donorLookupService";
 
@@ -188,25 +199,25 @@ export class DonationController {
     const formHtml = `
       <html><body onload="document.forms[0].submit()">
         <form method="post" action="https://sandbox.payhere.lk/pay/checkout">
-          <input type="hidden" name="merchant_id" value="${merchant_id}" />
-          <input type="hidden" name="order_id" value="${order_id}" />
-          <input type="hidden" name="items" value="${items}" />
-          <input type="hidden" name="amount" value="${amount}" />
-          <input type="hidden" name="currency" value="${currency}" />
-          <input type="hidden" name="hash" value="${hash}" />
-          <input type="hidden" name="return_url" value="${return_url}" />
-          <input type="hidden" name="cancel_url" value="${cancel_url}" />
-          <input type="hidden" name="notify_url" value="${notify_url}" />
-          <input type="hidden" name="first_name" value="${first_name}" />
-          <input type="hidden" name="last_name" value="${last_name}" />
-          <input type="hidden" name="email" value="${email}" />
-          <input type="hidden" name="phone" value="${phone}" />
-          <input type="hidden" name="address" value="${address}" />
-          <input type="hidden" name="city" value="${city}" />
-          <input type="hidden" name="country" value="${country}" />
-          <input type="hidden" name="payment_method" value="${payment_method}" />
-          ${recurrence ? `<input type="hidden" name="recurrence" value="${recurrence}" />` : ""}
-          ${duration ? `<input type="hidden" name="duration" value="${duration}" />` : ""}
+          <input type="hidden" name="merchant_id" value="${escHtml(merchant_id)}" />
+          <input type="hidden" name="order_id" value="${escHtml(order_id)}" />
+          <input type="hidden" name="items" value="${escHtml(items)}" />
+          <input type="hidden" name="amount" value="${escHtml(amount)}" />
+          <input type="hidden" name="currency" value="${escHtml(currency)}" />
+          <input type="hidden" name="hash" value="${escHtml(hash)}" />
+          <input type="hidden" name="return_url" value="${escHtml(return_url)}" />
+          <input type="hidden" name="cancel_url" value="${escHtml(cancel_url)}" />
+          <input type="hidden" name="notify_url" value="${escHtml(notify_url)}" />
+          <input type="hidden" name="first_name" value="${escHtml(first_name)}" />
+          <input type="hidden" name="last_name" value="${escHtml(last_name)}" />
+          <input type="hidden" name="email" value="${escHtml(email)}" />
+          <input type="hidden" name="phone" value="${escHtml(phone)}" />
+          <input type="hidden" name="address" value="${escHtml(address)}" />
+          <input type="hidden" name="city" value="${escHtml(city)}" />
+          <input type="hidden" name="country" value="${escHtml(country)}" />
+          <input type="hidden" name="payment_method" value="${escHtml(payment_method)}" />
+          ${recurrence ? `<input type="hidden" name="recurrence" value="${escHtml(recurrence)}" />` : ""}
+          ${duration ? `<input type="hidden" name="duration" value="${escHtml(duration)}" />` : ""}
         </form>
       </body></html>`;
 
