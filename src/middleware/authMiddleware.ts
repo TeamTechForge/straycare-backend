@@ -43,14 +43,20 @@ const verifyToken = async (req: Request, res: Response, next: NextFunction): Pro
   next();
 };
 
-const optionalToken = (req: Request, res: Response, next: NextFunction): void => {
+const optionalToken = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const authHeader = req.headers["authorization"];
 
   if (authHeader && authHeader.startsWith("Bearer ")) {
     const token = authHeader.split(" ")[1];
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET) as JwtPayload;
-      req.user = { id: decoded.id, role: decoded.role };
+      // Mirror the deleted-account check from verifyToken so that anonymized
+      // accounts cannot leak their identity through optional-auth routes.
+      const User = require("../models/User");
+      const liveUser = await User.findById(decoded.id).select("isDeleted").lean();
+      if (liveUser && liveUser.isDeleted !== true) {
+        req.user = { id: decoded.id, role: decoded.role };
+      }
     } catch (err) {
       // Ignore invalid token for optional routes
     }

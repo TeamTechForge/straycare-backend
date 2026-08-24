@@ -297,7 +297,8 @@ const updateNGOProfile = catchAsync(async (req: Request, res: Response, next: Ne
   const userId = req.user!.id;
   const { phone, orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret, payHereAppId, payHereAppSecret, latitude, longitude } = req.body;
 
-  const ngoUpdates: any = { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId, merchantSecret: merchantSecret ? encryptSecret(merchantSecret) : "" };
+  const ngoUpdates: any = { orgName, contactPerson, regNumber, foundedYear, location, bio, profileImage, verificationDocument, merchantId };
+  if (merchantSecret !== undefined) ngoUpdates.merchantSecret = encryptSecret(merchantSecret);
   if (payHereAppId) ngoUpdates.payHereAppId = String(payHereAppId).trim();
   if (payHereAppSecret) ngoUpdates.payHereAppSecret = encryptSecret(String(payHereAppSecret).trim());
 
@@ -339,7 +340,8 @@ const updateVetProfile = catchAsync(async (req: Request, res: Response, next: Ne
   const userId = req.user!.id;
   const { name, phone, primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret, payHereAppId, payHereAppSecret, latitude, longitude } = req.body;
 
-  const vetUpdates: any = { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId, merchantSecret: merchantSecret ? encryptSecret(merchantSecret) : "" };
+  const vetUpdates: any = { primaryLocation, bio, clinicName, clinicAddress, licenseNumber, yearsOfExperience, profileImage, licenseDocument, merchantId };
+  if (merchantSecret !== undefined) vetUpdates.merchantSecret = encryptSecret(merchantSecret);
   if (payHereAppId) vetUpdates.payHereAppId = String(payHereAppId).trim();
   if (payHereAppSecret) vetUpdates.payHereAppSecret = encryptSecret(String(payHereAppSecret).trim());
 
