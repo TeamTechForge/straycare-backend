@@ -156,7 +156,12 @@ export class NotificationService {
 
     try {
       const user = await User.findById(userId);
-      if (!user || !user.pushToken) {
+      if (!user) {
+        Logger.warn(`[sendPushOnly] Recipient user not found: ${userId}`, { service: "NotificationService" });
+        return;
+      }
+      if (!user.pushToken) {
+        Logger.warn(`[sendPushOnly] No push token for user ${userId} — push skipped`, { service: "NotificationService" });
         return;
       }
 
