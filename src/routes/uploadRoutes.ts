@@ -100,6 +100,10 @@ router.get("/files/:id", async (req: Request, res: Response) => {
       }
     );
 
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: "Invalid file ID" });
+    }
+
     const fileId = new mongoose.Types.ObjectId(
       req.params.id
     );

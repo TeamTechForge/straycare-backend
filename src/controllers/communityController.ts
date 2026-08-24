@@ -200,7 +200,9 @@ export const deleteCommunityPost = async (req: Request, res: Response): Promise<
         const context = await getValidatedPostAndUser(req, res);
         if (!context) return;
         const { post, postId, userId } = context;
-        if (!post.authorUserId || String(post.authorUserId) !== userId) {
+        const isOwner = post.authorUserId && String(post.authorUserId) === userId;
+        const isAdmin = req.user?.role === "admin";
+        if (!isOwner && !isAdmin) {
             res.status(403).json({ success: false, message: "Only the post owner may delete this post" });
             return;
         }

@@ -15,6 +15,14 @@ import { NotificationService } from "../services/notificationService";
 const { sendPasswordResetCodeEmail } = require("../utils/emailService");
 import type { Request, Response, NextFunction } from "express";
 const Notification = require("../models/Notification");
+const CommunityLike = require("../models/CommunityLike").default || require("../models/CommunityLike");
+const SavedCommunityPost = require("../models/SavedCommunityPost").default || require("../models/SavedCommunityPost");
+const AdoptionPost = require("../models/AdoptionPost").default || require("../models/AdoptionPost");
+const LostFoundPost = require("../models/LostFoundPost").default || require("../models/LostFoundPost");
+const StrayReport = require("../models/StrayReport");
+const RescueRequest = require("../models/RescueRequest");
+const RescueHistory = require("../models/RescueHistory");
+const ForumPost = require("../models/ForumPost");
 
 /**
  * Handles Registration
@@ -98,6 +106,12 @@ const login = catchAsync(async (req: Request, res: Response, next: NextFunction)
 
   if (!user) {
     res.status(404).json({ message: "Account not found" });
+    return;
+  }
+
+  // Block login for anonymized/deleted accounts.
+  if (user.isDeleted === true) {
+    res.status(403).json({ message: "This account is no longer available." });
     return;
   }
 
@@ -294,16 +308,92 @@ const changePassword = catchAsync(async (req: Request, res: Response, next: Next
 
 /**
  * Handles Delete Account
+ *
+ * Requires re-authentication before deletion (already implemented in the
+ * verification gate above):
+ * - local users:  must supply their current password in req.body.password
+ * - google users: must supply a fresh Firebase ID token in req.body.googleCredential
+ *
+ * The backend determines which verification to apply by reading
+ * user.authProvider from the database. The client cannot influence this.
+ *
+ * On successful verification, the user document is ANONYMIZED IN-PLACE
+ * (not deleted) to preserve foreign-key references in all other collections.
+ * Structured PII is removed using $unset. Related private records are deleted.
+ * User-generated public content is retained and will display "Deleted User".
  */
 const deleteAccount = catchAsync(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const userId = req.user!.id;
-  const user = await User.findById(userId);
+
+  // Fetch the user with the password hash included so we can verify it.
+  const user = await User.findById(userId).select("+password");
 
   if (!user) {
     res.status(404).json({ message: "User not found" });
     return;
   }
-  // Delete the role-specific profile before removing the main user account.
+
+  // ── Identity verification ────────────────────────────────────────────────
+  // The provider is read from the database, not from the request body.
+  // A google user cannot bypass this by sending { "password": "..." }.
+
+  if (user.authProvider === "local" || !user.authProvider) {
+    // ── Email / password users ──────────────────────────────────────────────
+    const { password } = req.body;
+
+    if (!password || typeof password !== "string" || password.trim() === "") {
+      res.status(400).json({ message: "Password is required to delete your account" });
+      return;
+    }
+
+    // user.password may be undefined for very old records that had no password set.
+    if (!user.password) {
+      res.status(400).json({ message: "Account has no password set. Contact support." });
+      return;
+    }
+
+    const isMatch = await PasswordService.comparePassword(password, user.password);
+    // Do not log the supplied password under any circumstances.
+    if (!isMatch) {
+      res.status(401).json({ message: "Incorrect password. Account not deleted." });
+      return;
+    }
+
+  } else if (user.authProvider === "google") {
+    // ── Google users ────────────────────────────────────────────────────────
+    const { googleCredential } = req.body;
+
+    if (!googleCredential || typeof googleCredential !== "string" || googleCredential.trim() === "") {
+      res.status(400).json({ message: "Google credential is required to delete your account" });
+      return;
+    }
+
+    let decodedToken: any;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(googleCredential);
+    } catch (err: any) {
+      res.status(401).json({ message: "Invalid or expired Google credential. Please sign in with Google again." });
+      return;
+    }
+
+    // The UID from the verified token must match what is stored in the database.
+    const firebaseUid: string | undefined = decodedToken.uid || decodedToken.sub;
+    if (!firebaseUid || firebaseUid !== user.googleId) {
+      res.status(401).json({ message: "Google account does not match. Account not deleted." });
+      return;
+    }
+
+  } else {
+    res.status(400).json({ message: "Unsupported authentication provider" });
+    return;
+  }
+
+  // ── Step 1: Delete private per-user records ──────────────────────────────
+  await Notification.deleteMany({ userId });
+  await SavedCommunityPost.deleteMany({ userId });
+  await CommunityLike.deleteMany({ userId });
+
+  // ── Step 2: Delete role-specific profile ────────────────────────────────
   if (user.role === "ngo") {
     await NGOProfile.findOneAndDelete({ userId });
   } else if (user.role === "volunteer") {
@@ -314,13 +404,84 @@ const deleteAccount = catchAsync(async (req: Request, res: Response, next: NextF
     await GeneralUserProfile.findOneAndDelete({ userId });
   }
 
-  await User.findByIdAndDelete(userId);
+  // ── Step 3: Anonymize structured PII in content records ─────────────────
+  // ForumPost stores author as a denormalized String — update it directly.
+  await ForumPost.updateMany(
+    { userId },
+    { $set: { author: "Deleted User" } }
+  );
 
-  // Remove notifications associated with the deleted account.
-  await Notification.deleteMany({ userId });
+  // AdoptionPost stores poster name and contact explicitly.
+  await AdoptionPost.updateMany(
+    { userId },
+    { $set: { posterName: "Deleted User", contact: "" } }
+  );
+
+  // LostFoundPost stores contact name and number explicitly.
+  await LostFoundPost.updateMany(
+    { userId },
+    { $set: { contactName: "", contactNumber: "" } }
+  );
+
+  // StrayReport stores reporterUserId as a String (not ObjectId).
+  await StrayReport.updateMany(
+    { reporterUserId: userId.toString() },
+    { $set: { reporterUserId: "" } }
+  );
+
+  // RescueRequest stores reporter PII as denormalized String fields.
+  await RescueRequest.updateMany(
+    { userId: userId.toString() },
+    { $set: { reporterName: "Deleted User", reporterPhone: "", reporterAvatar: "" } }
+  );
+
+  // RescueHistory mirrors RescueRequest structure for completed cases.
+  await RescueHistory.updateMany(
+    { userId: userId.toString() },
+    { $set: { reporterName: "Deleted User", reporterPhone: "", reporterAvatar: "" } }
+  );
+
+  // ── Step 4: Anonymize the User document ──────────────────────────────────
+  // The _id is PRESERVED so all authorUserId / userId references in other
+  // collections remain valid and can resolve to "Deleted User".
+  //
+  // $set   — replaces the field value with the anonymized placeholder.
+  // $unset — physically removes the field from the MongoDB document so that
+  //          no credential data survives in any form.
+  //
+  // Email: unique index prevents setting to ""; use a non-guessable
+  // placeholder that cannot be used to log in or be guessed.
+  await User.findByIdAndUpdate(
+    userId,
+    {
+      $set: {
+        name:          "Deleted User",
+        email:         `deleted_${userId}@deleted.straycare`,
+        authProvider:  "deleted",
+        isDeleted:     true,
+        isApproved:    false,
+        avatar:        "",
+        profileImage:  "",
+        blockedUsers:  [],
+        accountStatus: "deleted",
+      },
+      $unset: {
+        password:             "",
+        googleId:             "",
+        phone:                "",
+        pushToken:            "",
+        resetPasswordToken:   "",
+        resetPasswordExpires: "",
+      },
+    },
+    // runValidators: false because the required() functions on phone/password
+    // would fail for a local user when those fields are being removed.
+    { runValidators: false }
+  );
 
   res.status(200).json({ message: "Account and associated data deleted successfully" });
 });
+
 
 /**
  * Handles Google Authentication
@@ -357,7 +518,14 @@ const googleAuth = catchAsync(async (req: Request, res: Response, next: NextFunc
   let isNewUser = false;
 
   if (user) {
-    // Existing user - update googleId and avatar if not already set
+    // Block login for anonymized/deleted accounts.
+    // The placeholder email prevents accidental Google re-registration;
+    // the isDeleted check prevents a JWT being issued regardless.
+    if (user.isDeleted === true) {
+      res.status(403).json({ message: "This account is no longer available." });
+      return;
+    }
+    // Existing active user - update googleId and avatar if not already set
     if (!user.googleId) user.googleId = uid;
     if (!user.avatar && picture) user.avatar = picture;
     await user.save();
