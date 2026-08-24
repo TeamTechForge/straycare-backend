@@ -341,6 +341,11 @@ const sendMessage = catchAsync(async (req: Request, res: Response, next: NextFun
     return;
   }
 
+  if (type === "text" && (!text || text.trim() === "")) {
+    res.status(400).json({ message: "Text content is required" });
+    return;
+  }
+
   // Verify user is a participant
   const conversation = await Conversation.findOne({
     _id: conversationId,

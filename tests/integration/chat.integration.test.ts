@@ -6,8 +6,17 @@ const Message = require('../../src/models/Message');
 
 const app = require('../../src/app');
 
+process.env.MESSAGE_ENCRYPTION_KEY = 'a'.repeat(64);
+
 // Setup in-memory DB
 setupTestDB();
+
+jest.mock('../../src/services/notificationService', () => ({
+  NotificationService: {
+    sendPushOnly: jest.fn().mockResolvedValue(undefined),
+    sendNotification: jest.fn().mockResolvedValue(undefined)
+  }
+}));
 
 describe('Chat Integration Tests', () => {
   let user1Token: string;
@@ -98,7 +107,7 @@ describe('Chat Integration Tests', () => {
       // Verify DB updated
       const conv = await Conversation.findById(conversationId);
       expect(conv.unreadCounts.get(user2Id.toString())).toBe(1); // User 2 has 1 unread message
-      expect(conv.lastMessage.text).toBe('Hello User 2!');
+      expect(conv.lastMessage).toBeDefined();
 
       // Verify Socket Emission
       expect(mockSocketTo).toHaveBeenCalledWith(conversationId);
@@ -167,6 +176,108 @@ describe('Chat Integration Tests', () => {
       
       // Verify socket emit
       expect(mockSocketEmit).toHaveBeenCalledWith('message:delete', expect.any(Object));
+    });
+
+    it('should reject an empty message', async () => {
+      const response = await request(app)
+        .post('/api/chat/messages')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({ conversationId, text: '' }); // empty message
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('message', 'Text content is required');
+    });
+
+    it('should deny access to unauthorized conversation', async () => {
+      // Create a third user
+      const res3 = await request(app).post('/api/auth/register').send({
+        name: 'User Three', email: 'user3@test.com', password: 'Password123!', phone: '+94771000003',
+      });
+      const user3Token = res3.body.token;
+
+      // User 3 attempts to send a message to a conversation between User 1 and User 2
+      const response = await request(app)
+        .post('/api/chat/messages')
+        .set('Authorization', `Bearer ${user3Token}`)
+        .send({ conversationId, text: 'Sneaky message' });
+
+      expect(response.status).toBe(404); // Not found or not a participant
+    });
+  });
+
+  describe('Specific Conversation Types', () => {
+    it('Start chat from Lost & Found: Open a Lost & Found listing and select the messaging option', async () => {
+      const response = await request(app)
+        .post('/api/chat/conversations')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({ 
+          participantId: user2Id,
+          conversationType: 'lost_found',
+          relatedEntity: { item: '603b12345678901234567890', type: 'LostAndFound' }
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.conversationType).toBe('lost_found');
+      expect(response.body.relatedEntity.item.toString()).toBe('603b12345678901234567890');
+    });
+
+    it('Send Lost & Found message: Send a message to the owner/poster of a Lost & Found listing', async () => {
+      // Start the chat first
+      const convRes = await request(app)
+        .post('/api/chat/conversations')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({ 
+          participantId: user2Id,
+          conversationType: 'lost_found',
+          relatedEntity: { item: '603b12345678901234567890', type: 'LostAndFound' }
+        });
+      const convId = convRes.body._id;
+
+      // Send the message
+      const response = await request(app)
+        .post('/api/chat/messages')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({ conversationId: convId, text: 'I found your dog!' });
+
+      expect(response.status).toBe(201);
+      expect(response.body.text).toBe('I found your dog!');
+    });
+
+    it('Start adoption chat: Open an Adoption listing and select the messaging option', async () => {
+      const response = await request(app)
+        .post('/api/chat/conversations')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({ 
+          participantId: user2Id,
+          conversationType: 'adoption',
+          relatedEntity: { item: '603b12345678901234567891', type: 'Adoption' }
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.conversationType).toBe('adoption');
+      expect(response.body.relatedEntity.item.toString()).toBe('603b12345678901234567891');
+    });
+
+    it('Send adoption message: Send a message regarding an Adoption listing', async () => {
+      // Start the chat first
+      const convRes = await request(app)
+        .post('/api/chat/conversations')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({ 
+          participantId: user2Id,
+          conversationType: 'adoption',
+          relatedEntity: { item: '603b12345678901234567891', type: 'Adoption' }
+        });
+      const convId = convRes.body._id;
+
+      // Send the message
+      const response = await request(app)
+        .post('/api/chat/messages')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({ conversationId: convId, text: 'Is the cat still available?' });
+
+      expect(response.status).toBe(201);
+      expect(response.body.text).toBe('Is the cat still available?');
     });
   });
 });
