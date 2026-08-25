@@ -52,7 +52,7 @@ describe('Auth Integration Tests', () => {
         .send({ ...validRegistrationPayload, password: '123' }); // Too short password
 
       expect(response.status).toBe(400);
-      expect(response.body).toHaveProperty('message', 'Password must be at least 6 characters long');
+      expect(response.body).toHaveProperty('message', 'Password must be 8-15 characters long, and contain at least one uppercase letter and one symbol');
     });
   });
 

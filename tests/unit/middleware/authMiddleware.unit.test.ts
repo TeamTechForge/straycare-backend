@@ -6,6 +6,12 @@ const { verifyToken: authMiddleware } = require('../../../src/middleware/authMid
 // Mock jsonwebtoken
 jest.mock('jsonwebtoken');
 
+jest.mock('../../../src/models/User', () => ({
+  findById: jest.fn()
+}));
+const User = require('../../../src/models/User');
+import mongoose from 'mongoose';
+
 describe('Auth Middleware', () => {
   let req: Partial<Request>;
   let res: Partial<Response>;
@@ -53,15 +59,21 @@ describe('Auth Middleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('should call next and set req.user if token is valid', () => {
+  it('should call next and set req.user if token is valid', async () => {
     req.headers = { authorization: 'Bearer valid-token' };
-    const decodedPayload = { id: 'user123', role: 'general_user' };
+    const validUserId = new mongoose.Types.ObjectId().toString();
+    const decodedPayload = { id: validUserId, role: 'general_user' };
     (jwt.verify as jest.Mock).mockReturnValue(decodedPayload);
+    
+    User.findById.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({ _id: validUserId, isDeleted: false })
+    });
 
-    authMiddleware(req as Request, res as Response, next);
+    await authMiddleware(req as Request, res as Response, next);
 
     expect(jwt.verify).toHaveBeenCalledWith('valid-token', 'test-secret');
-    expect((req as any).user).toEqual({ id: 'user123', role: 'general_user' });
+    expect((req as any).user).toEqual({ id: validUserId, role: 'general_user' });
     expect(next).toHaveBeenCalledTimes(1);
   });
 });

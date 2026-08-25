@@ -2,6 +2,8 @@ import express from "express";
 
 import {
     getAnimalPosts,
+    getLostAnimals,
+    getFoundAnimals,
     getAnimalPostById,
     createAnimalPost,
     updateAnimalPost,
@@ -14,6 +16,8 @@ const { verifyToken } = require("../middleware/authMiddleware");
 const router = express.Router();
 
 router.get("/", getAnimalPosts);
+router.get("/lost", getLostAnimals);
+router.get("/found", getFoundAnimals);
 
 router.get("/:id", getAnimalPostById);
 

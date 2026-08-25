@@ -1,17 +1,24 @@
-jest.mock("../../../src/models/Notification", () => ({ create: jest.fn() }));
+import Notification from "../../../src/models/Notification";
+import User from "../../../src/models/User";
+
+jest.unmock("../../../src/services/notificationService");
+
+jest.mock("../../../src/models/Notification", () => ({
+  __esModule: true,
+  default: { create: jest.fn() }
+}));
+
 jest.mock("../../../src/models/User", () => ({
-  findById: jest.fn(),
-  findByIdAndUpdate: jest.fn(),
+  __esModule: true,
+  default: { findById: jest.fn(), findByIdAndUpdate: jest.fn() }
 }));
 jest.mock("../../../src/utils/logger", () => ({
-  Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+  Logger: { info: jest.fn(), warn: console.warn, error: console.error },
 }));
 
 import mongoose from "mongoose";
 import { NotificationService } from "../../../src/services/notificationService";
 
-const Notification = require("../../../src/models/Notification");
-const User = require("../../../src/models/User");
 const validUserId = new mongoose.Types.ObjectId().toString();
 
 describe("NotificationService", () => {
@@ -21,8 +28,11 @@ describe("NotificationService", () => {
   });
 
   it("persists case metadata and sends Expo-compatible action data", async () => {
-    Notification.create.mockResolvedValue({});
-    User.findById.mockResolvedValue({ pushToken: "ExponentPushToken[valid-token]" });
+    console.log("NotificationService is:", NotificationService);
+    console.log("validUserId is:", validUserId, "isValid?", mongoose.Types.ObjectId.isValid(validUserId));
+    
+    (Notification.create as jest.Mock).mockResolvedValue({});
+    (User.findById as jest.Mock).mockResolvedValue({ pushToken: "ExponentPushToken[valid-token]" });
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       json: jest.fn().mockResolvedValue({ data: { status: "ok" } }),
@@ -65,8 +75,8 @@ describe("NotificationService", () => {
   });
 
   it("removes a device token rejected as no longer registered", async () => {
-    Notification.create.mockResolvedValue({});
-    User.findById.mockResolvedValue({ pushToken: "ExpoPushToken[stale-token]" });
+    (Notification.create as jest.Mock).mockResolvedValue({});
+    (User.findById as jest.Mock).mockResolvedValue({ pushToken: "ExpoPushToken[stale-token]" });
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       json: jest.fn().mockResolvedValue({ data: { status: "error", details: { error: "DeviceNotRegistered" } } }),
@@ -78,8 +88,8 @@ describe("NotificationService", () => {
   });
 
   it("does not call Expo for a malformed stored token and clears it", async () => {
-    Notification.create.mockResolvedValue({});
-    User.findById.mockResolvedValue({ pushToken: "not-an-expo-token" });
+    (Notification.create as jest.Mock).mockResolvedValue({});
+    (User.findById as jest.Mock).mockResolvedValue({ pushToken: "not-an-expo-token" });
 
     await NotificationService.sendNotification(validUserId, "Case update", "Updated", "success");
 

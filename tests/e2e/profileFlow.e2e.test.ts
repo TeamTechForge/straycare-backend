@@ -13,7 +13,7 @@ describe('E2E: Profile Creation Flow', () => {
   const registrationPayload = {
     name: 'E2E User',
     email: 'e2e@test.com',
-    password: 'SecurePassword123!',
+    password: 'Secure123!',
     phone: '+94775555555',
   };
 

@@ -175,12 +175,12 @@ describe("Rescue controller actions", () => {
     expect(report.timeline).toEqual([expect.objectContaining({ status: "Completed" })]);
     expect(NotificationService.sendNotification).toHaveBeenCalledWith(
       userId,
-      "Rescue Completed • SC-456",
-      "The rescue for case SC-456 has been completed by Sandevi.",
+      "Case Updated • SC-456",
+      "The rescue for your case has been completed. Updated by Sandevi.",
       "success",
       "RR-456",
       "SC-456",
-      expect.objectContaining({ event: "rescue_completed" })
+      expect.objectContaining({ event: "rescue_completed", action: "view_case", animalType: "Cat", assignedRescuerName: "Sandevi", categoryId: "case_update", status: "Completed" })
     );
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });

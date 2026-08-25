@@ -51,7 +51,9 @@ describe('In-App Calling Integration Tests', () => {
 
   afterEach(async () => {
     // Clear any open ring timeouts by simulating an end
-    await CallSignallingService.handleCallEnd(mockIo, { callerId, calleeId }, callerId);
+    if (mockIo) {
+      await CallSignallingService.handleCallEnd(mockIo, { callerId, calleeId }, callerId);
+    }
     jest.restoreAllMocks();
   });
 

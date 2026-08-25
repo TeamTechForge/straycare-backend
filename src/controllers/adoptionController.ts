@@ -23,6 +23,12 @@ const normalizePostPayload = (body: any) => {
   if (body.images !== undefined && !Array.isArray(body.images)) {
     throw new Error("Images must be an array");
   }
+  if (body.ageValue !== undefined && (typeof body.ageValue !== 'number' || body.ageValue <= 0)) {
+    throw new Error("Age value must be a positive number");
+  }
+  if (body.ageValue !== undefined && body.ageUnit) {
+    payload.age = `${body.ageValue} ${body.ageUnit}`;
+  }
   return payload;
 };
 

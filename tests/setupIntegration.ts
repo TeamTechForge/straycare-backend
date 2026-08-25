@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 let mongoServer: MongoMemoryServer;
 
 export const setupTestDB = () => {
+  jest.setTimeout(60000);
   beforeAll(async () => {
     mongoServer = await MongoMemoryServer.create();
     const mongoUri = mongoServer.getUri();

@@ -7,7 +7,7 @@ describe('AuthValidator', () => {
         name: 'Test User',
         email: 'valid.email@example.com',
         phone: '+94771234567',
-        password: 'Password123',
+        password: 'Password123!',
       };
 
       const result = AuthValidator.validateRegistrationPayload(validPayload);
@@ -18,7 +18,7 @@ describe('AuthValidator', () => {
       const invalidPayload = {
         email: 'test@example.com',
         phone: '+94771234567',
-        password: 'Password123',
+        password: 'Password123!',
       };
 
       const result = AuthValidator.validateRegistrationPayload(invalidPayload);
@@ -29,7 +29,7 @@ describe('AuthValidator', () => {
       const invalidPayload = {
         name: 'Test',
         phone: '+94771234567',
-        password: 'Password123',
+        password: 'Password123!',
       };
 
       const result = AuthValidator.validateRegistrationPayload(invalidPayload);
@@ -40,7 +40,7 @@ describe('AuthValidator', () => {
       const invalidPayload = {
         name: 'Test',
         email: 'test@test.com',
-        password: 'Password123',
+        password: 'Password123!',
       };
 
       const result = AuthValidator.validateRegistrationPayload(invalidPayload);
@@ -67,7 +67,7 @@ describe('AuthValidator', () => {
       };
 
       const result = AuthValidator.validateRegistrationPayload(invalidPayload);
-      expect(result).toEqual({ isValid: false, message: 'Password must be at least 6 characters long' });
+      expect(result).toEqual({ isValid: false, message: 'Password must be 8-15 characters long, and contain at least one uppercase letter and one symbol' });
     });
 
     it('should return isValid false if email format is invalid', () => {
@@ -75,7 +75,7 @@ describe('AuthValidator', () => {
         name: 'Test User',
         email: 'invalid-email-format',
         phone: '+94771234567',
-        password: 'Password123',
+        password: 'Password123!',
       };
 
       const result = AuthValidator.validateRegistrationPayload(invalidPayload);

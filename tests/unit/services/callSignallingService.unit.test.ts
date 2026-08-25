@@ -6,6 +6,9 @@ import { CallStatus } from '../../../src/enums/CallStatus.enum';
 
 jest.mock('../../../src/services/callLogService');
 jest.mock('../../../src/services/privacyService');
+jest.mock('../../../src/services/notificationService', () => ({
+  NotificationService: { sendPushOnly: jest.fn().mockResolvedValue(true) }
+}));
 jest.mock('../../../src/utils/logger', () => ({
   Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() }
 }));
@@ -49,7 +52,7 @@ describe('Call Signalling Service Unit Tests', () => {
       expect(callLogService.findActiveCall).toHaveBeenCalledWith('user2');
       expect(mockSocketTo).toHaveBeenCalledWith('user:user1');
       expect(mockSocketEmit).toHaveBeenCalledWith(CallEvents.BUSY, payload);
-      expect(callLogService.createLog).toHaveBeenCalledWith('user1', 'user2', CallStatus.BUSY);
+      expect(callLogService.createLog).toHaveBeenCalledWith('user1', 'user2', CallStatus.BUSY, undefined, undefined);
     });
 
     it('should emit UNAUTHORIZED if privacy blocks the call', async () => {
@@ -70,7 +73,7 @@ describe('Call Signalling Service Unit Tests', () => {
 
       expect(mockSocketTo).toHaveBeenCalledWith('user:user2');
       expect(mockSocketEmit).toHaveBeenCalledWith(CallEvents.INCOMING, payload);
-      expect(callLogService.createLog).toHaveBeenCalledWith('user1', 'user2');
+      expect(callLogService.createLog).toHaveBeenCalledWith('user1', 'user2', CallStatus.RINGING, undefined, undefined);
 
       // Fast forward 30 seconds to trigger timeout
       jest.advanceTimersByTime(30000);

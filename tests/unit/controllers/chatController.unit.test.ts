@@ -17,6 +17,9 @@ jest.mock('../../../src/models/Message');
 jest.mock('../../../src/models/User');
 jest.mock('../../../src/models/NGOProfile');
 jest.mock('../../../src/services/privacyService');
+jest.mock('../../../src/services/notificationService', () => ({
+  NotificationService: { sendPushOnly: jest.fn().mockResolvedValue(true) }
+}));
 
 describe('Chat Controller Unit Tests', () => {
   let req: any;
@@ -40,6 +43,7 @@ describe('Chat Controller Unit Tests', () => {
       }),
     };
     req.app = { get: jest.fn().mockReturnValue(mockIo) };
+    process.env.MESSAGE_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     jest.clearAllMocks();
   });
@@ -128,7 +132,7 @@ describe('Chat Controller Unit Tests', () => {
 
       await chatController.sendMessage(req, res, next);
 
-      expect(Message.create).toHaveBeenCalledWith(expect.objectContaining({ text: 'Hello', sender: 'user1' }));
+      expect(Message.create).toHaveBeenCalledWith(expect.objectContaining({ isEncrypted: true, sender: 'user1' }));
       expect(mockConversation.save).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(201);
       

@@ -181,7 +181,9 @@ describe("Lost & Found Integration Tests", () => {
 
   describe("POST /api/animals/:id/report", () => {
     it("should increment report count", async () => {
-      const response = await request(app).post(`/api/animals/${post1Id}/report`);
+      const response = await request(app)
+        .post(`/api/animals/${post1Id}/report`)
+        .set("Authorization", `Bearer ${userToken}`);
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty("reportCount", 1);

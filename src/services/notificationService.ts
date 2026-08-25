@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
 import { Logger } from "../utils/logger";
 
-const Notification = require("../models/Notification");
-const User = require("../models/User");
+import Notification from "../models/Notification";
+import User from "../models/User";
 
 // Helper function to send push notifications via Expo Push Service
 const EXPO_PUSH_TOKEN_PATTERN = /^(ExponentPushToken|ExpoPushToken)\[[^\]]+\]$/;
@@ -87,12 +87,14 @@ export class NotificationService {
     caseId: string = "",
     pushData: Record<string, any> = {}
   ): Promise<void> {
+    console.log("SEND NOTIFICATION CALLED WITH:", userId, title);
     if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
       Logger.warn(`Invalid or missing userId: ${userId}`, { service: "NotificationService" });
       return;
     }
 
     try {
+      console.log("Creating notification with userId:", userId, "title:", title);
       await Notification.create({
         userId,
         title,

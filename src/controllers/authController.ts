@@ -267,6 +267,12 @@ const resetPassword = catchAsync(async (req: Request, res: Response, next: NextF
     return;
   }
 
+  const passwordValidation = AuthValidator.validatePassword(newPassword);
+  if (!passwordValidation.isValid) {
+    res.status(400).json({ message: passwordValidation.message });
+    return;
+  }
+
   const hashedPassword = await PasswordService.hashPassword(newPassword, 10);
   user.password = hashedPassword;
   // Clear the reset credentials so the code cannot be reused.
@@ -296,6 +302,12 @@ const changePassword = catchAsync(async (req: Request, res: Response, next: Next
 
   if (!isMatch) {
     res.status(401).json({ message: "Incorrect current password" });
+    return;
+  }
+
+  const passwordValidation = AuthValidator.validatePassword(newPassword);
+  if (!passwordValidation.isValid) {
+    res.status(400).json({ message: passwordValidation.message });
     return;
   }
 
