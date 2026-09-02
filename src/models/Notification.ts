@@ -66,4 +66,5 @@ notificationSchema.index(
   }
 );
 
-module.exports = mongoose.models.Notification || mongoose.model<INotification>("Notification", notificationSchema);
+const Notification = mongoose.models.Notification || mongoose.model<INotification>("Notification", notificationSchema);
+export default Notification;
